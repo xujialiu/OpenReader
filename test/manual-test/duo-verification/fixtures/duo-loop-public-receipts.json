@@ -1,0 +1,958 @@
+{
+  "kind": "HOST_REPLAY",
+  "provenance": "Public Word Boundaries for Lookup fixture; selection/state/paint captured shapes from redloop-130444 cycles 1-4. HOST after/before/input/capture/cleanup metadata is reconstructed, not fresh native qualification. Library hashes are HOST assertions from the printed run baseline/outward/final hash; independent per-return hashes were not retained. Original guard exitCode remains 0 (tool defect). No images or private artifacts included.",
+  "maxCycles": 4,
+  "baselineLibraryHash": "9900f68f331668a9d429df80db08d79f0e209ef2f52f2d903ba6b6ed0649af52",
+  "cycles": [
+    {
+      "cleanup": {
+        "verified": true
+      },
+      "baseline": {
+        "selection": {
+          "at": 1794114310618,
+          "viewport": [
+            382,
+            678
+          ],
+          "ranges": [
+            {
+              "section": 0,
+              "text": "hope",
+              "cfi": "epubcfi(/6/2!/4/4,/1:33,/1:37)",
+              "start": 33,
+              "end": 37,
+              "anchor": 33,
+              "focus": 37,
+              "backward": false,
+              "rects": [
+                [
+                  28.1,
+                  258.3,
+                  48,
+                  28
+                ]
+              ],
+              "rectCount": 1
+            }
+          ]
+        },
+        "state": {
+          "className": "Object",
+          "description": "Object",
+          "type": "object",
+          "value": {
+            "error": null,
+            "gate": null,
+            "loading": false,
+            "observedAt": 1794114310874,
+            "result": {
+              "source": "Free Dictionary API",
+              "text": "verb\nTo want something to happen, with a sense of expectation that it might.\n\u201cI am still hoping that all will turn out well.\u201d\nTo be optimistic; be full of hope; have hopes.\nTo place confidence; to trust with confident expectation of good; usually followed by in.\nTo wish.\n\u201cI hope you all the best.\u201d\n\nnoun\nThe feeling of trust, confidence, belief or expectation that something wished for can or will happen.\n\u201cAfter losing my job, there's no hope of being able to afford my world cruise.\u201d\nThe actual thing wished for.\nA person or thing that is a source of hope.\n\u201cWe still have one hope left: my roommate might see the note I left on the table.\u201d\nThe virtuous desire for future good.\n\nnoun\nA hollow; a valley, especially the upper end of a narrow mountain valley when it is nearly encircled by smooth, green slopes; a comb.\n\nnoun\nA sloping plain between mountain ridges.\nA small bay; an inlet; a haven."
+            },
+            "selection": {
+              "attempt": 0,
+              "mode": "dictionary",
+              "selecting": false,
+              "text": "hope"
+            },
+            "traffic": {
+              "installed": true,
+              "requests": [
+                {
+                  "abortedAt": null,
+                  "failedAt": null,
+                  "responseAt": 1794114306892,
+                  "service": "api.dictionaryapi.dev",
+                  "startedAt": 1794114306682,
+                  "status": 200
+                }
+              ]
+            }
+          }
+        },
+        "paint": {
+          "mode": "crop",
+          "cropPx": [
+            70,
+            761,
+            172,
+            112
+          ],
+          "inkShare": 0.1121,
+          "washShare": 0.5063,
+          "washMedian": [
+            210,
+            226,
+            253
+          ],
+          "handleBluePx": 4835,
+          "handleClusters": 2
+        },
+        "libraryHash": "9900f68f331668a9d429df80db08d79f0e209ef2f52f2d903ba6b6ed0649af52",
+        "after": 1794114310617,
+        "inputVerified": true,
+        "captureVerified": true,
+        "before": 1794114310875
+      },
+      "outward": {
+        "selection": {
+          "at": 1794114334055,
+          "viewport": [
+            867,
+            669
+          ],
+          "ranges": [
+            {
+              "section": 0,
+              "text": "hope",
+              "cfi": "epubcfi(/6/2!/4/4,/1:33,/1:37)",
+              "start": 33,
+              "end": 37,
+              "anchor": 33,
+              "focus": 37,
+              "backward": false,
+              "rects": [
+                [
+                  372.3,
+                  204.3,
+                  48,
+                  28
+                ]
+              ],
+              "rectCount": 1
+            }
+          ]
+        },
+        "state": {
+          "className": "Object",
+          "description": "Object",
+          "type": "object",
+          "value": {
+            "error": null,
+            "gate": null,
+            "loading": false,
+            "observedAt": 1794114334110,
+            "result": {
+              "source": "Free Dictionary API",
+              "text": "verb\nTo want something to happen, with a sense of expectation that it might.\n\u201cI am still hoping that all will turn out well.\u201d\nTo be optimistic; be full of hope; have hopes.\nTo place confidence; to trust with confident expectation of good; usually followed by in.\nTo wish.\n\u201cI hope you all the best.\u201d\n\nnoun\nThe feeling of trust, confidence, belief or expectation that something wished for can or will happen.\n\u201cAfter losing my job, there's no hope of being able to afford my world cruise.\u201d\nThe actual thing wished for.\nA person or thing that is a source of hope.\n\u201cWe still have one hope left: my roommate might see the note I left on the table.\u201d\nThe virtuous desire for future good.\n\nnoun\nA hollow; a valley, especially the upper end of a narrow mountain valley when it is nearly encircled by smooth, green slopes; a comb.\n\nnoun\nA sloping plain between mountain ridges.\nA small bay; an inlet; a haven."
+            },
+            "selection": {
+              "attempt": 0,
+              "mode": "dictionary",
+              "selecting": false,
+              "text": "hope"
+            },
+            "traffic": {
+              "installed": true,
+              "requests": [
+                {
+                  "abortedAt": null,
+                  "failedAt": null,
+                  "responseAt": 1794114306892,
+                  "service": "api.dictionaryapi.dev",
+                  "startedAt": 1794114306682,
+                  "status": 200
+                }
+              ]
+            }
+          }
+        },
+        "paint": {
+          "mode": "crop",
+          "cropPx": [
+            1103,
+            599,
+            172,
+            112
+          ],
+          "inkShare": 0.1127,
+          "washShare": 0.4654,
+          "washMedian": [
+            210,
+            226,
+            253
+          ],
+          "handleBluePx": 4766,
+          "handleClusters": 2
+        },
+        "libraryHash": "9900f68f331668a9d429df80db08d79f0e209ef2f52f2d903ba6b6ed0649af52",
+        "after": 1794114334054,
+        "inputVerified": true,
+        "captureVerified": true,
+        "before": 1794114334111
+      },
+      "return": {
+        "selection": {
+          "at": 1794114370224,
+          "viewport": [
+            382,
+            678
+          ],
+          "ranges": [
+            {
+              "section": 0,
+              "text": "hope",
+              "cfi": "epubcfi(/6/2!/4/4,/1:33,/1:37)",
+              "start": 33,
+              "end": 37,
+              "anchor": 33,
+              "focus": 37,
+              "backward": false,
+              "rects": [
+                [
+                  28.1,
+                  258.3,
+                  48,
+                  28
+                ]
+              ],
+              "rectCount": 1
+            }
+          ]
+        },
+        "state": {
+          "className": "Object",
+          "description": "Object",
+          "type": "object",
+          "value": {
+            "error": null,
+            "gate": null,
+            "loading": false,
+            "observedAt": 1794114370598,
+            "result": {
+              "source": "Free Dictionary API",
+              "text": "verb\nTo want something to happen, with a sense of expectation that it might.\n\u201cI am still hoping that all will turn out well.\u201d\nTo be optimistic; be full of hope; have hopes.\nTo place confidence; to trust with confident expectation of good; usually followed by in.\nTo wish.\n\u201cI hope you all the best.\u201d\n\nnoun\nThe feeling of trust, confidence, belief or expectation that something wished for can or will happen.\n\u201cAfter losing my job, there's no hope of being able to afford my world cruise.\u201d\nThe actual thing wished for.\nA person or thing that is a source of hope.\n\u201cWe still have one hope left: my roommate might see the note I left on the table.\u201d\nThe virtuous desire for future good.\n\nnoun\nA hollow; a valley, especially the upper end of a narrow mountain valley when it is nearly encircled by smooth, green slopes; a comb.\n\nnoun\nA sloping plain between mountain ridges.\nA small bay; an inlet; a haven."
+            },
+            "selection": {
+              "attempt": 0,
+              "mode": "dictionary",
+              "selecting": false,
+              "text": "hope"
+            },
+            "traffic": {
+              "installed": true,
+              "requests": [
+                {
+                  "abortedAt": null,
+                  "failedAt": null,
+                  "responseAt": 1794114306892,
+                  "service": "api.dictionaryapi.dev",
+                  "startedAt": 1794114306682,
+                  "status": 200
+                }
+              ]
+            }
+          }
+        },
+        "paint": {
+          "mode": "crop",
+          "cropPx": [
+            70,
+            761,
+            172,
+            112
+          ],
+          "inkShare": 0.1121,
+          "washShare": 0.5063,
+          "washMedian": [
+            210,
+            226,
+            253
+          ],
+          "handleBluePx": 4835,
+          "handleClusters": 2
+        },
+        "libraryHash": "9900f68f331668a9d429df80db08d79f0e209ef2f52f2d903ba6b6ed0649af52",
+        "after": 1794114370223,
+        "inputVerified": true,
+        "captureVerified": true,
+        "before": 1794114370599
+      }
+    },
+    {
+      "cleanup": {
+        "verified": true
+      },
+      "baseline": {
+        "selection": {
+          "at": 1794114461079,
+          "viewport": [
+            382,
+            678
+          ],
+          "ranges": [
+            {
+              "section": 0,
+              "text": "hope",
+              "cfi": "epubcfi(/6/2!/4/4,/1:33,/1:37)",
+              "start": 33,
+              "end": 37,
+              "anchor": 33,
+              "focus": 37,
+              "backward": false,
+              "rects": [
+                [
+                  28.1,
+                  258.3,
+                  48,
+                  28
+                ]
+              ],
+              "rectCount": 1
+            }
+          ]
+        },
+        "state": {
+          "className": "Object",
+          "description": "Object",
+          "type": "object",
+          "value": {
+            "error": null,
+            "gate": null,
+            "loading": false,
+            "observedAt": 1794114461580,
+            "result": {
+              "source": "Free Dictionary API",
+              "text": "verb\nTo want something to happen, with a sense of expectation that it might.\n\u201cI am still hoping that all will turn out well.\u201d\nTo be optimistic; be full of hope; have hopes.\nTo place confidence; to trust with confident expectation of good; usually followed by in.\nTo wish.\n\u201cI hope you all the best.\u201d\n\nnoun\nThe feeling of trust, confidence, belief or expectation that something wished for can or will happen.\n\u201cAfter losing my job, there's no hope of being able to afford my world cruise.\u201d\nThe actual thing wished for.\nA person or thing that is a source of hope.\n\u201cWe still have one hope left: my roommate might see the note I left on the table.\u201d\nThe virtuous desire for future good.\n\nnoun\nA hollow; a valley, especially the upper end of a narrow mountain valley when it is nearly encircled by smooth, green slopes; a comb.\n\nnoun\nA sloping plain between mountain ridges.\nA small bay; an inlet; a haven."
+            },
+            "selection": {
+              "attempt": 0,
+              "mode": "dictionary",
+              "selecting": false,
+              "text": "hope"
+            },
+            "traffic": {
+              "installed": true,
+              "requests": [
+                {
+                  "abortedAt": null,
+                  "failedAt": null,
+                  "responseAt": 1794114456154,
+                  "service": "api.dictionaryapi.dev",
+                  "startedAt": 1794114455630,
+                  "status": 200
+                }
+              ]
+            }
+          }
+        },
+        "paint": {
+          "mode": "crop",
+          "cropPx": [
+            70,
+            761,
+            172,
+            112
+          ],
+          "inkShare": 0.1121,
+          "washShare": 0.5063,
+          "washMedian": [
+            210,
+            226,
+            253
+          ],
+          "handleBluePx": 4835,
+          "handleClusters": 2
+        },
+        "libraryHash": "9900f68f331668a9d429df80db08d79f0e209ef2f52f2d903ba6b6ed0649af52",
+        "after": 1794114461078,
+        "inputVerified": true,
+        "captureVerified": true,
+        "before": 1794114461581
+      },
+      "outward": {
+        "selection": {
+          "at": 1794114488140,
+          "viewport": [
+            867,
+            669
+          ],
+          "ranges": [
+            {
+              "section": 0,
+              "text": "hope",
+              "cfi": "epubcfi(/6/2!/4/4,/1:33,/1:37)",
+              "start": 33,
+              "end": 37,
+              "anchor": 33,
+              "focus": 37,
+              "backward": false,
+              "rects": [
+                [
+                  372.3,
+                  204.3,
+                  48,
+                  28
+                ]
+              ],
+              "rectCount": 1
+            }
+          ]
+        },
+        "state": {
+          "className": "Object",
+          "description": "Object",
+          "type": "object",
+          "value": {
+            "error": null,
+            "gate": null,
+            "loading": false,
+            "observedAt": 1794114488381,
+            "result": {
+              "source": "Free Dictionary API",
+              "text": "verb\nTo want something to happen, with a sense of expectation that it might.\n\u201cI am still hoping that all will turn out well.\u201d\nTo be optimistic; be full of hope; have hopes.\nTo place confidence; to trust with confident expectation of good; usually followed by in.\nTo wish.\n\u201cI hope you all the best.\u201d\n\nnoun\nThe feeling of trust, confidence, belief or expectation that something wished for can or will happen.\n\u201cAfter losing my job, there's no hope of being able to afford my world cruise.\u201d\nThe actual thing wished for.\nA person or thing that is a source of hope.\n\u201cWe still have one hope left: my roommate might see the note I left on the table.\u201d\nThe virtuous desire for future good.\n\nnoun\nA hollow; a valley, especially the upper end of a narrow mountain valley when it is nearly encircled by smooth, green slopes; a comb.\n\nnoun\nA sloping plain between mountain ridges.\nA small bay; an inlet; a haven."
+            },
+            "selection": {
+              "attempt": 0,
+              "mode": "dictionary",
+              "selecting": false,
+              "text": "hope"
+            },
+            "traffic": {
+              "installed": true,
+              "requests": [
+                {
+                  "abortedAt": null,
+                  "failedAt": null,
+                  "responseAt": 1794114456154,
+                  "service": "api.dictionaryapi.dev",
+                  "startedAt": 1794114455630,
+                  "status": 200
+                }
+              ]
+            }
+          }
+        },
+        "paint": {
+          "mode": "crop",
+          "cropPx": [
+            1103,
+            599,
+            172,
+            112
+          ],
+          "inkShare": 0.1127,
+          "washShare": 0.4654,
+          "washMedian": [
+            210,
+            226,
+            253
+          ],
+          "handleBluePx": 4766,
+          "handleClusters": 2
+        },
+        "libraryHash": "9900f68f331668a9d429df80db08d79f0e209ef2f52f2d903ba6b6ed0649af52",
+        "after": 1794114488139,
+        "inputVerified": true,
+        "captureVerified": true,
+        "before": 1794114488382
+      },
+      "return": {
+        "selection": {
+          "at": 1794114525357,
+          "viewport": [
+            382,
+            678
+          ],
+          "ranges": [
+            {
+              "section": 0,
+              "text": "hope",
+              "cfi": "epubcfi(/6/2!/4/4,/1:33,/1:37)",
+              "start": 33,
+              "end": 37,
+              "anchor": 33,
+              "focus": 37,
+              "backward": false,
+              "rects": [
+                [
+                  28.1,
+                  258.3,
+                  48,
+                  28
+                ]
+              ],
+              "rectCount": 1
+            }
+          ]
+        },
+        "state": {
+          "className": "Object",
+          "description": "Object",
+          "type": "object",
+          "value": {
+            "error": null,
+            "gate": null,
+            "loading": false,
+            "observedAt": 1794114525657,
+            "result": {
+              "source": "Free Dictionary API",
+              "text": "verb\nTo want something to happen, with a sense of expectation that it might.\n\u201cI am still hoping that all will turn out well.\u201d\nTo be optimistic; be full of hope; have hopes.\nTo place confidence; to trust with confident expectation of good; usually followed by in.\nTo wish.\n\u201cI hope you all the best.\u201d\n\nnoun\nThe feeling of trust, confidence, belief or expectation that something wished for can or will happen.\n\u201cAfter losing my job, there's no hope of being able to afford my world cruise.\u201d\nThe actual thing wished for.\nA person or thing that is a source of hope.\n\u201cWe still have one hope left: my roommate might see the note I left on the table.\u201d\nThe virtuous desire for future good.\n\nnoun\nA hollow; a valley, especially the upper end of a narrow mountain valley when it is nearly encircled by smooth, green slopes; a comb.\n\nnoun\nA sloping plain between mountain ridges.\nA small bay; an inlet; a haven."
+            },
+            "selection": {
+              "attempt": 0,
+              "mode": "dictionary",
+              "selecting": false,
+              "text": "hope"
+            },
+            "traffic": {
+              "installed": true,
+              "requests": [
+                {
+                  "abortedAt": null,
+                  "failedAt": null,
+                  "responseAt": 1794114456154,
+                  "service": "api.dictionaryapi.dev",
+                  "startedAt": 1794114455630,
+                  "status": 200
+                }
+              ]
+            }
+          }
+        },
+        "paint": {
+          "mode": "crop",
+          "cropPx": [
+            70,
+            761,
+            172,
+            112
+          ],
+          "inkShare": 0.1121,
+          "washShare": 0.5063,
+          "washMedian": [
+            210,
+            226,
+            253
+          ],
+          "handleBluePx": 4835,
+          "handleClusters": 2
+        },
+        "libraryHash": "9900f68f331668a9d429df80db08d79f0e209ef2f52f2d903ba6b6ed0649af52",
+        "after": 1794114525356,
+        "inputVerified": true,
+        "captureVerified": true,
+        "before": 1794114525658
+      }
+    },
+    {
+      "cleanup": {
+        "verified": true
+      },
+      "baseline": {
+        "selection": {
+          "at": 1794114631200,
+          "viewport": [
+            382,
+            678
+          ],
+          "ranges": [
+            {
+              "section": 0,
+              "text": "hope",
+              "cfi": "epubcfi(/6/2!/4/4,/1:33,/1:37)",
+              "start": 33,
+              "end": 37,
+              "anchor": 33,
+              "focus": 37,
+              "backward": false,
+              "rects": [
+                [
+                  28.1,
+                  258.3,
+                  48,
+                  28
+                ]
+              ],
+              "rectCount": 1
+            }
+          ]
+        },
+        "state": {
+          "className": "Object",
+          "description": "Object",
+          "type": "object",
+          "value": {
+            "error": null,
+            "gate": null,
+            "loading": false,
+            "observedAt": 1794114631732,
+            "result": {
+              "source": "Free Dictionary API",
+              "text": "verb\nTo want something to happen, with a sense of expectation that it might.\n\u201cI am still hoping that all will turn out well.\u201d\nTo be optimistic; be full of hope; have hopes.\nTo place confidence; to trust with confident expectation of good; usually followed by in.\nTo wish.\n\u201cI hope you all the best.\u201d\n\nnoun\nThe feeling of trust, confidence, belief or expectation that something wished for can or will happen.\n\u201cAfter losing my job, there's no hope of being able to afford my world cruise.\u201d\nThe actual thing wished for.\nA person or thing that is a source of hope.\n\u201cWe still have one hope left: my roommate might see the note I left on the table.\u201d\nThe virtuous desire for future good.\n\nnoun\nA hollow; a valley, especially the upper end of a narrow mountain valley when it is nearly encircled by smooth, green slopes; a comb.\n\nnoun\nA sloping plain between mountain ridges.\nA small bay; an inlet; a haven."
+            },
+            "selection": {
+              "attempt": 0,
+              "mode": "dictionary",
+              "selecting": false,
+              "text": "hope"
+            },
+            "traffic": {
+              "installed": true,
+              "requests": [
+                {
+                  "abortedAt": null,
+                  "failedAt": null,
+                  "responseAt": 1794114625274,
+                  "service": "api.dictionaryapi.dev",
+                  "startedAt": 1794114624574,
+                  "status": 200
+                }
+              ]
+            }
+          }
+        },
+        "paint": {
+          "mode": "crop",
+          "cropPx": [
+            70,
+            761,
+            172,
+            112
+          ],
+          "inkShare": 0.1121,
+          "washShare": 0.5063,
+          "washMedian": [
+            210,
+            226,
+            253
+          ],
+          "handleBluePx": 4835,
+          "handleClusters": 2
+        },
+        "libraryHash": "9900f68f331668a9d429df80db08d79f0e209ef2f52f2d903ba6b6ed0649af52",
+        "after": 1794114631199,
+        "inputVerified": true,
+        "captureVerified": true,
+        "before": 1794114631733
+      },
+      "outward": {
+        "selection": {
+          "at": 1794114660706,
+          "viewport": [
+            867,
+            669
+          ],
+          "ranges": [
+            {
+              "section": 0,
+              "text": "hope",
+              "cfi": "epubcfi(/6/2!/4/4,/1:33,/1:37)",
+              "start": 33,
+              "end": 37,
+              "anchor": 33,
+              "focus": 37,
+              "backward": false,
+              "rects": [
+                [
+                  372.3,
+                  204.3,
+                  48,
+                  28
+                ]
+              ],
+              "rectCount": 1
+            }
+          ]
+        },
+        "state": {
+          "className": "Object",
+          "description": "Object",
+          "type": "object",
+          "value": {
+            "error": null,
+            "gate": null,
+            "loading": false,
+            "observedAt": 1794114661031,
+            "result": {
+              "source": "Free Dictionary API",
+              "text": "verb\nTo want something to happen, with a sense of expectation that it might.\n\u201cI am still hoping that all will turn out well.\u201d\nTo be optimistic; be full of hope; have hopes.\nTo place confidence; to trust with confident expectation of good; usually followed by in.\nTo wish.\n\u201cI hope you all the best.\u201d\n\nnoun\nThe feeling of trust, confidence, belief or expectation that something wished for can or will happen.\n\u201cAfter losing my job, there's no hope of being able to afford my world cruise.\u201d\nThe actual thing wished for.\nA person or thing that is a source of hope.\n\u201cWe still have one hope left: my roommate might see the note I left on the table.\u201d\nThe virtuous desire for future good.\n\nnoun\nA hollow; a valley, especially the upper end of a narrow mountain valley when it is nearly encircled by smooth, green slopes; a comb.\n\nnoun\nA sloping plain between mountain ridges.\nA small bay; an inlet; a haven."
+            },
+            "selection": {
+              "attempt": 0,
+              "mode": "dictionary",
+              "selecting": false,
+              "text": "hope"
+            },
+            "traffic": {
+              "installed": true,
+              "requests": [
+                {
+                  "abortedAt": null,
+                  "failedAt": null,
+                  "responseAt": 1794114625274,
+                  "service": "api.dictionaryapi.dev",
+                  "startedAt": 1794114624574,
+                  "status": 200
+                }
+              ]
+            }
+          }
+        },
+        "paint": {
+          "mode": "crop",
+          "cropPx": [
+            1103,
+            599,
+            172,
+            112
+          ],
+          "inkShare": 0.1127,
+          "washShare": 0.4654,
+          "washMedian": [
+            210,
+            226,
+            253
+          ],
+          "handleBluePx": 4766,
+          "handleClusters": 2
+        },
+        "libraryHash": "9900f68f331668a9d429df80db08d79f0e209ef2f52f2d903ba6b6ed0649af52",
+        "after": 1794114660705,
+        "inputVerified": true,
+        "captureVerified": true,
+        "before": 1794114661032
+      },
+      "return": {
+        "selection": {
+          "at": 1794114696821,
+          "viewport": [
+            382,
+            678
+          ],
+          "ranges": [
+            {
+              "section": 0,
+              "text": "hope",
+              "cfi": "epubcfi(/6/2!/4/4,/1:33,/1:37)",
+              "start": 33,
+              "end": 37,
+              "anchor": 33,
+              "focus": 37,
+              "backward": false,
+              "rects": [
+                [
+                  28.1,
+                  258.3,
+                  48,
+                  28
+                ]
+              ],
+              "rectCount": 1
+            }
+          ]
+        },
+        "state": {
+          "className": "Object",
+          "description": "Object",
+          "type": "object",
+          "value": {
+            "error": null,
+            "gate": null,
+            "loading": false,
+            "observedAt": 1794114696886,
+            "result": {
+              "source": "Free Dictionary API",
+              "text": "verb\nTo want something to happen, with a sense of expectation that it might.\n\u201cI am still hoping that all will turn out well.\u201d\nTo be optimistic; be full of hope; have hopes.\nTo place confidence; to trust with confident expectation of good; usually followed by in.\nTo wish.\n\u201cI hope you all the best.\u201d\n\nnoun\nThe feeling of trust, confidence, belief or expectation that something wished for can or will happen.\n\u201cAfter losing my job, there's no hope of being able to afford my world cruise.\u201d\nThe actual thing wished for.\nA person or thing that is a source of hope.\n\u201cWe still have one hope left: my roommate might see the note I left on the table.\u201d\nThe virtuous desire for future good.\n\nnoun\nA hollow; a valley, especially the upper end of a narrow mountain valley when it is nearly encircled by smooth, green slopes; a comb.\n\nnoun\nA sloping plain between mountain ridges.\nA small bay; an inlet; a haven."
+            },
+            "selection": {
+              "attempt": 0,
+              "mode": "dictionary",
+              "selecting": false,
+              "text": "hope"
+            },
+            "traffic": {
+              "installed": true,
+              "requests": [
+                {
+                  "abortedAt": null,
+                  "failedAt": null,
+                  "responseAt": 1794114625274,
+                  "service": "api.dictionaryapi.dev",
+                  "startedAt": 1794114624574,
+                  "status": 200
+                }
+              ]
+            }
+          }
+        },
+        "paint": {
+          "mode": "crop",
+          "cropPx": [
+            70,
+            761,
+            172,
+            112
+          ],
+          "inkShare": 0.1121,
+          "washShare": 0.5063,
+          "washMedian": [
+            210,
+            226,
+            253
+          ],
+          "handleBluePx": 4835,
+          "handleClusters": 2
+        },
+        "libraryHash": "9900f68f331668a9d429df80db08d79f0e209ef2f52f2d903ba6b6ed0649af52",
+        "after": 1794114696820,
+        "inputVerified": true,
+        "captureVerified": true,
+        "before": 1794114696887
+      }
+    },
+    {
+      "cleanup": {
+        "verified": true
+      },
+      "baseline": {
+        "selection": {
+          "at": 1794114903836,
+          "viewport": [
+            382,
+            678
+          ],
+          "ranges": [
+            {
+              "section": 0,
+              "text": "hope",
+              "cfi": "epubcfi(/6/2!/4/4,/1:33,/1:37)",
+              "start": 33,
+              "end": 37,
+              "anchor": 33,
+              "focus": 37,
+              "backward": false,
+              "rects": [
+                [
+                  28.1,
+                  258.3,
+                  48,
+                  28
+                ]
+              ],
+              "rectCount": 1
+            }
+          ]
+        },
+        "state": {
+          "className": "Object",
+          "description": "Object",
+          "type": "object",
+          "value": {
+            "error": null,
+            "gate": null,
+            "loading": false,
+            "observedAt": 1794114904274,
+            "result": {
+              "source": "Free Dictionary API",
+              "text": "verb\nTo want something to happen, with a sense of expectation that it might.\n\u201cI am still hoping that all will turn out well.\u201d\nTo be optimistic; be full of hope; have hopes.\nTo place confidence; to trust with confident expectation of good; usually followed by in.\nTo wish.\n\u201cI hope you all the best.\u201d\n\nnoun\nThe feeling of trust, confidence, belief or expectation that something wished for can or will happen.\n\u201cAfter losing my job, there's no hope of being able to afford my world cruise.\u201d\nThe actual thing wished for.\nA person or thing that is a source of hope.\n\u201cWe still have one hope left: my roommate might see the note I left on the table.\u201d\nThe virtuous desire for future good.\n\nnoun\nA hollow; a valley, especially the upper end of a narrow mountain valley when it is nearly encircled by smooth, green slopes; a comb.\n\nnoun\nA sloping plain between mountain ridges.\nA small bay; an inlet; a haven."
+            },
+            "selection": {
+              "attempt": 0,
+              "mode": "dictionary",
+              "selecting": false,
+              "text": "hope"
+            },
+            "traffic": {
+              "installed": true,
+              "requests": [
+                {
+                  "abortedAt": null,
+                  "failedAt": null,
+                  "responseAt": 1794114896238,
+                  "service": "api.dictionaryapi.dev",
+                  "startedAt": 1794114895553,
+                  "status": 200
+                }
+              ]
+            }
+          }
+        },
+        "paint": {
+          "mode": "crop",
+          "cropPx": [
+            70,
+            761,
+            172,
+            112
+          ],
+          "inkShare": 0.1121,
+          "washShare": 0.5063,
+          "washMedian": [
+            210,
+            226,
+            253
+          ],
+          "handleBluePx": 4835,
+          "handleClusters": 2
+        },
+        "libraryHash": "9900f68f331668a9d429df80db08d79f0e209ef2f52f2d903ba6b6ed0649af52",
+        "after": 1794114903835,
+        "inputVerified": true,
+        "captureVerified": true,
+        "before": 1794114904275
+      },
+      "outward": {
+        "selection": {
+          "at": 1794114930418,
+          "viewport": [
+            867,
+            669
+          ],
+          "ranges": []
+        },
+        "state": {
+          "className": "Object",
+          "description": "Object",
+          "type": "object",
+          "value": {
+            "error": null,
+            "gate": null,
+            "loading": false,
+            "observedAt": 1794114930809,
+            "result": {
+              "source": "Free Dictionary API",
+              "text": "verb\nTo want something to happen, with a sense of expectation that it might.\n\u201cI am still hoping that all will turn out well.\u201d\nTo be optimistic; be full of hope; have hopes.\nTo place confidence; to trust with confident expectation of good; usually followed by in.\nTo wish.\n\u201cI hope you all the best.\u201d\n\nnoun\nThe feeling of trust, confidence, belief or expectation that something wished for can or will happen.\n\u201cAfter losing my job, there's no hope of being able to afford my world cruise.\u201d\nThe actual thing wished for.\nA person or thing that is a source of hope.\n\u201cWe still have one hope left: my roommate might see the note I left on the table.\u201d\nThe virtuous desire for future good.\n\nnoun\nA hollow; a valley, especially the upper end of a narrow mountain valley when it is nearly encircled by smooth, green slopes; a comb.\n\nnoun\nA sloping plain between mountain ridges.\nA small bay; an inlet; a haven."
+            },
+            "selection": {
+              "attempt": 0,
+              "mode": "dictionary",
+              "selecting": false,
+              "text": "hope"
+            },
+            "traffic": {
+              "installed": true,
+              "requests": [
+                {
+                  "abortedAt": null,
+                  "failedAt": null,
+                  "responseAt": 1794114896238,
+                  "service": "api.dictionaryapi.dev",
+                  "startedAt": 1794114895553,
+                  "status": 200
+                }
+              ]
+            }
+          }
+        },
+        "paint": {
+          "mode": "whole",
+          "cropPx": null,
+          "inkShare": 0.0524,
+          "washShare": 0.0,
+          "washMedian": [
+            222,
+            223,
+            240
+          ]
+        },
+        "libraryHash": "9900f68f331668a9d429df80db08d79f0e209ef2f52f2d903ba6b6ed0649af52",
+        "after": 1794114930417,
+        "inputVerified": true,
+        "captureVerified": true,
+        "before": 1794114930810
+      }
+    }
+  ]
+}

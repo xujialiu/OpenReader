@@ -38,9 +38,9 @@ a refusal on an ambiguous Metro is not a failed Reading assertion.
 
 Obtain a clean active-display image and live native window/safe-area/WebView
 geometry using the existing diagnostics/real-input driver. Capture display1
-(outer) or3 (inner), not an assumed `XCUIScreen.main`. Every native probe here
-keeps all available XCTest screens; identify the actually rendered display in
-the report. Keep GUI/AX, LLDB, native input and screenshot operations serial.
+(outer) or3 (inner), not an assumed `XCUIScreen.main`. For the #350 loop, capture only owned XCTest screens0/1 with the
+fresh restricted-v2 marker and exactly two attachments; never capture a host
+Mac screen. Identify the actually rendered display in the report. Keep GUI/AX, LLDB, native input and screenshot operations serial.
 Never keep LLDB attached during a timed lookup or audio run: that pauses the
 app and invalidates the measurement. Use the parent's #357/#358 diagnostic
 controls rather than adding another debugger/volume workaround here.
