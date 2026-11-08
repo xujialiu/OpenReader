@@ -55,11 +55,25 @@ class NativePCMControlTest(unittest.TestCase):
         self.assertEqual(second['seq'], 2)
         self.assertEqual([row['do'] for row in received], ['describe', 'state'])
 
+    def test_arm_requires_fresh_description_ticket_and_preserves_it_in_command(self):
+        received = self.peer()
+        fields = {'maximumSeconds': 1, 'sourceIdentity': '0x1', 'engineIdentity': '0x2',
+                  'readingToken': 'host', 'attribution': 'sole-current-reading-no-other-audio',
+                  'descriptionToken': 'host-description-1', 'descriptionGeneration': 1}
+        request(self.container, self.run, 'arm', fields)
+        self.assertEqual(received[-1]['descriptionToken'], 'host-description-1')
+        self.assertEqual(received[-1]['descriptionGeneration'], 1)
+        for change in ({'descriptionToken': ''}, {'descriptionGeneration': 0}, {'descriptionGeneration': True}):
+            with self.assertRaises(ValueError):
+                request(self.container, self.run, 'arm', {**fields, **change})
+        self.assertEqual(len(received), 1)
+
     def test_fixed_fields_bounds_tokens_and_expiry_fail_closed_before_native_action(self):
         for action, fields in [('eval', {}), ('state', {'code': 'not allowed'}),
                                ('anchor', {'label': 'arbitrary'}),
                                ('arm', {'maximumSeconds': 11, 'sourceIdentity': '0x1', 'engineIdentity': '0x2',
-                                        'readingToken': 'host', 'attribution': 'sole-current-reading-no-other-audio'})]:
+                                        'readingToken': 'host', 'attribution': 'sole-current-reading-no-other-audio',
+                                        'descriptionToken': 'host-description-1', 'descriptionGeneration': 1})]:
             with self.assertRaises(ValueError):
                 request(self.container, self.run, action, fields)
         with self.assertRaises(ValueError):

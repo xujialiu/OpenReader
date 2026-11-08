@@ -3,6 +3,9 @@
 // without BOTH the Debug-role receipt and an explicit expiring launch token.
 #import <TargetConditionals.h>
 #if TARGET_OS_SIMULATOR && DEBUG && OPENREADER_PCM_TEST_ONLY
+#if !__has_feature(objc_arc)
+#error "Native PCM observer requires ARC strong pending-description ownership."
+#endif
 #import <AVFoundation/AVFoundation.h>
 #import <CommonCrypto/CommonDigest.h>
 #import <Foundation/Foundation.h>
@@ -18,6 +21,49 @@
 #include <thread>
 
 using namespace openreader::pcm;
+
+// Public-getter adapter: only these bounded read-only buffer/time/format
+// getters are permitted during Apple's valid callback lifetime. Borrowed ARC
+// references do not manage ownership here. The portable append path below has
+// no Objective-C calls; actual getter/ARC allocation and latency remain HOLD.
+static void ORPCMCopyPublicTap(CaptureBuffer &storage, AVAudioPCMBuffer *__unsafe_unretained pcm,
+                             AVAudioTime *__unsafe_unretained when,
+                             const AudioStreamBasicDescription &expectedASBD) {
+  auto lease = storage.callbackLease();
+  if (!lease) return;
+  const uint64_t arrival = mach_absolute_time();
+  AVAudioFormat *__unsafe_unretained actualFormat = pcm.format;
+  const AudioStreamBasicDescription *description = actualFormat.streamDescription;
+  if (!description) { storage.invalidate(FormatChanged); return; }
+  const AudioStreamBasicDescription actualASBD = *description;
+  if (actualASBD.mSampleRate != expectedASBD.mSampleRate ||
+      actualASBD.mFormatID != expectedASBD.mFormatID || actualASBD.mFormatFlags != expectedASBD.mFormatFlags ||
+      actualASBD.mBytesPerPacket != expectedASBD.mBytesPerPacket || actualASBD.mFramesPerPacket != expectedASBD.mFramesPerPacket ||
+      actualASBD.mBytesPerFrame != expectedASBD.mBytesPerFrame || actualASBD.mChannelsPerFrame != expectedASBD.mChannelsPerFrame ||
+      actualASBD.mBitsPerChannel != expectedASBD.mBitsPerChannel) {
+    storage.invalidate(FormatChanged); return;
+  }
+  const Format actual{actualASBD.mSampleRate, actualASBD.mChannelsPerFrame,
+                      !(actualASBD.mFormatFlags & kAudioFormatFlagIsNonInterleaved)};
+  const AVAudioFrameCount frames = pcm.frameLength;
+  const AudioBufferList *list = pcm.audioBufferList;
+  const Timestamp timestamp{(bool)when.sampleTimeValid, (bool)when.hostTimeValid, when.sampleTime,
+                            when.sampleRate, when.hostTime};
+  std::array<const float *, CaptureBuffer::maxChannels> planes{};
+  const uint32_t buffers = actual.interleaved ? 1 : actual.channels;
+  if (!list || actual.channels > CaptureBuffer::maxChannels || list->mNumberBuffers != buffers) {
+    storage.invalidate(InvalidSamples); return;
+  }
+  for (uint32_t c = 0; c < buffers; ++c) {
+    const uint32_t channels = actual.interleaved ? actual.channels : 1;
+    if (list->mBuffers[c].mNumberChannels != channels ||
+        list->mBuffers[c].mDataByteSize < (uint64_t)frames * channels * sizeof(float)) {
+      storage.invalidate(InvalidSamples); return;
+    }
+    planes[c] = static_cast<const float *>(list->mBuffers[c].mData);
+  }
+  storage.append(planes, frames, actual, timestamp, arrival);
+}
 
 static NSString *const ORPCMSchema = @"OpenReaderNativePCM-v1";
 static NSString *ORPCMIdentity(id object) {
@@ -51,6 +97,14 @@ static NSString *ORPCMHash(NSData *data) {
 
 @interface ORNativePCMController : NSObject {
   std::shared_ptr<CaptureBuffer> _buffer;
+  std::shared_ptr<DescriptionState> _descriptionState;
+  AVAudioEngine *_describedEngine;
+  AVAudioSourceNode *_describedSource;
+  AVAudioFormat *_describedFormat;
+  NSDictionary *_description;
+  NSString *_descriptionToken;
+  uint64_t _descriptionGeneration;
+  id _descriptionConfigurationObserver, _descriptionLifecycleObserver;
   AVAudioEngine *_engine;
   AVAudioSourceNode *_source;
   AVAudioFormat *_format;
@@ -70,6 +124,7 @@ static NSString *ORPCMHash(NSData *data) {
 - (instancetype)initWithRun:(NSString *)run build:(NSDictionary *)build;
 - (void)tick;
 - (void)removeGraphObservers;
+- (void)clearDescription;
 @end
 
 @implementation ORNativePCMController
@@ -158,24 +213,64 @@ static NSString *ORPCMHash(NSData *data) {
   if (_buffer && session.outputVolume != 0) _buffer->invalidate(VolumeNotZero);
 }
 
+- (void)clearDescription {
+  if (_descriptionState) _descriptionState->invalidate();
+  for (id observer in @[_descriptionConfigurationObserver ?: NSNull.null, _descriptionLifecycleObserver ?: NSNull.null]) {
+    if (observer != NSNull.null) [NSNotificationCenter.defaultCenter removeObserver:observer];
+  }
+  _descriptionConfigurationObserver = nil; _descriptionLifecycleObserver = nil;
+  _describedEngine = nil; _describedSource = nil; _describedFormat = nil;
+  _description = nil; _descriptionToken = nil; _descriptionState.reset();
+}
+
 - (NSDictionary *)describe {
+  [self clearDescription];
+  if (_buffer) return @{@"eligible": @NO, @"reason": @"one-capture-per-launch"};
+  if (!_timebase.numer || !_timebase.denom) return @{@"eligible": @NO, @"reason": @"invalid-mach-timebase"};
   if (![AudioEngine respondsToSelector:@selector(or_pcmTestEngineSnapshot)])
     return @{@"eligible": @NO, @"reason": @"test-build-locked-snapshot-accessor-missing"};
-  // This retained snapshot is acquired inside the library's existing mutex;
-  // the accessor releases that mutex BEFORE any AVAudioNode/tap call here.
-  AVAudioEngine *engine = [AudioEngine or_pcmTestEngineSnapshot];
-  AVAudioSourceNode *source = [self soleSource:engine];
-  if (!engine || !source || source.engine != engine)
-    return @{@"eligible": @NO, @"reason": @"missing-or-ambiguous-existing-source"};
-  return @{@"eligible": @YES,
-      @"engineIdentity": ORPCMIdentity(engine), @"sourceIdentity": ORPCMIdentity(source),
-      @"format": ORPCMFormat([source outputFormatForBus:0]), @"engineRunning": @(engine.running),
+  const uint64_t deadline = mach_absolute_time() + (uint64_t)(5e9L * _timebase.denom / _timebase.numer);
+  auto descriptionState = std::make_shared<DescriptionState>(++_descriptionGeneration, deadline);
+  _descriptionState = descriptionState;
+  // Observe before acquiring/retaining the described objects, through capture
+  // observer handover. No event between describe and arm may be silently lost.
+  _descriptionConfigurationObserver = [NSNotificationCenter.defaultCenter
+      addObserverForName:AVAudioEngineConfigurationChangeNotification object:nil queue:nil
+      usingBlock:^(NSNotification *note) { descriptionState->invalidate(); }];
+  _descriptionLifecycleObserver = [NSNotificationCenter.defaultCenter
+      addObserverForName:@"OpenReaderAudioTrace" object:nil queue:nil usingBlock:^(NSNotification *note) {
+        NSString *event = note.userInfo[@"event"];
+        if ([event hasPrefix:@"engine."] || [event hasPrefix:@"interruption."]) descriptionState->invalidate();
+      }];
+  // Strong ivars keep these precise objects alive across file commands, so a
+  // retired source's address cannot be recycled into the pending description.
+  _describedEngine = [AudioEngine or_pcmTestEngineSnapshot];
+  _describedSource = [self soleSource:_describedEngine];
+  _describedFormat = [_describedSource outputFormatForBus:0];
+  if (!_describedEngine || !_describedSource || _describedSource.engine != _describedEngine ||
+      [self soleSource:_describedEngine] != _describedSource || !_describedEngine.running ||
+      !descriptionState->usable(_descriptionGeneration, mach_absolute_time())) {
+    [self clearDescription];
+    return @{@"eligible": @NO, @"reason": @"missing-ambiguous-or-changed-existing-source"};
+  }
+  _descriptionToken = NSUUID.UUID.UUIDString;
+  _description = @{@"eligible": @YES, @"descriptionToken": _descriptionToken,
+      @"descriptionGeneration": @(_descriptionGeneration), @"validForSeconds": @5,
+      @"engineIdentity": ORPCMIdentity(_describedEngine), @"sourceIdentity": ORPCMIdentity(_describedSource),
+      @"format": ORPCMFormat(_describedFormat), @"engineRunning": @(_describedEngine.running),
       @"outputVolume": @(AVAudioSession.sharedInstance.outputVolume)};
+  return _description;
 }
 
 - (NSDictionary *)arm:(NSDictionary *)command API_AVAILABLE(ios(27.0)) {
   if (_buffer) return @{@"error": @"one-capture-per-launch"};
-  NSDictionary *description = [self describe];
+  if (!_descriptionState || ![command[@"descriptionGeneration"] isKindOfClass:NSNumber.class] ||
+      [command[@"descriptionGeneration"] doubleValue] != _descriptionGeneration ||
+      ![_descriptionToken isEqual:command[@"descriptionToken"]] ||
+      !_descriptionState->usable(_descriptionGeneration, mach_absolute_time())) {
+    [self clearDescription]; return @{@"error": @"description-stale-expired-or-cancelled"};
+  }
+  NSDictionary *description = _description;
   double seconds = [command[@"maximumSeconds"] doubleValue];
   if (![description[@"eligible"] isEqual:@YES] || ![description[@"engineRunning"] isEqual:@YES] ||
       ![description[@"sourceIdentity"] isEqual:command[@"sourceIdentity"]] ||
@@ -185,11 +280,14 @@ static NSString *ORPCMHash(NSData *data) {
       !std::isfinite(seconds) || seconds <= 0 || seconds > 10 ||
       AVAudioSession.sharedInstance.outputVolume != 0)
     return @{@"error": @"source-attribution-running-format-duration-or-volume-control"};
-  _engine = [AudioEngine or_pcmTestEngineSnapshot];
-  _source = [self soleSource:_engine]; _format = [_source outputFormatForBus:0];
-  if (!_source || ![[self describe] isEqual:description] ||
-      _format.commonFormat != AVAudioPCMFormatFloat32)
-    return @{@"error": @"source-changed-or-non-float32-format"};
+  AVAudioEngine *currentEngine = [AudioEngine or_pcmTestEngineSnapshot];
+  if (currentEngine != _describedEngine || [self soleSource:currentEngine] != _describedSource ||
+      _describedSource.engine != _describedEngine || !_describedEngine.running ||
+      ![[_describedSource outputFormatForBus:0] isEqual:_describedFormat] ||
+      _describedFormat.commonFormat != AVAudioPCMFormatFloat32) {
+    [self clearDescription]; return @{@"error": @"described-object-changed-or-non-float32-format"};
+  }
+  _engine = _describedEngine; _source = _describedSource; _format = _describedFormat;
   try {
     _buffer = std::make_shared<CaptureBuffer>(
         Format{_format.sampleRate, _format.channelCount, (bool)_format.interleaved}, seconds,
@@ -203,6 +301,7 @@ static NSString *ORPCMHash(NSData *data) {
   [self addAnchor:@"arm-before-install"];
   auto storage = _buffer;
   const Format expected{_format.sampleRate, _format.channelCount, (bool)_format.interleaved};
+  const AudioStreamBasicDescription expectedASBD = *_format.streamDescription;
   _configurationObserver = [NSNotificationCenter.defaultCenter
       addObserverForName:AVAudioEngineConfigurationChangeNotification object:_engine queue:nil
       usingBlock:^(NSNotification *note) {
@@ -217,34 +316,17 @@ static NSString *ORPCMHash(NSData *data) {
         if ([event hasPrefix:@"engine."] || [event hasPrefix:@"interruption."])
           storage->invalidate(ConfigurationChanged);
       }];
+  // Capture observers are active before the one-shot ticket is consumed and
+  // pending observers removed, leaving no lifecycle-observation gap.
+  if (!_descriptionState->consume(_descriptionGeneration, mach_absolute_time())) {
+    _buffer->invalidate(IdentityChanged); [self removeGraphObservers]; [self clearDescription];
+    return @{@"error": @"description-cancelled-before-install"};
+  }
+  [self clearDescription];
   NSError *error = nil;
   BOOL installed = [_source installTapOnBus:0 bufferSize:(AVAudioFrameCount)std::ceil(expected.sampleRate * .1)
-      format:nil error:&error block:^(AVAudioPCMBuffer *pcm, AVAudioTime *when) {
-        // No Objective-C collection construction, logging, JS, file access or
-        // retained Apple pointers here. shared_ptr ownership survives late calls.
-        auto lease = storage->callbackLease();
-        if (!lease) return;
-        const uint64_t arrival = mach_absolute_time();
-        AVAudioFormat *format = pcm.format;
-        Format actual{format.sampleRate, format.channelCount, (bool)format.interleaved};
-        if (format.commonFormat != AVAudioPCMFormatFloat32 || actual.channels > CaptureBuffer::maxChannels) {
-          storage->invalidate(FormatChanged); return;
-        }
-        std::array<const float *, CaptureBuffer::maxChannels> planes{};
-        const AudioBufferList *list = pcm.audioBufferList;
-        const uint32_t buffers = actual.interleaved ? 1 : actual.channels;
-        if (list->mNumberBuffers != buffers) { storage->invalidate(InvalidSamples); return; }
-        for (uint32_t c = 0; c < buffers; ++c) {
-          const uint32_t channels = actual.interleaved ? actual.channels : 1;
-          if (list->mBuffers[c].mNumberChannels != channels ||
-              list->mBuffers[c].mDataByteSize < (uint64_t)pcm.frameLength * channels * sizeof(float)) {
-            storage->invalidate(InvalidSamples); return;
-          }
-          planes[c] = static_cast<const float *>(list->mBuffers[c].mData);
-        }
-        storage->append(planes, pcm.frameLength, actual,
-            Timestamp{(bool)when.sampleTimeValid, (bool)when.hostTimeValid, when.sampleTime,
-                      when.sampleRate, when.hostTime}, arrival);
+      format:nil error:&error block:^(AVAudioPCMBuffer *__unsafe_unretained pcm, AVAudioTime *__unsafe_unretained when) {
+        ORPCMCopyPublicTap(*storage, pcm, when, expectedASBD);
       }];
   if (!installed) {
     _buffer->stop();
@@ -270,6 +352,7 @@ static NSString *ORPCMHash(NSData *data) {
 }
 
 - (void)disarm {
+  [self clearDescription];
   if (!_buffer || _removalAttempted) return;
   _removalAttempted = YES;
   [self addAnchor:@"disarm-before-remove"];
@@ -334,7 +417,7 @@ static NSString *ORPCMHash(NSData *data) {
   NSSet *common = [NSSet setWithArray:@[@"seq", @"do", @"run"]];
   NSMutableSet *allowed = [common mutableCopy];
   if ([action isEqual:@"arm"]) [allowed addObjectsFromArray:@[@"maximumSeconds", @"sourceIdentity",
-      @"engineIdentity", @"readingToken", @"attribution"]];
+      @"engineIdentity", @"readingToken", @"attribution", @"descriptionToken", @"descriptionGeneration"]];
   if ([action isEqual:@"anchor"]) [allowed addObject:@"label"];
   if (![[NSSet setWithArray:command.allKeys] isSubsetOfSet:allowed]) return @{@"error": @"unknown-field"};
   if ([action isEqual:@"describe"]) return [self describe];
@@ -362,6 +445,10 @@ static NSString *ORPCMHash(NSData *data) {
   @autoreleasepool {
     if (_shutdown) return;
     const double now = NSProcessInfo.processInfo.systemUptime;
+    if (_descriptionState && (!_descriptionState->usable(_descriptionGeneration, mach_absolute_time()) ||
+        !_describedEngine.running || _describedSource.engine != _describedEngine ||
+        [self soleSource:_describedEngine] != _describedSource ||
+        ![[_describedSource outputFormatForBus:0] isEqual:_describedFormat])) [self clearDescription];
     if (_buffer && _ownsTap && !_removalAttempted) {
       if (![self identityUnchanged]) _buffer->invalidate(IdentityChanged);
       [self sampleVolume];

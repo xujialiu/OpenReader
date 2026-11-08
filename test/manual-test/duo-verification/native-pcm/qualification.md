@@ -20,7 +20,12 @@ lengths and format, not that request, determine storage and analysis.
 The installer is deliberately **not** a default config plugin/import/package
 script. It modifies only a fresh, private external source archive's generated
 project, after normal prebuild. A source checkout or its ordinary `ios/` is
-refused. Absent/0 opt-in is a strict no-op. Formal/free Info.plist roles are
+refused. Every existing PBX/plist/dependency/Pod write target and source destination
+parent is canonicalized and checked for owned external containment, then
+revalidated before any write. PBX/plist/source-parent symlink escapes fail before
+changing any target file. The archive must be exclusively owned and unchanged
+while installing; this preflight is not an adversarial concurrent-path sandbox.
+Absent/0 opt-in is a strict no-op. Formal/free Info.plist roles are
 refused even with opt-in. The translation unit additionally excludes all body
 code unless `TARGET_OS_SIMULATOR && DEBUG && OPENREADER_PCM_TEST_ONLY`; its
 `+load` does nothing without a Debug-role receipt and `-ORNativePCMRun TOKEN`.
@@ -112,9 +117,19 @@ mutex-protected accessor, never AudioEngine's unguarded nonatomic singleton or
 property. It then reads Apple's public `attachedNodes` snapshot, not the library's
 mutable dictionaries. The library lock is released before source enumeration,
 format reads or any tap API. It rejects
-zero or multiple source nodes, and requires a fresh describe answer's exact
-engine/source identities plus `sole-current-reading-no-other-audio` declaration
-and a nonsecret Reading token. This declaration is an attribution receipt,
+zero or multiple source nodes. Describe retains the precise engine/source/format
+in strong ivars across commands and issues a fresh UUID token plus increasing
+generation, valid for at most five seconds and one arm. Lifecycle/configuration
+observers start before snapshot acquisition; cancellation, expiry, another
+describe or shutdown retires the ticket. Arm requires that token/generation and
+compares the actual current objects to the retained described objects, not just
+address strings. Capture observers overlap ticket consumption so no target
+lifecycle event is lost during handover. A retired source cannot be freed and
+reallocated at the same address while its description retains it; an old token
+cannot arm a replacement after that retention expires.
+
+Arm also requires the described engine/source identity receipts plus
+`sole-current-reading-no-other-audio` declaration and a nonsecret Reading token. This declaration is an attribution receipt,
 **not independent proof**: the tester must establish the actual held Reading,
 its selected Provider/Voice/Clip, and absence of Pronunciation/other app audio.
 The source identity is the retained object address, **not** the library's
@@ -133,8 +148,20 @@ tests. It preallocates actual-rate/channel float PCM (up to 192 kHz, 8 channels,
 copying valid frames, preserving every channel to owned interleaved float32.
 It records full AVAudioTime validity/sampleTime/sampleRate/hostTime, actual frame
 length, cumulative **output-frame** offset and callback-arrival mach time.
-No allocation-heavy work, lock/wait, encoding, JS, log or filesystem operation
-is on that copy path. Raw mach timebase and bracketed wall/host/continuous clock
+The public tap adapter necessarily uses **nine bounded read-only getters**:
+`pcm.format`, borrowed `format.streamDescription`, `pcm.frameLength`,
+`pcm.audioBufferList`, and the five AVAudioTime validity/time/rate getters.
+Expected immutable ASBD scalars are cached before installation; actual format
+scalars are checked against them. Getter results/pointers are borrowed only
+within the valid callback lifetime, with no owning ARC temporaries, explicit
+ownership operations, arbitrary messaging, Objective-C construction/collections,
+controller/graph calls, logging, files, JS, locks or waits in the adapter.
+The portable C++ append path is separate and has **no Objective-C calls** and no
+allocation/lock/wait. The whole callback is **not** claimed to be zero-Objective-C
+or measured allocation-free. Actual compiled ARC/getter allocation behavior,
+latency, configuration changes and cleanup remain **HOLD** until native
+qualification; a private hook is never a fallback.
+Raw mach timebase and bracketed wall/host/continuous clock
 anchors are exported. `frameOffset / actualSampleRate` is output time, NOT the
 content cursor and NOT multiplied by playback rate.
 
@@ -150,7 +177,10 @@ Failure bits, all meaning **incomplete**, not an app audio failure:
 | 1024 / 2048 / 4096 | uncertain cleanup / 10 s deadline exceeded / engine configuration changed |
 
 Timestamp consistency allows two PCM frames as a disclosed **instrument clock
-check**, not a Word Timing tolerance. Sample-time units use AVAudioTime's own
+check**, not a Word Timing tolerance. Sample time must first strictly increase,
+independently of that tolerance, including one-/two-frame packets; equal or
+reversed sample times reject in both storage and the independent analyser.
+Sample-time units use AVAudioTime's own
 sample rate; host ticks use the raw timebase. Invalid sample time can occur with
 conversion: keep it incomplete; do not substitute a content counter. Polling is
 not atomic graph-lifecycle coverage, so native source retirement/coverage and
@@ -173,7 +203,11 @@ from `harness.json` in
 `Library/Application Support/duo-native-pcm/RUN/`. Native accepts only bounded
 `describe`, `arm`, `state`, `anchor`, `disarm`, `drain`, `shutdown` JSON commands.
 It never accepts file paths or evaluation code. Host sequence persists despite
-command deletion. A timeout means **may have executed**: inspect before retry.
+command deletion. Arm carries the fresh `descriptionToken` and
+`descriptionGeneration` from the describe answer automatically; address strings
+alone are insufficient. Send arm within the five-second validity window; an
+expired/cancelled ticket requires a new describe after reestablishing attribution.
+A timeout means **may have executed**: inspect before retry.
 
 ```sh
 TOOL=test/manual-test/duo-verification/native-pcm
@@ -228,9 +262,15 @@ succeeded. Keep originals read-only. Never replay narration to recover an export
    overflow and confirmed removal/quiescence. Source identity, not playing=true
    or a tone, establishes which graph was observed. Stop dependent cases if any
    control fails.
-3. Decode that exact Clip outside the app to lossless float32 plus a private
-   reference JSON, as `analyse.py --help` specifies. Preserve original Clip,
-   PCM and metadata checksums. Never synthesize a substitute Clip/timing source.
+3. Export the **actual Clip bytes/decoded PCM and real Word Timing arrays consumed
+   by this Reading**, with their runtime provenance, then decode that exact Clip
+   outside the app to lossless float32 plus a private reference JSON as
+   `analyse.py --help` specifies. A saved HTTP-200 response plus timings, matching
+   Provider/Voice/text/cache name, or its checksum alone does not establish that
+   byte identity. If consumed-source provenance is unavailable, keep native
+   qualification HOLD; do not substitute a separately fetched/saved candidate.
+   Preserve original Clip, PCM and metadata checksums. Never synthesize a
+   substitute Clip/timing source.
    Use host numpy/scipy already available, or an isolated host environment;
    do not upgrade app dependencies.
 
@@ -248,7 +288,12 @@ hide. It checks all output channels against a known mono/same-channel reference,
 resampling the reference to the **actual** tap rate only on the host. Every
 40 ms overlapping waveform window at 10 ms hops is independently correlated;
 local repeat/skip/progression errors reject, not an aggregate-median/end-count
-criterion. Gain/DC changes are supported. Low energy, competing passages or low
+criterion. Simultaneous channels share a single reference content coordinate:
+all channel matches must agree with the common reference-frame anchor within
+**two output frames** (reported as `crossChannelToleranceFrames`), an instrument
+matching uncertainty, not a speech/Word Timing tolerance. A consistently shifted
+right channel cannot establish its own independent passing anchor. Honest
+per-channel gain/DC changes are supported. Low energy, competing passages or low
 confidence stay explicit INCOMPLETE/REJECT, never silently filled with a source
 clock. The 40 ms/10 ms analysis resolution is disclosed, not exact sample or
 <100 ms word-sync certification. Packet timestamp gaps use the separate two-frame
@@ -267,7 +312,11 @@ An ambiguous real-Clip result is BLOCKED; do not weaken thresholds to pass it.
    paired with real Word Timings, `DuoAcceptanceWordTrace`, active-display
    word painting/CFI/rect evidence and the chosen Line Position as in
    `../duo-acceptance.md` Phase 4. Retain display anchors, actual native-input
-   receipts and all clock brackets/uncertainty. No LLDB attach during audio/AX.
+   receipts and all clock brackets/uncertainty. Map each waveform match through
+   the actual packet containing its output-frame offset: packet hostTime plus
+   that packet's relative frames/actual rate, then the native/page clock brackets.
+   Neither callback arrival nor a saved provider timing array alone establishes
+   the live word/audio alignment. No LLDB attach during audio/AX.
    Establish no-change and mutation controls again after any observer change.
 5. This initial analyser **refuses nonunit playback rate**. WSOLA is not bit
    preserving; native nonunit-rate waveform/coverage qualification is a separate
@@ -303,8 +352,9 @@ uses no Simulator and cleans its temporary binary. The installed native `.mm`
 has **not** been compiled by those checks. The external library accessor has
 only exact-source/guard/lock-scope/unchanged-production-byte contracts checked on
 the host, not native ARC/lifecycle execution. Actual compilation/link/load,
-initial snapshot lifetime, native callback overhead, returned format/time validity,
-known-real-Clip matching at
+initial snapshot/ticket ownership and stale-description/lifecycle cancellation,
+actual public-getter adapter ARC/compiler/allocation/latency, returned format/time
+validity, consumed-real-Clip/Word-Timing provenance and matching at
 Sound 0 and teardown remain tester/parent review gates.
 
 In every native finally: confirm Pause, disarm/drain/shutdown, check `ownsTap=false`,

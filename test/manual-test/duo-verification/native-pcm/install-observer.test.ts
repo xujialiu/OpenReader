@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -80,7 +80,48 @@ function fixture(variant = 'debug') {
   return { snapshot, sourceRevision: revision, receiptPath: join(root, 'receipt.json'), optIn: '1' };
 }
 
+function treeHashes(root: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  function visit(directory: string, prefix = '') {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const name = join(prefix, entry.name), file = join(directory, entry.name);
+      if (entry.isSymbolicLink()) result[name] = 'link:' + readlinkSync(file);
+      else if (entry.isDirectory()) { result[name] = 'directory'; visit(file, name); }
+      else result[name] = hash(readFileSync(file));
+    }
+  }
+  visit(root); return result;
+}
+
 describe('install-observer opt-in isolation (HOST ONLY)', () => {
+  it.each(['pbx', 'plist', 'source-parent'])('rejects %s symlink escape before ANY target file changes', (kind) => {
+    const options = fixture();
+    const root = dirname(options.snapshot), ordinary = join(root, 'ordinary-fixture');
+    mkdirSync(ordinary);
+    writeFileSync(join(ordinary, '.git'), 'HOST fake ordinary project; no real checkout touched');
+    const pbx = join(options.snapshot, 'ios/OpenReader.xcodeproj/project.pbxproj');
+    const info = join(options.snapshot, 'ios/OpenReader/Info.plist');
+    if (kind === 'source-parent') {
+      // Keep Info.plist separately owned, so only the source-destination parent
+      // guard (not the plist guard) can prevent this redirect.
+      const metadata = join(options.snapshot, 'ios/Metadata');
+      mkdirSync(metadata); cpSync(info, join(metadata, 'Info.plist'));
+      writeFileSync(pbx, readFileSync(pbx, 'utf8').replaceAll('OpenReader/Info.plist', 'Metadata/Info.plist'));
+      const parent = dirname(info), redirected = join(ordinary, 'OpenReader');
+      cpSync(parent, redirected, { recursive: true });
+      rmSync(parent, { recursive: true }); symlinkSync(redirected, parent);
+    } else {
+      const target = kind === 'pbx' ? pbx : info;
+      const redirected = join(ordinary, kind === 'pbx' ? 'project.pbxproj' : 'Info.plist');
+      cpSync(target, redirected); rmSync(target); symlinkSync(redirected, target);
+    }
+    const before = treeHashes(root);
+    let refusal: unknown;
+    try { installObserver(options); } catch (error) { refusal = error; }
+    expect(treeHashes(root)).toEqual(before);
+    expect(refusal).toBeInstanceOf(Error);
+    expect(String(refusal)).toContain('owned external');
+  });
   it('does absolutely nothing when absent/0, including for nonexistent project paths', () => {
     for (const optIn of [undefined, '0']) {
       expect(installObserver({ snapshot: '/nonexistent/never-touch', optIn })).toEqual({ enabled: false, modified: false });
@@ -188,6 +229,37 @@ describe('install-observer opt-in isolation (HOST ONLY)', () => {
       expect(restored).toBe(original); // every production method/statement is otherwise byte-identical
     }
     expect(() => snapshotSources(header, source + '\n')).toThrow('source/version/layout mismatch');
+  });
+  it('binds arm to a retained description token rather than pointer strings alone', () => {
+    const native = readFileSync(join(__dirname, 'NativePCMObserver.mm'), 'utf8');
+    expect(native).toContain('AVAudioEngine *_describedEngine;');
+    expect(native).toContain('AVAudioSourceNode *_describedSource;');
+    expect(native).toContain('descriptionToken');
+    expect(native).toContain('currentEngine != _describedEngine');
+    expect(native).toContain('[self soleSource:currentEngine] != _describedSource');
+    expect(native).toContain('descriptionState->invalidate()');
+    expect(native).not.toContain('![[self describe] isEqual:description]');
+    const describeSource = native.slice(native.indexOf('- (NSDictionary *)describe {'), native.indexOf('- (NSDictionary *)arm:'));
+    expect(describeSource.indexOf('addObserverForName')).toBeLessThan(describeSource.indexOf('_describedEngine = [AudioEngine'));
+    expect(describeSource).toContain('@"validForSeconds": @5');
+    const armSource = native.slice(native.indexOf('- (NSDictionary *)arm:'), native.indexOf('- (void)removeGraphObservers {'));
+    expect(armSource.indexOf('_configurationObserver =')).toBeLessThan(armSource.indexOf('_descriptionState->consume('));
+    expect(armSource.indexOf('_descriptionState->consume(')).toBeLessThan(armSource.indexOf('installTapOnBus:0'));
+    expect(armSource).not.toContain('[self describe]');
+  });
+  it('uses a bounded borrowed public-getter adapter, not an owning Objective-C RT temporary', () => {
+    const native = readFileSync(join(__dirname, 'NativePCMObserver.mm'), 'utf8');
+    expect(native).toContain('AVAudioFormat *__unsafe_unretained actualFormat');
+    expect(native).toContain('const AVAudioFrameCount frames = pcm.frameLength;');
+    expect(native).toContain('ORPCMCopyPublicTap(*storage, pcm, when, expectedASBD)');
+    expect(native).not.toContain('AVAudioFormat *format = pcm.format;');
+    const adapter = native.slice(native.indexOf('static void ORPCMCopyPublicTap('), native.indexOf('static NSString *const ORPCMSchema'));
+    expect(adapter.match(/\b(?:pcm|when|actualFormat)\.\w+/g)?.sort()).toEqual([
+      'actualFormat.streamDescription', 'pcm.audioBufferList', 'pcm.format', 'pcm.frameLength',
+      'when.hostTime', 'when.hostTimeValid', 'when.sampleRate', 'when.sampleTime', 'when.sampleTimeValid',
+    ].sort());
+    expect(adapter).not.toMatch(/\b(?:retain|release|autorelease|alloc|new|NSLog|dispatch|printf|fwrite|mutex|lock|shared_ptr)\b/);
+    expect(adapter).not.toMatch(/\[(?:self|NSString|NSArray|NSDictionary|AVAudioEngine)\b/);
   });
   it('uses only the verified public selector, nil connected-bus format and fixed expiring command protocol', () => {
     const native = readFileSync(join(__dirname, 'NativePCMObserver.mm'), 'utf8');

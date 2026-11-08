@@ -50,7 +50,7 @@ def timeline_errors(receipt):
             expected = before['frames'] / rate
             sample_delta = (int(row['sampleTime']) - int(before['sampleTime'])) / stamp_rate
             host_delta = (int(row['hostTime']) - int(before['hostTime'])) * base['numer'] / base['denom'] / 1e9
-            if stamp_rate != before['timestampSampleRate'] or abs(sample_delta - expected) > tolerance:
+            if int(row['sampleTime']) <= int(before['sampleTime']) or stamp_rate != before['timestampSampleRate'] or abs(sample_delta - expected) > tolerance:
                 errors.append(f'callback {index}: sample timestamp gap/reversal')
             if host_delta <= 0 or abs(host_delta - expected) > tolerance:
                 errors.append(f'callback {index}: host timestamp gap/reversal')
@@ -162,7 +162,7 @@ def waveform_matches(source, output, rate):
             violations.append({'outputFrame': at, 'referenceFrame': actual,
                                'reason': 'local repeat/skip/progression error', 'errorFrames': error})
     return {'matches': rows, 'unresolved': incomplete, 'violations': violations,
-            'windowMs': 40, 'hopMs': 10, 'searchMs': 150, 'rate': 1,
+            'referenceAnchorFrame': anchor, 'windowMs': 40, 'hopMs': 10, 'searchMs': 150, 'rate': 1,
             'limit': '1x known-Clip local waveform qualifier only; unresolved windows are NOT certified. Not native WSOLA or word/paint/acoustic proof.'}
 
 
@@ -196,11 +196,25 @@ def analyse(capture, reference, playback_rate=1):
     begin = max(0, int(np.floor((int(anchors['measurement-start']['beforeHostTime']) - first_host) * seconds_per_tick * actual_rate)))
     end = min(len(output), int(np.ceil((int(anchors['measurement-end']['afterHostTime']) - first_host) * seconds_per_tick * actual_rate)))
     result = {'matches': [], 'unresolved': [], 'violations': []}
+    common_anchor = None
+    # One content coordinate for simultaneous channels. Two output frames is a
+    # disclosed instrument matching uncertainty, not a speech/Word Timing budget.
+    channel_tolerance_frames = 2
     for channel in range(output.shape[1]):
         local = waveform_matches(source[:, 0 if ref['channels'] == 1 else channel], output[begin:end, channel], actual_rate)
+        if common_anchor is None:
+            common_anchor = local['referenceAnchorFrame']
+        if common_anchor is not None and channel > 0:
+            for row in local['matches']:
+                error = row['referenceFrame'] - (common_anchor + row['outputFrame'])
+                if abs(error) > channel_tolerance_frames:
+                    local['violations'].append({'outputFrame': row['outputFrame'], 'referenceFrame': row['referenceFrame'],
+                        'reason': 'cross-channel reference coordinate disagreement', 'errorFrames': error})
         for kind in ('matches', 'unresolved', 'violations'):
             result[kind].extend({**row, 'channel': channel, 'outputFrame': row['outputFrame'] + begin} for row in local[kind])
         result.update({key: local[key] for key in ('windowMs', 'hopMs', 'searchMs', 'rate', 'limit')})
+    result['commonReferenceFrameAtAnalysisStart'] = common_anchor
+    result['crossChannelToleranceFrames'] = channel_tolerance_frames
     result['timelineErrors'] = errors
     result['referenceResampled'] = actual_rate != reference_rate
     result['analysedChannels'] = output.shape[1]

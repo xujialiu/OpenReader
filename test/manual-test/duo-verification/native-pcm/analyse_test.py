@@ -166,6 +166,51 @@ class NativePCMAnalysisTest(unittest.TestCase):
             qualify_copies(self.original, self.reference, self.root / 'bad-position', 0, 300)
         self.assertFalse((self.root / 'bad-position').exists())
 
+    def test_shifted_stereo_channel_rejects_common_reference_coordinate_disagreement(self):
+        source = np.frombuffer((self.root / 'clip.f32le').read_bytes(), dtype='<f4')
+        target, receipt = self.external_copy('shifted-stereo')
+        receipt['format']['channels'] = 2
+        stereo = np.column_stack((source[3000:12000] * .6 + .01, source[3300:12300] * .8 - .02))
+        self.save(target, stereo, receipt)  # valid refreshed checksum, right channel 50ms ahead
+        result = analyse(target, self.reference)
+        self.assertEqual(result['status'], 'REJECT', result['status'])
+        self.assertTrue(any(row.get('reason') == 'cross-channel reference coordinate disagreement'
+                            for row in result['violations']))
+        self.assertEqual(result['timelineErrors'], [])
+        self.assertEqual(self.hashes(self.original), self.original_hashes)
+
+    def test_common_channel_coordinate_uses_disclosed_two_frame_instrument_bound(self):
+        source = np.frombuffer((self.root / 'clip.f32le').read_bytes(), dtype='<f4')
+        for shift, status in ((0, 'HOST_1X_MATCH'), (2, 'HOST_1X_MATCH'), (3, 'REJECT')):
+            target, receipt = self.external_copy(f'stereo-offset-{shift}')
+            receipt['format']['channels'] = 2
+            stereo = np.column_stack((self.output, source[3000 + shift:12000 + shift] * .8 - .02))
+            self.save(target, stereo, receipt)
+            result = analyse(target, self.reference)
+            self.assertEqual(result['status'], status)
+            self.assertEqual(result['crossChannelToleranceFrames'], 2)
+
+    def test_short_packets_require_strict_sample_time_progress_before_tolerance(self):
+        original = json.loads((self.original / 'capture.json').read_text())
+        for frames in (1, 2):
+            for delta in (frames, 0, -1):
+                receipt = copy.deepcopy(original)
+                receipt['format']['sampleRate'] = 1000
+                receipt['frameCount'] = frames * 2
+                receipt['records'] = [dict(original['records'][0], frameOffset=index * frames,
+                    frames=frames, sampleTime=str(100 + (delta if index else 0)),
+                    timestampSampleRate=1000, hostTime=str(1000000000 + index * frames * 1000000))
+                    for index in (0, 1)]
+                receipt['anchors'] = [{'label': label, 'clock': {'beforeHostTime': str(tick), 'afterHostTime': str(tick)}}
+                    for label, tick in [('measurement-start', 1000000000), ('measurement-end', 1000000000 + 2 * frames * 1000000)]]
+                errors = timeline_errors(receipt)
+                with self.subTest(frames=frames, delta=delta):
+                    if delta > 0:
+                        self.assertEqual(errors, [])
+                    else:
+                        self.assertTrue(any('sample timestamp' in error for error in errors), errors)
+                    print(f'short packet timeline frames={frames} sample delta={delta}: ' + ('ACCEPT' if not errors else 'REJECT'))
+
     def test_every_output_channel_is_qualified_and_original_checksums_are_enforced(self):
         target, receipt = self.external_copy('stereo')
         stereo = np.column_stack((self.output, self.output * .8))

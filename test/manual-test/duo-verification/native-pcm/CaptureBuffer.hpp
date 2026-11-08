@@ -48,6 +48,23 @@ enum Failure : uint32_t {
   ConfigurationChanged = 1 << 12,
 };
 
+// One bounded describe-to-arm ticket. Native code separately retains the actual
+// described objects; address strings are receipts, never object authority.
+class DescriptionState {
+ public:
+  DescriptionState(uint64_t generation, uint64_t deadline) : generation_(generation), deadline_(deadline) {}
+  bool usable(uint64_t generation, uint64_t now) const noexcept {
+    return generation != 0 && generation == generation_ && now <= deadline_ && available_.load();
+  }
+  bool consume(uint64_t generation, uint64_t now) noexcept {
+    return usable(generation, now) && available_.exchange(false);
+  }
+  void invalidate() noexcept { available_.store(false); }
+ private:
+  uint64_t generation_, deadline_;
+  std::atomic<bool> available_{true};
+};
+
 class CaptureBuffer {
  public:
   static constexpr uint32_t maxChannels = 8;
@@ -138,7 +155,7 @@ class CaptureBuffer {
       const auto &before = previous.time;
       const long double seconds = previous.frames / format_.sampleRate;
       const long double tolerance = timestampToleranceFrames / format_.sampleRate;
-      if (time.sampleRate != before.sampleRate ||
+      if (time.sampleTime <= before.sampleTime || time.sampleRate != before.sampleRate ||
           std::abs((static_cast<long double>(time.sampleTime) - before.sampleTime) /
                    time.sampleRate - seconds) > tolerance)
         invalidate(SampleTimeGap);

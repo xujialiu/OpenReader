@@ -47,11 +47,15 @@ def request(container, run, action, fields=None, timeout=3):
     if not 0 <= age <= 120000 or (root / 'expired.json').exists():
         raise ValueError('Control lifetime expired; do not replay into another launch')
     fields = fields or {}
-    allowed = {'arm': {'maximumSeconds', 'sourceIdentity', 'engineIdentity', 'readingToken', 'attribution'},
+    allowed = {'arm': {'maximumSeconds', 'sourceIdentity', 'engineIdentity', 'readingToken', 'attribution', 'descriptionToken', 'descriptionGeneration'},
                'anchor': {'label'}}.get(action, set())
     if set(fields) != allowed:
         raise ValueError('Exact fixed command fields required; arbitrary evaluation is forbidden')
     if action == 'arm':
+        if not isinstance(fields['descriptionToken'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', fields['descriptionToken']):
+            raise ValueError('Fresh description token required')
+        if type(fields['descriptionGeneration']) is not int or not 0 < fields['descriptionGeneration'] <= 1000000:
+            raise ValueError('Fresh description generation required')
         if not isinstance(fields['maximumSeconds'], (int, float)) or not 0 < fields['maximumSeconds'] <= 10:
             raise ValueError('Capture bound must be <=10 seconds')
         if not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', fields['readingToken']):
@@ -134,7 +138,7 @@ def main():
         description = json.loads(Path(args.description).read_text())
         if description.get('run') != args.run or not description.get('answer', {}).get('eligible'):
             raise ValueError('Matching eligible describe receipt required')
-        fields = {key: description['answer'][key] for key in ('sourceIdentity', 'engineIdentity')}
+        fields = {key: description['answer'][key] for key in ('sourceIdentity', 'engineIdentity', 'descriptionToken', 'descriptionGeneration')}
         fields.update(maximumSeconds=args.maximum_seconds, readingToken=args.reading_token,
                       attribution='sole-current-reading-no-other-audio')
     if args.action == 'anchor':

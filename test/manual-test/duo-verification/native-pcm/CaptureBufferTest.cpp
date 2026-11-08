@@ -21,6 +21,18 @@ static void append(CaptureBuffer &buffer, const float *pcm, uint32_t frames,
 }
 
 int main() {
+  {
+    DescriptionState first(1, 5000);
+    assert(first.usable(1, 1000) && !first.consume(2, 1000));
+    first.invalidate(); // lifecycle cancellation between describe and arm
+    assert(!first.consume(1, 1000));
+    DescriptionState expired(2, 5000);
+    assert(!expired.consume(2, 5001));
+    DescriptionState replacement(3, 6000);
+    assert(!replacement.consume(1, 2000)); // old generation cannot arm a replacement
+    assert(replacement.consume(3, 2000) && !replacement.consume(3, 2000));
+    std::cout << "description ticket: fresh generation, cancellation, expiry and one-shot consume PASS\n";
+  }
   const float first[] = {.1f, .2f, .3f, .4f};
   const float second[] = {.5f, .6f, .7f, .8f};
   {
@@ -82,6 +94,18 @@ int main() {
     assert((b.failures() & Overflow) && b.frameCount() == 4);
   }
   std::cout << "overflow: incomplete, never silent partial truncation PASS\n";
+  for (uint32_t frames : {1U, 2U}) {
+    for (int64_t delta : {static_cast<int64_t>(frames), int64_t{0}, int64_t{-1}}) {
+      CaptureBuffer b({1000, 1, false}, .010, {1, 1});
+      append(b, first, frames, timeAt(100, 1000000000));
+      append(b, second, frames, timeAt(100 + delta, 1000000000 + frames * 1000000ULL));
+      b.stop();
+      std::cout << "short packet frames=" << frames << " sample delta=" << delta
+                << " failures=" << b.failures() << std::endl;
+      if (delta > 0) assert(b.failures() == 0);
+      else assert(b.failures() & SampleTimeGap);
+    }
+  }
   for (auto change : {InvalidTimestamp, SampleTimeGap, HostTimeGap, FormatChanged, InvalidSamples}) {
     CaptureBuffer b({1000, 1, false}, .010, {1, 1});
     append(b, first, 4, timeAt(0, 1000000000));

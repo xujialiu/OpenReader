@@ -26,6 +26,16 @@ function inCheckout(directory) {
   }
 }
 
+function ownedExisting(root, file) {
+  const actual = fs.realpathSync(file);
+  if (!inside(root, actual) || inCheckout(actual)) throw new Error('Write target must be owned external snapshot content');
+  return actual;
+}
+function mustBeNew(file) {
+  try { fs.lstatSync(file); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
+  throw new Error('New owned external destination required');
+}
+
 function installObserver({ snapshot, sourceRevision, receiptPath, optIn = process.env.OPENREADER_NATIVE_PCM_OBSERVER }) {
   // Absence is a strict no-op: not even mkdir/read/stat against the project.
   if (optIn === undefined || optIn === '0') return { enabled: false, modified: false };
@@ -36,12 +46,14 @@ function installObserver({ snapshot, sourceRevision, receiptPath, optIn = proces
     throw new Error('Use an external source archive, never a checkout or its ordinary generated ios/');
   }
   const receipt = canonical(path.resolve(receiptPath));
-  if (inside(root, receipt) || fs.existsSync(receipt)) throw new Error('Receipt must be a new external file outside the snapshot');
+  if (inside(root, receipt) || fs.existsSync(receipt) || inCheckout(receipt)) throw new Error('Receipt must be a new external file outside the snapshot');
+  mustBeNew(receipt);
   const ios = fs.realpathSync(path.join(root, 'ios'));
   if (!inside(root, ios)) throw new Error('Generated ios/ must not be a symlink outside the snapshot');
   const names = fs.readdirSync(ios).filter(name => name.endsWith('.xcodeproj'));
   if (names.length !== 1) throw new Error('Expected exactly one generated Xcode project');
-  const projectFile = path.join(ios, names[0], 'project.pbxproj');
+  const requestedProject = path.join(ios, names[0], 'project.pbxproj');
+  const projectFile = ownedExisting(ios, requestedProject);
   const beforeProject = fs.readFileSync(projectFile);
   const project = xcode.project(projectFile); project.parseSync();
   const targets = Object.entries(project.pbxNativeTargetSection()).filter(([key, target]) =>
@@ -53,8 +65,8 @@ function installObserver({ snapshot, sourceRevision, receiptPath, optIn = proces
   if (!configs.length || configs.some(config => !config?.buildSettings)) throw new Error('Missing target build configurations');
   const infoPaths = new Set(configs.map(config => unquote(config.buildSettings.INFOPLIST_FILE)));
   if (infoPaths.size !== 1) throw new Error('Application configurations must share one generated Info.plist');
-  const infoFile = path.resolve(ios, [...infoPaths][0]);
-  if (!inside(ios, infoFile)) throw new Error('Info.plist must be inside the generated project');
+  const requestedInfo = path.resolve(ios, [...infoPaths][0]);
+  const infoFile = ownedExisting(ios, requestedInfo);
   const beforeInfo = fs.readFileSync(infoFile);
   const info = plist.parse(beforeInfo.toString());
   if (info.OpenReaderBuildVariant !== 'debug') throw new Error('Formal/free capture is forbidden, even with opt-in');
@@ -83,12 +95,13 @@ function installObserver({ snapshot, sourceRevision, receiptPath, optIn = proces
       throw new Error('Installer and archived observer must be from the same final source revision');
     }
   }
-  const headerFile = fs.realpathSync(path.join(audioRoot, 'ios/audioapi/ios/system/AudioEngine.h'));
-  const engineFile = fs.realpathSync(path.join(audioRoot, 'ios/audioapi/ios/system/AudioEngine.mm'));
-  if (![headerFile, engineFile].every(file => inside(audioRoot, file))) throw new Error('AudioEngine sources must be owned by the external snapshot');
+  const requestedHeader = path.join(audioRoot, 'ios/audioapi/ios/system/AudioEngine.h');
+  const requestedEngine = path.join(audioRoot, 'ios/audioapi/ios/system/AudioEngine.mm');
+  const headerFile = ownedExisting(audioRoot, requestedHeader);
+  const engineFile = ownedExisting(audioRoot, requestedEngine);
   const snapshotPatch = snapshotSources(fs.readFileSync(headerFile), fs.readFileSync(engineFile));
-  const podsFile = fs.realpathSync(path.join(ios, 'Pods/Pods.xcodeproj/project.pbxproj'));
-  if (!inside(ios, podsFile)) throw new Error('External snapshot must own its generated Pods project');
+  const requestedPods = path.join(ios, 'Pods/Pods.xcodeproj/project.pbxproj');
+  const podsFile = ownedExisting(ios, requestedPods);
   const beforePods = fs.readFileSync(podsFile);
   const pods = xcode.project(podsFile); pods.parseSync();
   const sourceBuildFlag = snapshotBuildFlag(pods);
@@ -99,8 +112,10 @@ function installObserver({ snapshot, sourceRevision, receiptPath, optIn = proces
   const name = unquote(target.name);
   const group = project.findPBXGroupKey({ name }) ?? project.findPBXGroupKey({ path: name });
   if (!group) throw new Error('Expected the generated application source group');
-  const destination = path.join(ios, name, 'NativePCMObserver');
-  if (!inside(ios, destination) || fs.existsSync(destination)) throw new Error('New generated observer directory required');
+  const requestedParent = path.join(ios, name);
+  const sourceParent = ownedExisting(ios, requestedParent);
+  const destination = path.join(sourceParent, 'NativePCMObserver');
+  mustBeNew(destination);
   if (!project.addSourceFile('NativePCMObserver/NativePCMObserver.mm',
     { target: targetID, compilerFlags: '-DOPENREADER_PCM_TEST_ONLY=1 -std=c++17' }, group) ||
       !project.addHeaderFile('NativePCMObserver/CaptureBuffer.hpp', {}, group)) {
@@ -109,6 +124,20 @@ function installObserver({ snapshot, sourceRevision, receiptPath, optIn = proces
   info.OpenReaderNativePCMObserver = build;
   const afterProject = project.writeSync();
   const afterInfo = plist.build(info);
+  // Revalidate every existing write target and destination parent after all
+  // parsing/preparation, before ANY filesystem write. The snapshot must remain
+  // exclusively owned (this is not an adversarial concurrent-path sandbox).
+  const writeTargets = [[root, path.join(root, 'ios'), ios], [ios, requestedProject, projectFile],
+    [ios, requestedInfo, infoFile], [ios, requestedPods, podsFile],
+    [audioRoot, requestedHeader, headerFile], [audioRoot, requestedEngine, engineFile],
+    [ios, requestedParent, sourceParent]];
+  for (const [owner, requested, expected] of writeTargets) {
+    if (ownedExisting(owner, requested) !== expected) throw new Error('Changed owned external write target');
+  }
+  if (canonical(path.resolve(receiptPath)) !== receipt || inCheckout(path.dirname(receipt))) {
+    throw new Error('Changed owned external receipt parent');
+  }
+  mustBeNew(destination); mustBeNew(receipt);
   fs.mkdirSync(path.dirname(receipt), { recursive: true, mode: 0o700 });
   fs.mkdirSync(destination, { mode: 0o700 });
   for (const file of FILES) fs.copyFileSync(path.join(toolDirectory, file), path.join(destination, file), fs.constants.COPYFILE_EXCL);
