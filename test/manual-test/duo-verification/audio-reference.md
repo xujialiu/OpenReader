@@ -2,9 +2,10 @@
 
 One real Clip with real Word Timings from the owner's actually configured
 Provider, captured on the host through the app's own provider layer — the
-reference a later **native** capture (a real Reading in the app) is compared
-against. Nothing here plays audio, touches a simulator, or reads a microphone:
-`capture` is one HTTPS request, `verify` is offline byte arithmetic.
+**network/source answer** a later **native** capture (a real Reading in the
+app) is compared against *by content*. Nothing here plays audio, touches a
+simulator, or reads a microphone: `capture` is one HTTPS request, `verify` is
+offline byte arithmetic.
 
 Not this recipe's job, and never claimed by it: the rendered Reading, the
 native observer, the highlight following at a Line Position, or App Consent —
@@ -68,22 +69,43 @@ Fully offline, against the recorded hashes and the files themselves:
 - the last Timing ends inside the clip;
 - the four negative controls on copies are all refused: dropped audio,
   repeated audio, an equal-frame-count replacement (duration and Timings
-  intact — only the sample hash still tells it apart), and gapped Timings
-  (audio intact — caught by the timings hash and the end-past-clip bound).
+  intact — within this analyser, which compares hashes and never waveforms,
+  only the sample hash still tells it apart), and gapped Timings (audio
+  intact — caught by the timings hash and the end-past-clip bound). These
+  controls establish the **integrity of this saved reference**; they are not a
+  rendered-continuity or timestamp-gap detector for the live Reading's output.
 
 `verify` exits nonzero if any line fails. It is a focused analyser for this
-reference, not the long-drift median of `native-audio-match.py`, and not an
-8 s continuity oracle.
+reference, not the long-drift median of `native-audio-match.py`, not an
+8 s continuity oracle, and not a waveform-alignment framework — a rendered
+waveform analyser is the PCM implementer's separate tool and is not built here.
 
 ## How the native capture uses it
 
 The Clip is named by Provider, Voice and Speech Text (ADR 0028), so a native
-Reading of the **same utterance** on the same Provider and Voice names the
-same Clip: its audio and Timings should equal this reference byte for byte,
-and any difference is a finding about the native path, not about the Provider.
-The reference proves the PCM is nonzero and the Timings match the text; the
-native observer still has to prove the rendered Reading follows them — that
-part (#353) is not done here.
+Reading of the **same utterance** names the same Clip for caching. That is a
+*name*, not a byte guarantee: a new synthesis on the same Provider/Voice/
+Speech Text may come back **byte-different** — the server can regenerate
+stochastically or serve a different cached copy — and the app's native
+decode, resampling and WSOLA time-stretch are not host-PCM16-hash identical
+even for the same bytes. So the native comparison is **by content**: duration,
+the Timings (start/end/char offsets), and waveform alignment between the
+host-decoded reference and the locally captured audio, with host timestamps —
+never by hash equality of PCM bytes. The recorded hashes here prove one thing
+only: that this saved reference is intact as captured.
+
+Sample lanes, named separately and never conflated:
+
+- **Network/source samples** — what the Provider returned; this reference.
+- **Cache samples** — what the app stored for that name (Offline Narration's
+  `offline-narration-v2` payloads, in the app's own storage format).
+- **Rendered samples** — what the audio graph plays after native decode,
+  resampling and time-stretch; a different format, channel count and rate is
+  expected, and byte/PCM hash equality is not evidence there.
+
+The reference proves the source PCM is nonzero and its Timings match the text;
+proving the rendered Reading follows them (#353) is the native observer's work,
+not done here.
 
 ## Current capture
 
@@ -92,5 +114,42 @@ part (#353) is not done here.
 ("jjk narrator", en), synthesis 200 in 3.9 s, one chunk; 59,976 bytes MP3
 (sha256 `aa146859…f1e92`), 24 kHz mono PCM 7.497 s (sha256
 `96ad7c90…3d3c5`), 20 Word Timings, "The" at 0.00–0.16 s through "dawn" at
-6.88–7.36 s, "12" timed at 3.52–4.08 s. `/tmp` is ephemeral: recapture costs
+6.88–7.36 s, "12" timed at 3.52–4.08 s. `fish.freeOnly` routes the request to
+`s2.1-pro-free`; the recorded request documents the **requested free routing**
+and is not an independent billing audit. `/tmp` is ephemeral: recapture costs
 one request.
+
+## Next stage: the actual Clip and Timings a Reading used
+
+Read-only, through seams that already exist — no new hooks, schema, or cache
+format. The rendered-waveform analyser and the test-only observer are the PCM
+implementer's lane (owned by the parent's delegate ba247…); this recipe only
+documents how to read what the app itself stored.
+
+- **Cache lane (stored clips).** A Download saves each clip under the app's
+  existing Offline Narration store, addressable without any app change:
+  `xcrun simctl get_app_container SIMULATOR_UDID data` →
+  `Documents/offline-narration-v2/<sha256(document id)>/<sha256(narration
+  identity)>/<sha256(Speech Text)>.json` — the metadata carries the stored
+  `format` (`alac` | `gzip-pcm` | `encoded`), `sampleRate`, `mediaType` and
+  the clip's stored **Word Timings** — beside the payload
+  `<sha256(Speech Text)>.audio` or `.m4a`. All three hashes are computed by
+  the app's own `src/offline/catalog-keys.ts`/`audio-paths.ts` (`documentKey`,
+  `voiceKey`, `audioKey` — keyed on the Speech Text, ADR 0028), so a host
+  script can compute the address and copy the files out read-only. These are
+  **cache samples**, not rendered ones.
+- **Network/source lane.** This reference is that lane's answer for this
+  utterance. A Reading may hit the Provider again rather than a cache; its
+  answer can differ byte-wise from this file (see above) while carrying the
+  same Timings for the same text.
+- **Rendered lane.** Only a capture of the running audio graph is evidence of
+  what was played — the observer's lane, not this one. Native unit frames may
+  differ in format, channel count and rate from the host PCM; the observer
+  must align waveform/content plus host timestamps and reject external drop,
+  repeat, same-length replacement and timestamp-only gaps while accepting an
+  honest positive. That analyser is **not implemented here and not tested**;
+  this file records it as a requirement, not an achievement.
+
+Do not stage audio into the app by writing the store: `Documents/Inbox` + the
+`hx.cjs` harness protocol is the supported staging seam, and it carries
+documents, not clips.

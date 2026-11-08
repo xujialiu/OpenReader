@@ -4,16 +4,26 @@
  * provider layer (`src/core/providers`, ADR 0013) — not a copy of it and not a
  * parallel service.
  *
- * The reference is what a later *native* capture (a real Reading in the app,
- * by the owning native tester) is compared against. It proves three things on
- * the host alone, with no simulator, no audio output and no playback:
+ * The reference is the **network/source answer** for one utterance: what the
+ * Provider returned, decoded on the host. A later *native* capture (a real
+ * Reading in the app, by the owning native tester) is compared against it by
+ * content — duration, Timings, waveform — **not by bytes**: a new synthesis on
+ * the same Provider/Voice/Speech Text is not guaranteed byte-identical (the
+ * server may regenerate stochastically or serve a different cached copy), and
+ * the app's native decode, resampling and time-stretch are not host-PCM16
+ * hash-identical either. The hashes below prove the integrity of this saved
+ * reference, and nothing more.
+ *
+ * It proves three things on the host alone, with no simulator, no audio output
+ * and no playback:
  *
  * 1. the configured Provider answers with nonzero audio;
  * 2. the clip carries real Word Timings — nonempty, in the utterance's own
  *    character coordinates, never interpolated (ADR 0005, CONTEXT.md);
- * 3. a focused analyser can check any candidate copy against the reference,
- *    and is not fooled by dropped, repeated, equal-frame-count-replaced audio
- *    or gapped timings.
+ * 3. a focused byte/Timing analyser refuses four kinds of tampered copies of
+ *    this saved reference. It checks hashes, durations and Timings — it is not
+ *    a rendered-continuity or waveform-alignment analyser, and it is not a
+ *    detector for the live Reading's output.
  *
  * The provider chosen is the one the owner's settings actually enable with
  * Word Timings over plain HTTP (`kit/node-kit.ts`'s `loadSettings`). Credentials
@@ -137,9 +147,11 @@ export const durationS = (pcm: Pcm): number => pcm.samples.length / pcm.rate;
 /**
  * A candidate copy measured against the recorded reference. Every failure is a
  * reason to refuse the copy; an honest copy fails none. The copy's duration
- * and Timings are compared as well as its hashes because an
- * equal-frame-count replacement keeps both — only the sample hash still tells
- * it apart, which is the point the controls demonstrate.
+ * and Timings are compared as well as its hashes because an equal-frame-count
+ * replacement keeps both; within this analyser — which compares hashes and
+ * never waveforms — only the sample hash still tells it apart. A waveform
+ * alignment could detect it by content, but that is a different analyser and
+ * these controls do not test one.
  */
 export function copyFailures(copy: { pcmHash: string; durationS: number; timingsHash: string; timings: readonly Timestamp[]; text: string }, reference: { pcmHash: string; durationS: number; timingsHash: string }, toleranceS = 0.05): string[] {
   const failures: string[] = [];

@@ -113,7 +113,7 @@ describe('copyFailures and negativeControls', () => {
     }
   });
 
-  it('catches an equal-frame-count replacement only by hash: duration and Timings are unchanged', () => {
+  it('catches an equal-frame-count replacement by hash — the strongest detector this analyser has; duration and Timings are unchanged. A waveform-alignment analyser could also catch it by content, and is out of scope here', () => {
     const control = negativeControls(pcm).find((c) => c.name === 'equal-frame-count-replace')!;
     const ts = timings;
     const failures = copyFailures(copyOf(control.pcm, ts), reference);
