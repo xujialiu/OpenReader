@@ -441,6 +441,40 @@ describe('lookup resize restores only originally owned iframe focus (#350, #355)
     expect(f.problems()).toEqual([]);
   });
 
+  it.each([
+    ['overlapping coverage', 50, 'normal', false],
+    ['zero height', 40, 'normal', false],
+    ['zero width', 30, 'zero', false],
+    ['disjoint horizontal bounds', 30, 'disjoint', false],
+    ['partially exposed range', 30, 'normal', true],
+  ] as const)('requires positive clipped viewport area (%s)', (_name, bottomPx, horizontal, shouldFocus) => {
+    const f = fixture();
+    f.choose();
+    const before = f.messages();
+    const top = f.page.stage.scrollTop;
+    f.resize();
+    const next = f.complete(6, (one) => {
+      const frameLeft = horizontal === 'disjoint' ? 60 : 0;
+      f.page.stage.getBoundingClientRect = () => ({ top: 0, bottom: 100,
+        left: horizontal === 'zero' ? 55 : 0, right: horizontal === 'zero' ? 55 : horizontal === 'disjoint' ? 50 : 400 });
+      one.frame.getBoundingClientRect = () => ({ top: 0, bottom: 800, left: frameLeft, right: frameLeft + 400, width: 400, height: 800 });
+      one.doc.selectionRect = { top: 45, bottom: 65, left: 45 - frameLeft, right: 65 - frameLeft, width: 20, height: 20 };
+      f.page.send({ kind: 'bar', coveredPx: 60 });
+      f.page.send({ kind: 'inset', bottomPx });
+      // Keep the independent Browsing anchor at the bar's visible edge.
+      f.page.rendition.getContents()[0].locationOf = () => ({ top: 60, left: 0 });
+    });
+    if (shouldFocus) expect(next.frame.focus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
+    else expect(next.frame.focus).not.toHaveBeenCalled();
+    expect(next.selection.toString()).toBe('hope');
+    expect(next.selection.getRangeAt(0).startOffset).toBe(10);
+    expect(next.selection.getRangeAt(0).endOffset).toBe(14);
+    expect(f.messages()).toEqual(before);
+    expect(f.page.stage.scrollTop).toBe(top);
+    expect(f.page.displays).toEqual(['viewport-anchor']);
+    expect(f.problems()).toEqual([]);
+  });
+
   it.each(['actions/rename', 'actions/debug-note', 'actions/move/create-folder'])('the existing drawer queue closes lookup before %s can own native input', (task) => {
     const f = fixture();
     const turns = createDrawerTurns();

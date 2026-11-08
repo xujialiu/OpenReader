@@ -854,6 +854,7 @@ ${constants}
     var bottom = Math.min(bounds.bottom, viewport.bottom - covered);
     var left = Math.max(bounds.left, viewport.left);
     var right = Math.min(bounds.right, viewport.right);
+    if (right <= left || bottom <= top) return false;
     return Array.from(range.getClientRects()).some(function (rect) {
       return rect.width > 0 && rect.height > 0 && bounds.top + rect.top < bottom && bounds.top + rect.bottom > top &&
         bounds.left + rect.left < right && bounds.left + rect.right > left;
