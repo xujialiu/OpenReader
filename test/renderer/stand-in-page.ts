@@ -159,7 +159,7 @@ export function standInPage(options: { toc?: readonly unknown[]; debugMode?: boo
     const listeners = new Map<string, ((event: any) => void)[]>();
     return {
       addEventListener(type: string, fn: (event: any) => void) { listeners.set(type, [...(listeners.get(type) ?? []), fn]); },
-      dispatchEvent(event: any) { for (const fn of listeners.get(event.type) ?? []) fn(event); },
+      dispatchEvent(event: any) { for (const fn of listeners.get(event.type) ?? []) fn({ ...event, currentTarget: this }); },
     };
   }
   Object.assign(window, eventTarget());

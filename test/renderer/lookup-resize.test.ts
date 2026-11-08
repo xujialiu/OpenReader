@@ -57,7 +57,7 @@ function rangeDocument(doc: any) {
       setStart(node: any, at: number) { this.startContainer = node; this.startOffset = at; },
       setEnd(node: any, at: number) { this.endContainer = node; this.endOffset = at; },
       selectNode(node: any) { this.setStart(node, 0); this.setEnd(node, node.childNodes.length); },
-      getClientRects: () => [], getBoundingClientRect: () => ({ top: 0, bottom: 0, width: 0, height: 0 }),
+      getClientRects: () => [doc.selectionRect], getBoundingClientRect: () => doc.selectionRect,
       toString() { return doc.documentElement.textContent.slice(offset(this.startContainer, this.startOffset), offset(this.endContainer, this.endOffset)); },
     };
     return range;
@@ -79,10 +79,11 @@ function fixture(deferred = false) {
     clear() {
       trace.push('clear');
       for (const content of liveContents()) {
-        content.document.defaultView.frameElement.isConnected = false;
+        const frame = content.document.defaultView.frameElement;
+        if (page.document.activeElement === frame) page.document.activeElement = page.document.body;
+        frame.isConnected = false;
         content.document.defaultView = null;
       }
-      page.document.activeElement = page.document.body;
     },
     emit(event: string, size: object, target?: string) {
       if (event === 'resized') renditionPrototype.onResized.call(page.rendition, size, target);
@@ -103,6 +104,7 @@ function fixture(deferred = false) {
     const offset = rangeDocument(doc);
     doc.activeElement = doc.body;
     doc.visibilityState = 'visible';
+    doc.selectionRect = { top: 100, bottom: 118, left: 20, right: 60, width: 40, height: 18 };
     const frame = Object.assign(doc.defaultView.frameElement, {
       tagName: 'IFRAME', ownerDocument: page.document, contentDocument: doc, isConnected: true,
       getBoundingClientRect: () => ({ top: 0, bottom: 800, left: 0, right: 400, width: 400, height: 800 }),
@@ -291,6 +293,20 @@ describe('lookup resize restores only originally owned iframe focus (#350, #355)
     expect(f.page.posted.filter((m) => m.type !== 'openreader:blocks')).toEqual(before);
   });
 
+  it('transfers only that ownership through a subsequent resize and keeps a backward range', () => {
+    const f = fixture();
+    f.choose(f.first, 10, 14, true);
+    f.resize();
+    const next = f.complete();
+    expect(next.frame.focus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
+    f.resize(400, 800);
+    const current = f.complete();
+    expect(current.frame.focus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
+    expect(current.selection.anchorOffset).toBe(14);
+    expect(current.selection.focusOffset).toBe(10);
+    expect(f.messages()).toHaveLength(2);
+  });
+
   it('captures selection-owned focus before the OS resize blur, not only inside manager.resize', () => {
     const f = fixture();
     f.choose();
@@ -360,6 +376,28 @@ describe('lookup resize restores only originally owned iframe focus (#350, #355)
     f.resize();
     const next = f.complete(6, () => f.page.document.dispatchEvent({ type, target: f.page.document.body }));
     expect(next.frame.focus).not.toHaveBeenCalled();
+    expect(next.selection.rangeCount).toBe(0);
+  });
+
+  it.each(['INPUT', 'TEXTAREA', 'SELECT', 'contenteditable'])('never captures focus from the original %s editor', (tag) => {
+    const f = fixture();
+    f.first.doc.activeElement = { tagName: tag, isContentEditable: tag === 'contenteditable' };
+    f.choose();
+    f.first.doc.activeElement = f.first.doc.body;
+    f.resize();
+    expect(f.complete().frame.focus).not.toHaveBeenCalled();
+  });
+
+  it.each(['focusin', 'pointerdown', 'keydown', 'beforeinput'])('the section document also cancels focus on %s', (type) => {
+    const f = fixture();
+    f.choose();
+    const target = { tagName: 'INPUT', ownerDocument: f.first.doc };
+    for (const listener of f.first.section.listeners.get(type) ?? []) {
+      listener.fn({ type, target, currentTarget: f.first.doc });
+    }
+    f.first.doc.activeElement = f.first.doc.body;
+    f.resize();
+    expect(f.complete().frame.focus).not.toHaveBeenCalled();
   });
 
   it('does not steal an editable field in the replacement document', () => {
@@ -373,9 +411,21 @@ describe('lookup resize restores only originally owned iframe focus (#350, #355)
     expect(next.frame.focus).not.toHaveBeenCalled();
     expect(f.page.document.activeElement).toBe(next.frame);
     expect(next.doc.activeElement.isContentEditable).toBe(true);
+    expect(next.selection.rangeCount).toBe(0);
   });
 
-  it.each(['detached', 'hidden', 'offscreen', 'different-document'])('does not focus a %s target or display another section', (kind) => {
+  it('does not focus when another DOM control remains active after redisplay', () => {
+    const f = fixture();
+    f.choose();
+    f.resize();
+    const target = { tagName: 'INPUT' };
+    const next = f.complete(6, () => { f.page.document.activeElement = target; });
+    expect(next.frame.focus).not.toHaveBeenCalled();
+    expect(f.page.document.activeElement).toBe(target);
+    expect(next.selection.rangeCount).toBe(0);
+  });
+
+  it.each(['detached', 'hidden', 'offscreen', 'offscreen-range', 'different-document'])('does not focus a %s target or display another section', (kind) => {
     const f = fixture();
     f.choose();
     f.resize();
@@ -383,6 +433,7 @@ describe('lookup resize restores only originally owned iframe focus (#350, #355)
       if (kind === 'detached') one.frame.isConnected = false;
       if (kind === 'hidden') one.frame.getAttribute = (name: string) => name === 'style' ? 'visibility: hidden' : null;
       if (kind === 'offscreen') one.frame.getBoundingClientRect = () => ({ top: 900, bottom: 1700, left: 0, right: 400, width: 400, height: 800 });
+      if (kind === 'offscreen-range') one.doc.selectionRect = { top: 1000, bottom: 1018, left: 20, right: 60, width: 40, height: 18 };
       if (kind === 'different-document') one.frame.contentDocument = {};
     });
     expect(next.frame.focus).not.toHaveBeenCalled();
