@@ -36,9 +36,10 @@ interactive preview at the opening height remains required. Ordinary iPhone
 behavior is unchanged. Mac must support Escape and downward grabber drag;
 the expanded Drawer dims and blocks the background. Window changes preserve
 the open Drawer, its height state and viewed content. The system-drawn
-candidate's width and bottom margin are accepted for implementation; native
-verification and Mac closing behavior remain gates. Decision 0085 records
-the agreed behavior and current acceptance scope._
+layout's width and bottom margin are accepted; issue #361 closes placement
+and close-button removal only. Further Mac keyboard handling and complete
+windowed verification are deferred. Decision 0085 records the intended
+behavior, known limitations and narrowed acceptance scope._
 
 Every drawer in the app becomes the phone's own: Contents, Voice, Appearance and
 Fonts, a book's actions with Rename and Download, and the drawer a looked-up

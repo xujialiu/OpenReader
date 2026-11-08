@@ -123,8 +123,11 @@ all its available space.
 
 ## Drawers stay near the bottom of the app window
 
-The revised requirement in issue #361 is agreed. Its implementation is
-under verification; agreement is not full device acceptance. Every Drawer on iPad or Mac must rise from the bottom of the
+Issue #361 closes the accepted placement correction and removal of Drawer
+close buttons. This is narrower than the full behavior described below:
+additional Mac keyboard handling and complete windowed verification are
+deferred, not silently counted as implemented or passed. Every Drawer on
+iPad or Mac must rise from the bottom of the
 current app window: Library and Document actions, Contents, Voice,
 Appearance, Download and Word Lookup all follow the same rule. A small gap
 in the device's own style is acceptable; a large blank region below a
@@ -142,8 +145,11 @@ There are no close buttons anywhere on an iPad or Mac Drawer; the cross
 is removed, not moved to the other corner. A touch drag down still closes
 it. This does not remove Back, Share or other actions from the header.
 On Mac, both Escape and dragging the top grabber down with a mouse or
-trackpad must provide a way to close the Drawer. Clicking outside at the
-opening height operates the page instead of closing the Drawer.
+trackpad are the intended closing methods. The current native behavior
+supports Escape at the opening height, but not while fully expanded; the
+additional keyboard handling is deferred. The grabber can still contract
+and dismiss it. Clicking outside at the opening height operates the page
+instead of closing the Drawer.
 
 Drawer Height is the chosen share of the current app window's height,
 not the physical display or a smaller system panel within the window.
@@ -152,8 +158,8 @@ ten-percent steps. The same choice applies to every Drawer.
 
 A wide-window Drawer is horizontally centred and limited to a comfortable
 width, rather than stretched across the whole display. A narrow window
-uses its available width. The accepted native candidate uses a width of about 580 points when there
-is room; a narrower window uses its available width.
+uses its available width. The accepted native layout uses a width of about
+580 points when there is room; a narrower window uses its available width.
 
 There are two resting heights. Dragging up expands the Drawer to nearly
 the current window's full height without abandoning the width limit.

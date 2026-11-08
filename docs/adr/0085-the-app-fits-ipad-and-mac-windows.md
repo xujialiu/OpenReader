@@ -278,7 +278,7 @@ The collapsed Reading Button stays at its existing window corner for this
 trial. The renderer still reserves a vertical band for the Player, not a new
 shape-aware occlusion model.
 
-## Tablet/Mac placement revision (#361): implementation in progress
+## Tablet/Mac placement revision (#361): narrowed layout scope closed
 
 The [product revision](../design/0085-the-app-fits-ipad-and-mac-windows.md#drawers-stay-near-the-bottom-of-the-app-window)
 requires every iPad/Mac Drawer near the bottom of the current app window,
@@ -420,6 +420,17 @@ probe is approved with display name `OpenReader Drawer Probe` and identifier
 reading the owner installation. Escape/pointer input, constrained windows
 and independent final tester acceptance remain pending. Beta19 is an in-progress source change,
 not a completed delivery or a claim that #361 is resolved.
+
+### Closure boundary and deferred work (#361)
+
+The accepted closure scope is the native fitted placement correction and
+removal of the app-drawn Close controls in Beta19. No additional native Escape
+module or shortcut prototype is selected or implemented. Expanded Mac Escape
+remains a known failing case; actual windowed outer geometry and visible-list
+continuity remain unverified. The iPad input checkpoint and its incomplete
+changed-interaction inspection are not waived. Closing #361 does not certify
+the broader specification or those missing gates. The raw receipts and
+corrected tester report remain the continuation record.
 
 ### Isolated Mac and independent-verification gates (#361)
 

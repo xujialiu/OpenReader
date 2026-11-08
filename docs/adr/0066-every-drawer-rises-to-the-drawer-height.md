@@ -51,8 +51,9 @@ preview and ordinary iPhone behavior remain unchanged. Mac Escape and
 pointer grabber dismissal, expanded-height background dimming/blocking and
 preserving the open instance, state and viewed list content through window
 changes are agreed requirements. The fitted native layout, candidate width and native inset are accepted;
-Beta19 implements the shared sizing and no-Close header, with scoped opening
-checks passed but remaining native behavior and final verification pending in
+Beta19 implements the shared sizing and no-Close header; #361 closes that
+narrowed scope. Expanded Mac Escape and complete native windowed verification
+are deferred, not passed, as recorded in
 [decision 0085](../design/0085-the-app-fits-ipad-and-mac-windows.md#drawers-stay-near-the-bottom-of-the-app-window).
 
 ## What was there
