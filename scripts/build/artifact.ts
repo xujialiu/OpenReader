@@ -46,7 +46,7 @@ export function inspectArtifact(versionLine: string, variant: BuildVariant, evid
   const identity = buildIdentity(versionLine, variant);
   const { plist, bundle, nativeBinaryCount, nativeStoreModules } = evidence;
   const require = (condition: boolean, message: string) => { if (!condition) throw new Error(message); };
-  require(plist.CFBundleIdentifier === 'top.xujialiu.openreader', 'Wrong app identity.');
+  require(plist.CFBundleIdentifier === 'top.xujialiu.openreader.drawerprobe', 'Wrong isolated probe identity.');
   require(plist.CFBundleShortVersionString === identity.version, 'Native Version does not match APP_VERSION.');
   require(plist.CFBundleVersion === identity.buildNumber, 'Native Build Number does not match the requested role.');
   require(plist.OpenReaderBuildVariant === variant, 'Native build variant does not match the requested role.');

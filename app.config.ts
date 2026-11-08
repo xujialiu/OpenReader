@@ -113,7 +113,8 @@ const config: ExpoConfig = {
      */
     supportsTablet: true,
     requireFullScreen: false,
-    bundleIdentifier: 'top.xujialiu.openreader',
+    // Isolated #361 Mac verification identity; not a production configuration.
+    bundleIdentifier: 'top.xujialiu.openreader.drawerprobe',
 
     /**
      * #108. The paid team. On 2026-09-30 the free Personal Team became it in
@@ -159,6 +160,7 @@ const config: ExpoConfig = {
      * reason (docs/app-store-connect.md has the sentence).
      */
     infoPlist: {
+      CFBundleDisplayName: 'OpenReader Drawer Probe',
       OpenReaderBuildVariant: BUILD.variant,
       NSAppTransportSecurity: { NSAllowsArbitraryLoads: true },
     },

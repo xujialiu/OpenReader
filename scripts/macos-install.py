@@ -17,8 +17,9 @@ import subprocess
 import sys
 import uuid
 
-BUNDLE = "top.xujialiu.openreader"
-TARGET = Path("/Applications/OpenReader.app")
+# Approved isolated #361 probe. Never replace or inspect the owner installation.
+BUNDLE = "top.xujialiu.openreader.drawerprobe"
+TARGET = Path("/tmp/openreader-drawer361-mac-live-01/OpenReader Drawer Probe.app")
 ROOT = Path(__file__).resolve().parents[1]
 
 
