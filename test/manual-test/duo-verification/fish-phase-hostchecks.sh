@@ -149,7 +149,7 @@ mk_tree() { # FAKEROOT
     "$f/A/public-probe" "$f/A/public-probe/result-T.xcresult" "$f/A/public-probe/test-T.log" \
     > "$f/A/probe-invocation.log"
   printf 'build log, no sentinel\n' > "$f/A/public-probe/build-0001.log"
-  printf 'test log, no sentinel\n' > "$f/A/public-probe/test-T.log"
+  { printf 'test log, no sentinel\n'; printf 't = 0.10s Type %s into "untitled" field\n' "'hello world'"; } > "$f/A/public-probe/test-T.log"
   printf '{"tests":[]}\n' > "$f/A/public-probe/tests-export.json"
   printf '{"result":"Passed","failedTests":0}\n' > "$f/A/summary-export.json"
   printf '{"activities":[]}\n' > "$f/A/public-probe/activities-export.json"
@@ -222,12 +222,32 @@ open(p, "a").write("\n".join(lines) + "\n")
 PY
 }
 inject_case plain-leak 1 inject_plain
+inject_truncated_single() { printf 't =     3.67s Type %s into "Not set" SecureTextField\n' "'OPENREADER_PUBLIC_...'" >> "$1/A/public-probe/test-T.log"; }
+inject_truncated_double() { printf 't =     3.67s Type %s into "Not set" SecureTextField\n' '"OPENREADER_PUBLIC_..."' >> "$1/A/public-probe/test-T.log"; }
+inject_perchar() { python3 - "$1" <<'PY'
+import sys
+p = sys.argv[1] + "/A/public-probe/test-T.log"
+lines = []
+for i, c in enumerate("OPENREADER_PUBLIC_FISH_SENTINEL_8437"):
+    lines.append('t =     %d.00s Type %s into "Not set" SecureTextField' % (i + 1, "'" + c + "'"))
+open(p, "a").write("\n".join(lines) + "\n")
+PY
+}
 inject_case type-activity-definite-fail 1 inject_type
 check "type-activity flagged in report" ok python3 - "$work/tree-type-activity-definite-fail/A/privacy-scan-report.json" <<'PY'
 import json, sys
 report = json.load(open(sys.argv[1]))
 assert report["verdict"] == "PRIVACY-NOT-QUALIFIED", report["verdict"]
 assert any(l.get("type_activity") for l in report["leaks"]), report["leaks"]
+PY
+inject_case truncated-single-quoted-leak 1 inject_truncated_single
+inject_case truncated-double-quoted-leak 1 inject_truncated_double
+inject_case perchar-reconstruction-leak 1 inject_perchar
+check "truncated prefix flagged as shared-prefix leak" ok python3 - "$work/tree-truncated-single-quoted-leak/A/privacy-scan-report.json" <<'PY'
+import json, sys
+report = json.load(open(sys.argv[1]))
+assert report["verdict"] == "PRIVACY-NOT-QUALIFIED", report["verdict"]
+assert any(l.get("shared_prefix_chars", 0) >= 4 for l in report["leaks"]), report["leaks"]
 PY
 inject_case utf16-binary-leak 1 inject_utf16_result
 inject_case undecodable-text-no-leak-hold 2 inject_utf16_text

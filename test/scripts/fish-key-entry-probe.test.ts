@@ -97,8 +97,15 @@ describe('FishKeyEntryProbe HOST source contract', () => {
     expect(publicMethod).not.toMatch(/field\.value|value.*count|Clear text/);
   });
 
+  it('hard-disables the real-input method at entry: fixed privacy failure before any read, tap or typing', () => {
+    expect(realMethod).toContain('try require(false, "XCTest input privacy failed: the typed input prefix leaked into framework activity (attempt-02); this real-input method is permanently disabled")');
+    expect(realMethod.indexOf('try require(false, "XCTest input privacy failed')).toBeGreaterThan(-1);
+    expect(realMethod.indexOf('try require(false, "XCTest input privacy failed')).toBeLessThan(realMethod.indexOf('readPrivateInput()'));
+    expect(realMethod.indexOf('try require(false, "XCTest input privacy failed')).toBeLessThan(realMethod.indexOf('field.tap()'));
+    expect(realMethod).not.toContain('requireMode("real-input-privacy-qualified")');
+  });
+
   it('requires an explicit qualified real mode and empty field, without a real-key clear path', () => {
-    expect(realMethod).toContain('requireMode("real-input-privacy-qualified")');
     expect(realMethod).toContain('require(input != publicSentinel');
     expect(realMethod.indexOf('requireEmpty(field, "Empty secure API key field required")')).toBeLessThan(realMethod.indexOf('field.typeText(input)'));
     expect(realMethod).not.toMatch(/delete|repeating|Clear text/);
@@ -112,22 +119,29 @@ describe('FishKeyEntryProbe HOST source contract', () => {
     expect([...code.matchAll(/try require\([\s\S]*?,\s*("[^"\n]*")\)/g)].length).toBeGreaterThan(15);
   });
 
-  it('documents the repaired status, the attempt-scoped GET exception and the same privacy limits', () => {
-    for (const text of ['HOST-repaired', 'NOT NATIVE QUALIFIED', 'attempt-01', attemptPath,
+  it('documents the spent attempt, the privacy FAIL, the disabled real method and the host-only rescan boundary', () => {
+    for (const text of ['attempt-01', attemptPath, 'SPENT',
+      'The one public qualification: SPENT',
       'UTF-16 LE/BE', 'hex and base64', 'complete\nreadable xcresult text/JSON',
-      'STOP: do not load or type the real credential', 'ONE public attempt', 'ONE real attempt',
-      'loadSettings()', 'only this shell\'s staged `fish-api-key.txt`', 'presence/resave/connection-check',
+      'STOP: do not load or type the real credential',
+      'only this shell\'s staged `fish-api-key.txt`', 'presence/resave/connection-check',
       'one bounded foreground `ios_guard.py` admission', 'Xcode-27.1.0.app', '**8437**',
       'api.fish.audio/compat/v1/models', 'one keyless GET', 'FishKeyEntryFieldRead',
       'unknown, held and refused are not absence',
-      'for THIS attempt only', 'a recovery or relaunch never re-arms it',
-      'the Keychain survives container replacement', 'still unknown',
-      'fish-key-entry-duo-8437-prep-02', 'EXACTLY ONCE', 'no implicit re-navigation']) {
+      'the Keychain survives container replacement',
+      'fish-key-entry-duo-8437-prep-02', 'EXACTLY ONCE', 'no implicit re-navigation',
+      '6.857', 'PRIVACY FAIL', 'permanently disabled',
+      'XCTest input privacy failed', 'a different credential transport',
+      'attempt-02', 'not a semantic or image privacy pass',
+      'owner decision']) {
       expect(guide).toContain(text);
     }
     expect(guide).not.toContain('NOT COMPILED, NOT NATIVE, NOT PRIVACY QUALIFIED');
     expect(guide).not.toContain('per fresh app process');
     expect(guide).not.toContain('this runtime reports');
+    expect(guide).not.toContain('loadSettings()');
+    expect(guide).not.toContain('ONE real attempt');
+    expect(guide).not.toContain('real-input-privacy-qualified');
   });
 
   it('keeps the host red/green runner compiling the exact classifier and the verbatim old guard without device operations', () => {
@@ -145,16 +159,25 @@ describe('FishKeyEntryProbe HOST source contract', () => {
     expect(runner).not.toMatch(/xcrun|simctl|git checkout|git apply|git restore|metro|Metro/);
   });
 
-  it('keeps the manifest scanner strict: static origins hashed, runtime leaks definite, holds on coverage gaps', () => {
+  it('keeps the manifest scanner deterministic, bounded and prefix-aware, never regex-backtracking', () => {
     expect(scanner).toContain('PRIVACY-CLEAN');
     expect(scanner).toContain('PRIVACY-NOT-QUALIFIED');
     expect(scanner).toContain('PRIVACY-HOLD');
     expect(scanner).toContain('sha256_of');
     expect(scanner).toContain('expected_public_constant');
     expect(scanner).toContain('type_activity');
-    expect(scanner).toContain('per-char-split');
+    expect(scanner).toContain('typed-stream');
+    expect(scanner).toContain('TYPE_LINE = re.compile');
+    expect(scanner).toContain('def type_payloads');
+    expect(scanner).toContain('truncated');
+    expect(scanner).toContain('typed-stream');
+    expect(scanner).toContain('budget-seconds');
+    expect(scanner).toContain('max-artifact-bytes');
+    expect(scanner).toContain('min-prefix-chars');
+    expect(scanner).toContain('report-path');
     expect(scanner).toContain('fish-api-key.txt still present at scan time');
     expect(scanner).toContain('no readable activity export');
+    expect(scanner).not.toMatch(/re\.escape\(c\) \+ "\.\{0,300\}"/);
     expect(scanner).not.toMatch(/simctl|xcrun |requests|urllib\.request/);
   });
 

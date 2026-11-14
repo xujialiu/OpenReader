@@ -150,7 +150,13 @@ final class FishKeyEntryProbe: XCTestCase {
   }
 
   func testPrivateInputIntoEmpty() throws {
-    try requireMode("real-input-privacy-qualified")
+    // HARD BARRIER (attempt-02, 2026-11-15): the public transport leaked an
+    // 18-character prefix of the typed input into framework logs and activity
+    // titles at t=3.67s, so no XCTest typing may ever carry a credential.
+    // Fixed failure at entry, before any staged-file read, tap or typing; not
+    // gated on mode or caller approval. A different credential transport
+    // needs a separate owner decision.
+    try require(false, "XCTest input privacy failed: the typed input prefix leaked into framework activity (attempt-02); this real-input method is permanently disabled")
     let input = try readPrivateInput()
     try require(input != publicSentinel, "Real input must replace the staged public sentinel")
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
