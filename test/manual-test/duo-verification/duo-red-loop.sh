@@ -50,7 +50,15 @@ CAPDIR=${5:?existing DuoScreenCaptureProbe project dir}
 PRESSDIR=${6:?existing LookupFoldPressProbe project dir}
 MAX_CYCLES=${7:-4}
 case "$MAX_CYCLES" in 1|2|3|4) ;; *) echo 'MAX_CYCLES must be 1-4' >&2; exit 2;; esac
-DEV="iPhone Duo duo-sim-runtime-01"
+DEV="${OPENREADER_DEVICE:-iPhone Duo duo-sim-runtime-01}"
+HUB_PID=${HUB_PID:-88167}
+HUB_WINDOW_TITLE=${HUB_WINDOW_TITLE:-$DEV}
+EXPECTED_VIEWPORT=${OPENREADER_EXPECT_VIEWPORT:-382,678}
+NATIVE_WIDTH=${OPENREADER_NATIVE_WIDTH:-466}
+NATIVE_HEIGHT=${OPENREADER_NATIVE_HEIGHT:-678}
+PRESS_X_OFFSET=${OPENREADER_PRESS_X_OFFSET:-0}
+PRESS_Y_OFFSET=${OPENREADER_PRESS_Y_OFFSET:-0}
+CAPTURE_DISPLAY=${OPENREADER_CAPTURE_DISPLAY:-1}
 KIT=test/manual-test/kit
 AREA=test/manual-test/duo-verification
 METRO_LOG=${OPENREADER_METRO_LOG:-/tmp/openreader-duosim-01/metro.log}
@@ -141,17 +149,17 @@ cleanup_cycle(){ # restoration is attempted even after a close/selection control
   if [ "$(state_field "$clean/initial.json" "d['selection'] is not None")" = True ]; then
     # Historical lane-specific callout coordinates/PID need fresh qualification
     # before a live run; failure cannot be accepted as verified cleanup.
-    orca computer list-windows --app pid:88167 --json > "$clean/windows.json" 2>&1 || failed=1
+    orca computer list-windows --app "pid:$HUB_PID" --json > "$clean/windows.json" 2>&1 || failed=1
     WIDC="$(python3 - "$clean/windows.json" <<'WINDOW'
 import json, sys
 with open(sys.argv[1]) as source:
     windows = json.load(source)['result']['windows']
-owned = [w for w in windows if 'iPhone Duo duo-sim-runtime-01' in w.get('title', '')]
+owned = [w for w in windows if '''$HUB_WINDOW_TITLE''' in w.get('title', '')]
 print(owned[0]['id'] if len(owned) == 1 else '')
 WINDOW
 )"
     if [ -n "$WIDC" ]; then
-      orca computer click --app pid:88167 --window-id "$WIDC" --x 583 --y 343 \
+      orca computer click --app "pid:$HUB_PID" --window-id "$WIDC" --x 583 --y 343 \
         --restore-window --no-screenshot --json > "$clean/callout-dismiss.json" 2>&1 || failed=1
       sleep 1.5
     else failed=1; fi
@@ -227,7 +235,7 @@ checkpoint(){ # phase; only called after successful input/settle
   libhash > "$RUN/cycle-$CYCLE/library-$phase.txt"
   if [ "$phase" = baseline ]; then
     image="$RUN/cycle-$CYCLE/painted-press-outer.png"
-    xcrun simctl io "$UDID" screenshot "$image" > "$RUN/cycle-$CYCLE/baseline.capture.log" 2>&1 \
+    xcrun simctl io "$UDID" screenshot --display "$CAPTURE_DISPLAY" "$image" > "$RUN/cycle-$CYCLE/baseline.capture.log" 2>&1 \
       || { control "$phase" "baseline capture failed"; return 2; }
   else
     restricted_capture "$tag" || { control "$phase" "restricted capture failed"; return 2; }
@@ -260,14 +268,15 @@ run_cycle(){
   local_lb=$(wc -l < "$METRO_LOG" 2>/dev/null || echo 0)
   node $KIT/hx.cjs "$UDID" '{}' --code-file "$AREA/duo-hoperect.js" >/dev/null 2>&1 \
     && hq_answer "$local_lb" "$RUN/cycle-$CYCLE/hoperect.txt" '"rect"' \
-    && grep -q '"viewport":\[382,678\]' "$RUN/cycle-$CYCLE/hoperect.txt" \
+    && grep -q "\"viewport\":\[$EXPECTED_VIEWPORT\]" "$RUN/cycle-$CYCLE/hoperect.txt" \
     || { control baseline "missing hoperect / not closed pose"; return 2; }
-  presspoint=$(python3 - "$RUN/cycle-$CYCLE/hoperect.txt" <<'POINT'
+  presspoint=$(python3 - "$RUN/cycle-$CYCLE/hoperect.txt" "$PRESS_X_OFFSET" "$PRESS_Y_OFFSET" "$NATIVE_WIDTH" "$NATIVE_HEIGHT" <<'POINT'
 import json, sys
 from pathlib import Path
 r = json.loads(Path(sys.argv[1]).read_text().split('HX PROBE ', 1)[1])['rect']
 x, y, w, h = r
-print('%d %d 466 678' % (round(x + w / 2), round(y + h / 2)))
+ox, oy, nw, nh = map(float, sys.argv[2:])
+print('%d %d %s %s' % (round(x + w / 2 + ox), round(y + h / 2 + oy), int(nw), int(nh)))
 POINT
 ) || { control baseline "press point derivation failed"; return 2; }
   printf '%s\n' "$presspoint" > "$POINTFILE"

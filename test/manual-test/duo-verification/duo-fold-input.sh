@@ -11,9 +11,14 @@ set -uo pipefail
 target=${1:?usage: duo-fold-input.sh open|closed}
 HUB_PID=${HUB_PID:-88167}
 GEOM=${GEOM:-206 123 1100 800}
+HUB_WINDOW_TITLE=${HUB_WINDOW_TITLE:-iPhone Duo duo-sim-runtime-01}
+FOLD_OPEN_X=${FOLD_OPEN_X:-606}
+FOLD_OPEN_Y=${FOLD_OPEN_Y:-774}
+FOLD_CLOSED_X=${FOLD_CLOSED_X:-573}
+FOLD_CLOSED_Y=${FOLD_CLOSED_Y:-774}
 case "$target" in
-  open)   X=606; Y=774 ;;
-  closed) X=573; Y=774 ;;
+  open)   X=$FOLD_OPEN_X; Y=$FOLD_OPEN_Y ;;
+  closed) X=$FOLD_CLOSED_X; Y=$FOLD_CLOSED_Y ;;
   *) echo "unknown target $target"; exit 2 ;;
 esac
 receipt=${RECEIPT_DIR:-/tmp}/fold-receipt-$target.json
@@ -22,7 +27,7 @@ PARSED="$(python3 -c "
 import json
 d=json.loads('''$LIST''')
 for w in d['result']['windows']:
-    if 'iPhone Duo duo-sim-runtime-01' in w.get('title',''):
+    if '''$HUB_WINDOW_TITLE''' in w.get('title',''):
         print(w['id'], w['x'], w['y'], w['width'], w['height']); break
 ")"
 WID="$(echo "$PARSED" | cut -d' ' -f1)"

@@ -7,6 +7,7 @@ No native/HTTP/input operations live here; pixel thresholds are unchanged.
 """
 import json
 import math
+import os
 from pathlib import Path
 import re
 import sys
@@ -46,6 +47,19 @@ def library_hash(value):
     return value
 
 
+def expected_viewport(phase):
+    default = [867, 669] if phase == 'outward' else [382, 678]
+    raw = os.environ.get('OPENREADER_OUTWARD_VIEWPORT' if phase == 'outward' else 'OPENREADER_CLOSED_VIEWPORT')
+    if raw is None:
+        return default
+    try:
+        values = [int(part) for part in raw.split(',')]
+    except ValueError as error:
+        raise ValueError('malformed expected viewport override') from error
+    require(len(values) == 2 and all(value > 0 for value in values), 'malformed expected viewport override')
+    return values
+
+
 def validate_checkpoint(p, phase):
     require(isinstance(p, dict), 'missing checkpoint')
     require(p['inputVerified'] is True and p['captureVerified'] is True, 'input/capture control failed')
@@ -53,7 +67,7 @@ def validate_checkpoint(p, phase):
     require(number(floor) and number(ceiling) and 0 < floor < ceiling, 'invalid freshness bounds')
     s = p['selection']
     require(isinstance(s, dict) and number(s['at']) and floor < s['at'] <= ceiling, 'missing/stale selection receipt')
-    require(s['viewport'] == ([867, 669] if phase == 'outward' else [382, 678]), 'unqualified viewport')
+    require(s['viewport'] == expected_viewport(phase), 'unqualified viewport')
     ranges = s['ranges']
     require(isinstance(ranges, list) and len(ranges) <= 1, 'ambiguous/malformed ranges')
     for r in ranges:
