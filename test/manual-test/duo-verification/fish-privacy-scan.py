@@ -29,7 +29,6 @@ import json
 import os
 import re
 import sys
-import urllib.parse
 
 SENTINEL = "OPENREADER_PUBLIC_FISH_SENTINEL_8437"
 
