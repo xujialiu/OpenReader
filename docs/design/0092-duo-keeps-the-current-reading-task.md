@@ -85,12 +85,12 @@ Relevant iPad use remains a completion gate for this repair. A blocked simulator
 ## Remaining work after the scoped delivery
 
 - #349: automatic rotation and the reading page's rearrangement now have simulator verification on both displays; this does not establish all the other continuity requirements.
-- #350: the selected passage's visible marking and adjustable handles after folding need verification.
+- #350: the current investigation ends without a reproducible selection failure. Earlier failures remain recorded; closing the report does not establish that selection continuity has passed.
 - #351: the final result of a lookup that finishes across a fold needs visible confirmation.
 - #352: actual split-window resizing and task continuity need verification.
 - #353: audio progression and word-level Following through display changes need complete evidence.
 - #354: undimmed Appearance preview needs a controlled before-and-after comparison.
-- #355: the current changes need actual Mac regression coverage.
+- #355: current Mac regression verification is outside the present acceptance scope. Earlier failures and unverified behavior retain their recorded status.
 - #356: physical Duo coverage remains separate and is not a condition for closing the simulator repair batch.
 - #360: the expanded reading page is reported to leave a large empty area on the right; its cause and any correction remain unestablished.
 
