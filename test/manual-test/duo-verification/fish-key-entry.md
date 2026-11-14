@@ -1,9 +1,22 @@
 # Fish secure-field credential setup probe
 
-**HOST preparation only: NOT COMPILED, NOT NATIVE, NOT PRIVACY QUALIFIED.**
+**Source status: HOST-repaired after one failed native attempt; NOT NATIVE QUALIFIED.**
+The first public-sentinel invocation (attempt-01, iOS 27.1, `1.0.4 (30)-beta19-debug`,
+2026-11-15) failed at its first precondition in 1.101 s — `Secure API key state is
+unavailable` — before any tap or typed character: the pre-repair guard conflated an
+empty String read with nil and non-String, and the raw log does not establish which
+of the three occurred. The current source adds the pure `FishKeyEntryFieldRead`
+classifier — an empty actual String (including the legacy placeholder String
+`"Not set"` this runtime reports) is `.empty`, any other actual String is
+`.nonempty`, and nil or a non-String is `.unavailable` and must stop before input —
+host-proven red/green by
+[fish-classifier-red-green.sh](fish-classifier-red-green.sh), which compiles the
+exact block from the live probe with the host Swift and asserts the pre-repair
+divergence against blob `2e56559`.
+
 [FishKeyEntryProbe.swift](../kit/FishKeyEntryProbe.swift) prepares credential
-entry; it is not app-feature verification or evidence that a key works.
-It reuses the sanctioned host-file → masked native `typeText` transport from
+entry; it is not app-feature verification or evidence that a key works. It reuses
+the sanctioned host-file → masked native `typeText` transport from
 [OfflineFixProbe](../downloads/fresh-library-and-deletions.md) and
 `ProviderHeaders105Probe`, but none of their navigation, Enable, connection
 checks, captures or plain-field fallbacks. Do not run those older methods for
@@ -11,25 +24,47 @@ this task. No app source, SDK, Version or Beta changes are needed.
 
 ## Admission and boundaries
 
-Native work belongs to the later `ios-tester`, after parent review. Use only
-the session-owned Duo whose existing Metro is **8437**, with its explicitly
-confirmed UDID (not an automatically chosen device). Leave the frozen app
-source/Beta 18 intact. No owner Mac copy, other device, phone, keyboard/device
+Native work belongs to the later `ios-tester`, after parent review. Use only the
+session-owned Duo whose Metro is **8437** — `iPhone Duo ios353-fishpub-8437`,
+explicitly confirmed UDID `40DC7F6C-3500-480D-A0FB-147AEF50C609` (never an
+automatically chosen device) — running the frozen ordinary Debug
+`1.0.4 (30)-beta19-debug` built from this worktree. Leave the frozen app
+source/Beta 19 intact. No owner Mac copy, other device, phone, keyboard/device
 configuration, global clipboard, security change, CDP/new endpoint, prototype
-mutation, Keychain API/reset, Provider request, Voice, Play or Download is part
-of this probe. The methods never launch, activate or terminate the app.
+mutation, Keychain API/reset, Provider activation, connection test, Voice list,
+synthesis, download, Play or audio is part of this probe. The methods never
+launch, activate or terminate the app.
+
+**Renewed staging network exception (explicit).** Opening the Fish Audio screen
+mounts a `useEffect` that loads the Model list
+(`src/app/provider-screen.tsx` → `sharedFishModels.load`): a keyless GET to
+`https://api.fish.audio/compat/v1/models`, independent of the Enabled switch,
+single-flight, cached 30 minutes per app process. The parent authorizes AT MOST
+**one keyless GET** caused by the single staging navigation to the disabled Fish
+Audio screen per fresh app process. No credential or Document/Speech Text may be
+sent. This is the only network exception; do not reopen or retry navigation to
+spend another request — if the Model list fails to load, leave the error footnote
+in place (it does not affect the probe's preconditions) and do NOT reopen the
+page. No interception, prototype patch, new endpoint or Keychain shortcut.
 
 Before entry, the caller must independently establish **original Fish key
-presence ABSENT**, not unknown/refused/held, and the already-running app must
-be foreground on the settled Fish Audio Provider screen: disabled, idle,
-editable, masked, with the key showing `Not set`. Do not navigate there inside
-this probe (opening the screen can load Models independently). No concurrent
+presence ABSENT**, not unknown/refused/held — unknown, held and refused are not absence. What establishes it here: a fresh app container, nothing staged or
+typed by anyone, no `API key:` error footnote on the screen, and the masked
+field's read classifying `.empty`. The constant `placeholderValue == "Not set"`
+is the field's configuration — screen-state gating, not presence evidence on its
+own — and the classifier covers the accessibility read only, never a Keychain
+claim. The already-running app must be foreground on the settled Fish Audio
+Provider screen: disabled, idle, editable, masked, with the key showing
+`Not set`. Do not navigate there inside this probe. No concurrent
 UI/credential writer or playback is allowed. A nonempty field is a stop, never
-permission to clear an existing owner key. Missing/ambiguous/revealed fields,
-enabled/busy providers and unexpected placeholder representations fail closed.
+permission to clear an existing owner key. Missing/ambiguous/revealed fields, an
+`API key:` error footnote, enabled/busy providers and unexpected placeholder
+representations fail closed.
 
-Use one foreground phase inside the **same `ios_guard.py` admission** for all
-native readiness, build/test, result export, qualification and real entry:
+Use one bounded foreground `ios_guard.py` admission for ALL of staging (host
+file, screen navigation, settled-state verification), native readiness,
+build/test, result export, qualification and real entry; prior separate
+admission boundaries do not count as same-admission proof:
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode-27.1.0.app/Contents/Developer \
@@ -38,8 +73,12 @@ DEVELOPER_DIR=/Applications/Xcode-27.1.0.app/Contents/Developer \
 ```
 
 `OWN_PHASE` is the caller's owned foreground phase script, not a background
-runner or a new transport framework. Use the per-command `DEVELOPER_DIR` above
-on **every** Apple/runner command inside it too; never `xcode-select`. Follow
+runner or a new transport framework: it stages the sentinel file, performs the
+one navigation through `ax.py` (tree-read verified before and after), verifies
+the settled preconditions, runs readiness (`ios_ready.py --metro`), silence,
+the single `run-probe.sh` invocation, all exports, the sentinel scan and the
+EXIT-trap cleanup. Use the per-command `DEVELOPER_DIR` above on **every**
+Apple/runner command inside it too; never `xcode-select`. Follow
 [the kit's bounded readiness/cleanup rules](../kit/ios-verification.md).
 Readiness takes a screenshot: do it only while the field is verified empty or
 masked, never revealed. No additional screenshots/tree dumps/field-value
@@ -54,32 +93,35 @@ spend another entry attempt.
 This probe is deliberately pinned to this dedicated, one-use path:
 
 ```sh
-ATTEMPT=/tmp/openreader-fish-key-entry-duo-8437-attempt-01
+ATTEMPT=/tmp/openreader-fish-key-entry-duo-8437-attempt-02
 umask 077
 mkdir -m 700 "$ATTEMPT" || exit 2  # no -p; an existing path is a STOP
 trap 'rm -f -- "$ATTEMPT/fish-api-key.txt"' EXIT
 ```
 
-Run creation, staging and the admitted phase in this same owned shell, with
-failure stopping the sequence. Never reuse `/tmp/openreader-fish-key.txt`, an
-owner file, or an older attempt directory. Do not remove/recreate this path to
-reset the attempt bound. A later separately authorized attempt needs a newly
-reviewed dedicated path. Keep raw evidence under this private directory; the
+attempt-01 (`/tmp/openreader-fish-key-entry-duo-8437-attempt-01`) is SPENT: its
+one public invocation failed at the precondition above, nothing was typed, and
+its artifacts are preserved as failed evidence — NEVER reuse, remove or
+recreate it. Never reuse `/tmp/openreader-fish-key.txt`, an owner file, or an
+older attempt directory either. Do not remove/recreate this path to reset the
+attempt bound. A later separately authorized attempt needs a newly reviewed
+dedicated path. Keep raw evidence under this private directory; the
 `finally`/EXIT path deletes **only this shell's staged `fish-api-key.txt`**,
 not owner files, Keychain contents or evidence. Parent must be owned by this
-host user, mode **0700**, not a symlink; the input must be a user-owned regular,
-single-link file, mode **0600**, not a symlink. Host staging checks ownership;
-the native reader independently checks type, permissions and link count.
-Do not put a credential in source, argv, environment variables/dumps, JSON
-configuration, metadata, shell tracing, console output or the model transcript.
+host user, mode **0700**, not a symlink; the input must be a user-owned
+regular, single-link file, mode **0600**, not a symlink. Host staging checks
+ownership; the native reader independently checks type, permissions and link
+count. Do not put a credential in source, argv, environment variables/dumps,
+JSON configuration, metadata, shell tracing, console output or the model
+transcript.
 
-Stage only the **public** sentinel first (this snippet is HOST preparation
-for later execution, not a command to run with credentials now):
+Stage only the **public** sentinel first (this snippet is HOST preparation for
+later execution, not a command to run with credentials now):
 
 ```sh
 npx tsx --input-type=module <<'JS'
 import { lstatSync, writeFileSync } from 'node:fs';
-const dir = '/tmp/openreader-fish-key-entry-duo-8437-attempt-01';
+const dir = '/tmp/openreader-fish-key-entry-duo-8437-attempt-02';
 try {
   const parent = lstatSync(dir);
   if (!parent.isDirectory() || parent.uid !== process.getuid() ||
@@ -110,9 +152,14 @@ The method refuses any staged input other than the public sentinel, requires
 empty, types while masked, observes nonempty as a boolean, and **immediately
 clears only its own just-typed sentinel** using 36 native Delete keys, without
 retapping/moving the caret or measuring masked AX length. It requires the
-`Not set` placeholder boolean afterward, with Fish still disabled. Partial
-entry/failure/interruption is not an invitation to clear unknown contents:
-STOP and return control to the parent; no blind overwrite/clear/retry.
+`Not set` placeholder boolean afterward, with Fish still disabled. An empty
+actual String read — including the legacy placeholder String this runtime
+reports — classifies `.empty` and the flow proceeds; a nil or non-String read
+classifies `.unavailable` and the probe stops before tap or typing: a
+nonsecret native adaptation to an empty String read may succeed, while an
+actual nil/unknown read must stop before input. Partial entry/failure/
+interruption is not an invitation to clear unknown contents: STOP and return
+control to the parent; no blind overwrite/clear/retry.
 
 **A passing XCTest result is necessary but NOT the privacy gate.** Before
 loading any real credential, the tester must inspect/scan **all** raw build,
@@ -137,20 +184,22 @@ logging/diagnostic settings and field behavior. Do not suppress diagnostics
 just to hide a leak; changing the logging route requires a new qualification,
 not an extra attempt under this authorization.
 
-## Only after PASS: one real-input attempt
+## Only after PASS: one real-input attempt — LOCKED
 
-Keep Fish disabled and the field empty with no intervening writer. Replace
-only the owned **staging file** whose contents are still the public sentinel.
-The existing `loadSettings()` process supplies only the required Fish value;
-never ask a model to read the settings/key and never echo it. This local
-process does not create a Provider or make a request. It catches errors with a
-fixed message rather than dumping settings/parser errors:
+This method stays locked: it runs only after a reviewed passing public/native
+privacy qualification AND a separate explicit approval; do not execute it as
+part of the public phase. Keep Fish disabled and the field empty with no
+intervening writer. Replace only the owned **staging file** whose contents are
+still the public sentinel. The existing `loadSettings()` process supplies only
+the required Fish value; never ask a model to read the settings/key and never
+echo it. This local process does not create a Provider or make a request. It
+catches errors with a fixed message rather than dumping settings/parser errors:
 
 ```sh
 npx tsx --input-type=module <<'JS'
 import { lstatSync, readFileSync, writeFileSync } from 'node:fs';
 import { loadSettings } from './test/manual-test/kit/node-kit.ts';
-const dir = '/tmp/openreader-fish-key-entry-duo-8437-attempt-01';
+const dir = '/tmp/openreader-fish-key-entry-duo-8437-attempt-02';
 try {
   const path = dir + '/fish-api-key.txt';
   const parent = lstatSync(dir), file = lstatSync(path);
@@ -175,14 +224,15 @@ DEVELOPER_DIR=/Applications/Xcode-27.1.0.app/Contents/Developer \
 The native process alone reads the staged real value for masked typing. Its
 1–512 printable-ASCII byte bound is transport safety, **not** a Fish credential
 format/validity claim. It rejects newline/control-key payloads, empty/unreadable
-or unsafe files, the sentinel, and nonempty/revealed/locked/ambiguous fields.
-It does not clear a real value, press the eye, Enable or Test connection. Always
-select the single method; default/incorrect modes fail closed. There is at
-most **ONE public attempt and, only after its reviewed PASS, ONE real attempt**;
-any failure ends this authorization. Do not repeat real typing because rc was
-ambiguous or a save seems delayed. Delete the staged file in `finally` even on
-failure/cancellation; retain the private raw evidence and report only redacted
-booleans/fixed failures, never the key or field value.
+or unsafe files, the sentinel, and nonempty/revealed/locked/ambiguous fields or
+an `API key:` error footnote. It does not clear a real value, press the eye,
+Enable or Test connection. Always select the single method; default/incorrect
+modes fail closed. There is at most **ONE public attempt and, only after its
+reviewed PASS, ONE real attempt**; any failure ends this authorization. Do not
+repeat real typing because rc was ambiguous or a save seems delayed. Delete the
+staged file in `finally` even on failure/cancellation; retain the private raw
+evidence and report only redacted booleans/fixed failures, never the key or
+field value.
 
 ## What typing cannot establish
 
