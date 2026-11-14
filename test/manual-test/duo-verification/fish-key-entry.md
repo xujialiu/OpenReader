@@ -2,17 +2,21 @@
 
 **Source status: HOST-repaired after one failed native attempt; NOT NATIVE QUALIFIED.**
 The first public-sentinel invocation (attempt-01, iOS 27.1, `1.0.4 (30)-beta19-debug`,
-2026-11-15) failed at its first precondition in 1.101 s — `Secure API key state is
+2026-11-15 00:00) failed at its first precondition in 1.101 s — `Secure API key state is
 unavailable` — before any tap or typed character: the pre-repair guard conflated an
 empty String read with nil and non-String, and the raw log does not establish which
 of the three occurred. The current source adds the pure `FishKeyEntryFieldRead`
-classifier — an empty actual String (including the legacy placeholder String
-`"Not set"` this runtime reports) is `.empty`, any other actual String is
+classifier — an empty actual String is `.empty`, any other actual String is
 `.nonempty`, and nil or a non-String is `.unavailable` and must stop before input —
-host-proven red/green by
-[fish-classifier-red-green.sh](fish-classifier-red-green.sh), which compiles the
-exact block from the live probe with the host Swift and asserts the pre-repair
-divergence against blob `2e56559`.
+and it also supports the legacy `Not set` String representation the pre-repair probe
+read as empty; the actual native representation of an empty field on this runtime is
+still unknown until the qualified attempt measures it. The repair is host-proven by
+[fish-classifier-red-green.sh](fish-classifier-red-green.sh): the VERBATIM pre-repair
+`isEmpty` (extracted from blob `2e56559`, compiled with minimal host stand-ins) FAILS
+the same 13-case acceptance table exactly at `emptyString expected=empty actual=unavailable`
+(exit 1) while the repaired classifier passes it (exit 0). The earlier old-guard
+table that characterized the old decision with `expected=unavailable` remains
+recorded in notes as characterization.
 
 [FishKeyEntryProbe.swift](../kit/FishKeyEntryProbe.swift) prepares credential
 entry; it is not app-feature verification or evidence that a key works. It reuses
@@ -35,22 +39,28 @@ mutation, Keychain API/reset, Provider activation, connection test, Voice list,
 synthesis, download, Play or audio is part of this probe. The methods never
 launch, activate or terminate the app.
 
-**Renewed staging network exception (explicit).** Opening the Fish Audio screen
+**Renewed staging network exception (explicit, attempt-scoped).** Opening the Fish Audio screen
 mounts a `useEffect` that loads the Model list
 (`src/app/provider-screen.tsx` → `sharedFishModels.load`): a keyless GET to
 `https://api.fish.audio/compat/v1/models`, independent of the Enabled switch,
 single-flight, cached 30 minutes per app process. The parent authorizes AT MOST
 **one keyless GET** caused by the single staging navigation to the disabled Fish
-Audio screen per fresh app process. No credential or Document/Speech Text may be
+Audio screen, for THIS attempt only — it is not renewed automatically per app
+process, and a recovery or relaunch never re-arms it. No credential or
+Document/Speech Text may be
 sent. This is the only network exception; do not reopen or retry navigation to
 spend another request — if the Model list fails to load, leave the error footnote
 in place (it does not affect the probe's preconditions) and do NOT reopen the
 page. No interception, prototype patch, new endpoint or Keychain shortcut.
 
 Before entry, the caller must independently establish **original Fish key
-presence ABSENT**, not unknown/refused/held — unknown, held and refused are not absence. What establishes it here: a fresh app container, nothing staged or
-typed by anyone, no `API key:` error footnote on the screen, and the masked
-field's read classifying `.empty`. The constant `placeholderValue == "Not set"`
+presence ABSENT**, not unknown/refused/held — unknown, held and refused are not absence. What establishes it here is THIS freshly session-created
+simulator's no-input history — no Fish credential was ever entered on
+`iPhone Duo ios353-fishpub-8437` in this session — together with no `API key:`
+error footnote on the screen and the masked field's read classifying `.empty`.
+A fresh app container alone proves NOTHING: the Keychain survives container replacement,
+so container freshness is never absence evidence. The constant
+`placeholderValue == "Not set"`
 is the field's configuration — screen-state gating, not presence evidence on its
 own — and the classifier covers the accessibility read only, never a Keychain
 claim. The already-running app must be foreground on the settled Fish Audio
@@ -64,7 +74,17 @@ representations fail closed.
 Use one bounded foreground `ios_guard.py` admission for ALL of staging (host
 file, screen navigation, settled-state verification), native readiness,
 build/test, result export, qualification and real entry; prior separate
-admission boundaries do not count as same-admission proof:
+admission boundaries do not count as same-admission proof. The phase scripts
+live in a separate owned HOST prep directory
+(`/tmp/openreader-fish-key-entry-duo-8437-prep-02`, mode 0700 — never inside
+the attempt directory): the launcher verifies attempt-02 is absent, creates it
+EXACTLY ONCE (mode 0700), and then runs the guard with the phase from prep;
+the phase only validates the owned existing directory, never creates or
+removes it. Both the phase's EXIT trap and the launcher's outer trap delete
+ONLY this attempt's staged `fish-api-key.txt`; all evidence and the spent
+directory are kept. There is no implicit re-navigation after any recovery or
+relaunch: a recovery may only be spent by readiness BEFORE the single
+navigation, and a failed staging assertion stops the phase:
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode-27.1.0.app/Contents/Developer \
@@ -100,13 +120,14 @@ trap 'rm -f -- "$ATTEMPT/fish-api-key.txt"' EXIT
 ```
 
 attempt-01 (`/tmp/openreader-fish-key-entry-duo-8437-attempt-01`) is SPENT: its
-one public invocation failed at the precondition above, nothing was typed, and
-its artifacts are preserved as failed evidence — NEVER reuse, remove or
-recreate it. Never reuse `/tmp/openreader-fish-key.txt`, an owner file, or an
-older attempt directory either. Do not remove/recreate this path to reset the
-attempt bound. A later separately authorized attempt needs a newly reviewed
-dedicated path. Keep raw evidence under this private directory; the
-`finally`/EXIT path deletes **only this shell's staged `fish-api-key.txt`**,
+one public invocation failed at the precondition above on 2026-11-15 00:00,
+nothing was typed, and its artifacts are preserved as failed evidence — NEVER
+reuse, remove or recreate it. Never reuse `/tmp/openreader-fish-key.txt`, an
+owner file, or an older attempt directory either. Do not remove/recreate this
+path to reset the attempt bound; the launcher refuses an existing path and the
+phase validates an owned existing one. A later separately authorized attempt
+needs a newly reviewed dedicated path. Keep raw evidence under this private
+directory; the `finally`/EXIT path deletes **only this shell's staged `fish-api-key.txt`**,
 not owner files, Keychain contents or evidence. Parent must be owned by this
 host user, mode **0700**, not a symlink; the input must be a user-owned
 regular, single-link file, mode **0600**, not a symlink. Host staging checks
@@ -153,8 +174,8 @@ empty, types while masked, observes nonempty as a boolean, and **immediately
 clears only its own just-typed sentinel** using 36 native Delete keys, without
 retapping/moving the caret or measuring masked AX length. It requires the
 `Not set` placeholder boolean afterward, with Fish still disabled. An empty
-actual String read — including the legacy placeholder String this runtime
-reports — classifies `.empty` and the flow proceeds; a nil or non-String read
+actual String read — including the legacy `Not set` String representation the
+pre-repair probe supported (the actual native representation is still unknown) — classifies `.empty` and the flow proceeds; a nil or non-String read
 classifies `.unavailable` and the probe stops before tap or typing: a
 nonsecret native adaptation to an empty String read may succeed, while an
 actual nil/unknown read must stop before input. Partial entry/failure/
