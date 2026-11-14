@@ -1,0 +1,7 @@
+schemaVersion: 1
+enabledWorkflows: ["simulator", "ui-automation", "debugging", "simulator-management"]
+sentryDisabled: true
+sessionDefaults:
+  workspacePath: "./ios/OpenReader.xcworkspace"
+  scheme: "OpenReader"
+  bundleId: "top.xujialiu.openreader"

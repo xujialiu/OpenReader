@@ -46,9 +46,10 @@ yarn-error.*
 /.secrets
 __pycache__/
 
-# Local automation configuration and artifacts
+# Local automation configuration and artifacts; MCP workflows must reach worktrees.
 /.playwright-mcp/
-/.mobilebuildmcp/
+/.mobilebuildmcp/*
+!/.mobilebuildmcp/config.yaml
 
 # Sub-worktrees an agent creates for other agents (AGENTS.md, "Sub-worktrees")
 /.worktrees/
