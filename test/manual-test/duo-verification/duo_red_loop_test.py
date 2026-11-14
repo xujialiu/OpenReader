@@ -100,6 +100,22 @@ class DuoRedLoopTest(unittest.TestCase):
                 self.assertEqual(run.returncode, 0 if fault is None else 2, run.stderr)
                 self.assertEqual(json.loads((directory.parent / 'cleanup.json').read_text())['verified'], fault is None)
 
+    def test_cleanup_window_selector_passes_title_as_argument(self):
+        source = DRIVER.read_text()
+        marker = "WIDC=\"$(python3 - \"$clean/windows.json\" \"$HUB_WINDOW_TITLE\" <<'WINDOW'"
+        self.assertIn(marker, source)
+        program = source.split("<<'WINDOW'\n", 1)[1].split('\nWINDOW', 1)[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            windows = Path(tmp) / 'windows.json'
+            windows.write_text(json.dumps({'result': {'windows': [
+                {'id': 7, 'title': 'owned-window – iOS 27.1'},
+                {'id': 8, 'title': 'other-window – iOS 27.1'},
+            ]}}))
+            run = subprocess.run(['python3', '-', str(windows), 'owned-window'], input=program,
+                                 capture_output=True, text=True, timeout=5)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(run.stdout.strip(), '7')
+
     def test_exact_range_invariants_on_both_paths(self):
         for phase in ['outward', 'return']:
             for field, value in [('cfi', 'epubcfi(/wrong)'), ('backward', True),

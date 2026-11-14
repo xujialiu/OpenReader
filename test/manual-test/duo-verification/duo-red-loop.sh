@@ -150,11 +150,12 @@ cleanup_cycle(){ # restoration is attempted even after a close/selection control
     # Historical lane-specific callout coordinates/PID need fresh qualification
     # before a live run; failure cannot be accepted as verified cleanup.
     orca computer list-windows --app "pid:$HUB_PID" --json > "$clean/windows.json" 2>&1 || failed=1
-    WIDC="$(python3 - "$clean/windows.json" <<'WINDOW'
+    WIDC="$(python3 - "$clean/windows.json" "$HUB_WINDOW_TITLE" <<'WINDOW'
 import json, sys
 with open(sys.argv[1]) as source:
     windows = json.load(source)['result']['windows']
-owned = [w for w in windows if '''$HUB_WINDOW_TITLE''' in w.get('title', '')]
+title = sys.argv[2]
+owned = [w for w in windows if title in w.get('title', '')]
 print(owned[0]['id'] if len(owned) == 1 else '')
 WINDOW
 )"
