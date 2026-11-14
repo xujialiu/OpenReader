@@ -1,9 +1,38 @@
 import XCTest
 
+// HOST-TESTABLE CLASSIFIER — exact block begin; extracted verbatim by
+// test/manual-test/duo-verification/fish-classifier-red-green.sh. Keep this
+// block free of XCTest and every other framework symbol so the same text
+// compiles unchanged on the host.
+/// Classifier for one accessibility read of the masked API key field.
+///
+/// Pure over the raw `XCUIElement.value` (taken as `Any?`): no app, no
+/// logging, no assertion and no Keychain on this path. It classifies the READ
+/// only and is never evidence of what the Keychain holds; original credential
+/// presence is the caller's independent gate, where unknown, held and refused
+/// are not absence.
+///
+/// - `.unavailable`: nil, or a value that is not a String — the read says
+///   nothing usable and every caller must stop before a tap or typing.
+/// - `.empty`: an actual String with no characters, including the legacy
+///   placeholder String "Not set" this runtime reports for an empty field.
+/// - `.nonempty`: any other actual String — observed content, never logged.
+enum FishKeyEntryFieldRead: Equatable {
+  case empty
+  case nonempty
+  case unavailable
+}
+
+func classifyFishKeyEntryFieldValue(_ raw: Any?) -> FishKeyEntryFieldRead {
+  guard let text = raw as? String else { return .unavailable }
+  return text.isEmpty || text == "Not set" ? .empty : .nonempty
+}
+// HOST-TESTABLE CLASSIFIER — exact block end
+
 /// Credential setup only. Native log privacy must be qualified with the public
 /// sentinel before the caller authorizes the real-input method; see the guide.
 final class FishKeyEntryProbe: XCTestCase {
-  private let attemptPath = "/tmp/openreader-fish-key-entry-duo-8437-attempt-01"
+  private let attemptPath = "/tmp/openreader-fish-key-entry-duo-8437-attempt-02"
   private let publicSentinel = "OPENREADER_PUBLIC_FISH_SENTINEL_8437"
 
   override func setUpWithError() throws {
@@ -57,6 +86,10 @@ final class FishKeyEntryProbe: XCTestCase {
                 "Fish Audio must be disabled and idle")
     try require(!app.staticTexts["Turn off to edit."].exists && !app.staticTexts["Testing…"].exists,
                 "Fish Audio must be disabled and idle")
+    // A footnote here means the credential read or save failed; the field state
+    // is then untrustworthy and the caller must stop before tap or typing.
+    try require(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "API key: ")).count == 0,
+                "API key error footnote present")
     try require(app.textFields.matching(identifier: "API key").count == 0,
                 "Revealed API key field refused")
     let fields = app.secureTextFields.matching(identifier: "API key")
@@ -67,13 +100,34 @@ final class FishKeyEntryProbe: XCTestCase {
     return field
   }
 
-  // Compare internally; never pass the field's value to an assertion or log.
-  private func isEmpty(_ field: XCUIElement) throws -> Bool {
-    guard let value = field.value as? String, !value.isEmpty else {
+  // One classified read of the field. This classifies this accessibility read
+  // only; it is not a Keychain presence claim, and its content is never logged
+  // or asserted. Nil and non-String fail closed here, before any input.
+  private func classifiedRead(_ field: XCUIElement) throws -> FishKeyEntryFieldRead {
+    let read = classifyFishKeyEntryFieldValue(field.value)
+    guard read != .unavailable else {
       try require(false, "Secure API key state is unavailable")
-      return false
+      return read
     }
-    return value == "Not set"
+    return read
+  }
+
+  // Requires an empty read. Observed content is a stop, never a clearance.
+  private func requireEmpty(_ field: XCUIElement, _ message: String) throws {
+    let read = try classifiedRead(field)
+    guard read == .empty else {
+      try require(false, message)
+      return
+    }
+  }
+
+  // Requires observed content from this read, as a boolean, never its value.
+  private func requireContent(_ field: XCUIElement, _ message: String) throws {
+    let read = try classifiedRead(field)
+    guard read == .nonempty else {
+      try require(false, message)
+      return
+    }
   }
 
   func testPublicSentinelIntoEmptyAndClearOwn() throws {
@@ -82,16 +136,16 @@ final class FishKeyEntryProbe: XCTestCase {
     try require(input == publicSentinel, "Public sentinel input required")
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
     let field = try disabledFishField(app)
-    try require(isEmpty(field), "Empty secure API key field required")
+    try requireEmpty(field, "Empty secure API key field required")
     field.tap()
     field.typeText(input)
     _ = try disabledFishField(app)
-    try require(!isEmpty(field), "Public sentinel entry was not observed")
+    try requireContent(field, "Public sentinel entry was not observed")
     // Only this method's own public input, typed from empty with no intervening
     // navigation or retap. The deletion count is NOT a masked AX value's length.
     field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: publicSentinel.count))
     _ = try disabledFishField(app)
-    try require(isEmpty(field), "Own public sentinel did not clear to the placeholder")
+    try requireEmpty(field, "Own public sentinel did not clear to the placeholder")
   }
 
   func testPrivateInputIntoEmpty() throws {
@@ -100,10 +154,10 @@ final class FishKeyEntryProbe: XCTestCase {
     try require(input != publicSentinel, "Real input must replace the staged public sentinel")
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
     let field = try disabledFishField(app)
-    try require(isEmpty(field), "Empty secure API key field required")
+    try requireEmpty(field, "Empty secure API key field required")
     field.tap()
     field.typeText(input)
     _ = try disabledFishField(app)
-    try require(!isEmpty(field), "Private input entry was not observed")
+    try requireContent(field, "Private input entry was not observed")
   }
 }
