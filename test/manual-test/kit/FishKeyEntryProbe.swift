@@ -15,7 +15,8 @@ import XCTest
 /// - `.unavailable`: nil, or a value that is not a String — the read says
 ///   nothing usable and every caller must stop before a tap or typing.
 /// - `.empty`: an actual String with no characters, including the legacy
-///   placeholder String "Not set" this runtime reports for an empty field.
+///   `Not set` String representation the pre-repair probe supported; the
+///   actual native representation of an empty field is still unknown.
 /// - `.nonempty`: any other actual String — observed content, never logged.
 enum FishKeyEntryFieldRead: Equatable {
   case empty

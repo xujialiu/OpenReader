@@ -5,6 +5,9 @@ const source = readFileSync(new URL('../manual-test/kit/FishKeyEntryProbe.swift'
 const code = source.replace(/\/\/[^\n]*/g, '');
 const guide = readFileSync(new URL('../manual-test/duo-verification/fish-key-entry.md', import.meta.url), 'utf8');
 const runner = readFileSync(new URL('../manual-test/duo-verification/fish-classifier-red-green.sh', import.meta.url), 'utf8');
+const scanner = readFileSync(new URL('../manual-test/duo-verification/fish-privacy-scan.py', import.meta.url), 'utf8');
+const phaseLib = readFileSync(new URL('../manual-test/duo-verification/fish-phase-lib.sh', import.meta.url), 'utf8');
+const hostChecks = readFileSync(new URL('../manual-test/duo-verification/fish-phase-hostchecks.sh', import.meta.url), 'utf8');
 const publicMethod = code.slice(code.indexOf('func testPublicSentinelIntoEmptyAndClearOwn()'),
   code.indexOf('func testPrivateInputIntoEmpty()'));
 const realMethod = code.slice(code.indexOf('func testPrivateInputIntoEmpty()'));
@@ -109,26 +112,64 @@ describe('FishKeyEntryProbe HOST source contract', () => {
     expect([...code.matchAll(/try require\([\s\S]*?,\s*("[^"\n]*")\)/g)].length).toBeGreaterThan(15);
   });
 
-  it('documents the repaired status, the renewed staging exception and the same privacy limits', () => {
+  it('documents the repaired status, the attempt-scoped GET exception and the same privacy limits', () => {
     for (const text of ['HOST-repaired', 'NOT NATIVE QUALIFIED', 'attempt-01', attemptPath,
       'UTF-16 LE/BE', 'hex and base64', 'complete\nreadable xcresult text/JSON',
       'STOP: do not load or type the real credential', 'ONE public attempt', 'ONE real attempt',
       'loadSettings()', 'only this shell\'s staged `fish-api-key.txt`', 'presence/resave/connection-check',
       'one bounded foreground `ios_guard.py` admission', 'Xcode-27.1.0.app', '**8437**',
       'api.fish.audio/compat/v1/models', 'one keyless GET', 'FishKeyEntryFieldRead',
-      'unknown, held and refused are not absence']) {
+      'unknown, held and refused are not absence',
+      'for THIS attempt only', 'a recovery or relaunch never re-arms it',
+      'the Keychain survives container replacement', 'still unknown',
+      'fish-key-entry-duo-8437-prep-02', 'EXACTLY ONCE', 'no implicit re-navigation']) {
       expect(guide).toContain(text);
     }
     expect(guide).not.toContain('NOT COMPILED, NOT NATIVE, NOT PRIVACY QUALIFIED');
+    expect(guide).not.toContain('per fresh app process');
+    expect(guide).not.toContain('this runtime reports');
   });
 
-  it('keeps the host red/green runner compiling the exact classifier without device operations', () => {
+  it('keeps the host red/green runner compiling the exact classifier and the verbatim old guard without device operations', () => {
     expect(runner).toContain('/usr/bin/swiftc');
     expect(runner).toContain('HOST-TESTABLE CLASSIFIER');
     expect(runner).toContain('exact block begin');
     expect(runner).toContain('FISH_CLASSIFIER_OLD_REF:-2e56559');
     expect(runner).toContain('mktemp');
     expect(runner).toContain('guard let value = field.value as? String, !value.isEmpty else');
+    expect(runner).toContain('private func isEmpty(_ field: XCUIElement) throws -> Bool {');
+    expect(runner).toContain('struct XCUIElement { let value: Any? }');
+    expect(runner).toContain('RED-EXIT');
+    expect(runner).toContain("'CASE emptyString expected=empty actual=unavailable MISMATCH'");
+    expect(runner).toContain('old process exited 1 on the exact emptyString');
     expect(runner).not.toMatch(/xcrun|simctl|git checkout|git apply|git restore|metro|Metro/);
+  });
+
+  it('keeps the manifest scanner strict: static origins hashed, runtime leaks definite, holds on coverage gaps', () => {
+    expect(scanner).toContain('PRIVACY-CLEAN');
+    expect(scanner).toContain('PRIVACY-NOT-QUALIFIED');
+    expect(scanner).toContain('PRIVACY-HOLD');
+    expect(scanner).toContain('sha256_of');
+    expect(scanner).toContain('expected_public_constant');
+    expect(scanner).toContain('type_activity');
+    expect(scanner).toContain('per-char-split');
+    expect(scanner).toContain('fish-api-key.txt still present at scan time');
+    expect(scanner).toContain('no readable activity export');
+    expect(scanner).not.toMatch(/simctl|xcrun |requests|urllib\.request/);
+  });
+
+  it('keeps the phase lib and host-fake checks covering the fatal paths without real tools', () => {
+    expect(phaseLib).toContain('phase_require_attempt_dir()');
+    expect(phaseLib).toContain('phase_bind_result()');
+    expect(phaseLib).toContain('phase_assert_plist_identity()');
+    expect(phaseLib).toContain('phase_assert_metro()');
+    expect(phaseLib).toContain('phase_run_export()');
+    expect(phaseLib).toContain('phase_write_hold()');
+    expect(phaseLib).toContain('plutil -extract CFBundleShortVersionString raw');
+    expect(hostChecks).toContain('HOSTCHECKS-ALL-OK');
+    expect(hostChecks).toContain('fakebin');
+    expect(hostChecks).toContain('type-activity-definite-fail');
+    expect(hostChecks).toContain('staged-input-hold');
+    expect(hostChecks).not.toMatch(/xcrun |simctl|ios_guard/);
   });
 });

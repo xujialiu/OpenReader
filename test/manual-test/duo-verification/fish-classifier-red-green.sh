@@ -1,22 +1,25 @@
 #!/bin/bash
-# HOST red/green for FishKeyEntryProbe's pure field-read classifier.
+# HOST red/green for FishKeyEntryProbe's field-read handling.
 #
 # - GREEN: extracts the exact pure classifier block from the live probe source
 #   between its "HOST-TESTABLE CLASSIFIER" markers and compiles it unchanged on
 #   the host with /usr/bin/swiftc (no XCTest, no simulator API), then runs a
-#   table of nil / non-String / empty / legacy-placeholder / content cases
-#   against independently written expected classifications.
-# - RED: compiles an isolated copy of the pre-repair guard's decision whose
-#   three decisive expressions are asserted verbatim inside the recorded
-#   pre-repair blob (FISH_CLASSIFIER_OLD_REF, default 2e56559), and proves the
-#   empty-String read classifies as unavailable there while the repaired
-#   classifier classifies the same read empty.
+#   13-case table (nil / non-String types / empty / legacy placeholder /
+#   content) against independently written expected classifications. Must exit 0.
+# - RED (honest failing-acceptance case): extracts the VERBATIM pre-repair
+#   `isEmpty` method from blob FISH_CLASSIFIER_OLD_REF (default 2e56559), the
+#   same Swift text compiled on the host with minimal stand-ins (an
+#   `XCUIElement` value holder and a throwing `require`), adapts its
+#   result/throw to the SAME 13-case classifications, and must exit 1 with the
+#   exact mismatch `CASE emptyString expected=empty actual=unavailable`.
+#   No handwritten reimplementation of the old logic and no substring-only
+#   provenance: the compiled function is the extracted text itself.
 # - No mutation: every generated file lives in one mktemp directory; the
 #   production probe is never modified or moved by this script.
 #
 # Usage: bash test/manual-test/duo-verification/fish-classifier-red-green.sh
-# Exit: 0 both harnesses match their characterization and the red case
-#   diverges; 2 extraction/provenance failure; 1 any table disagreement.
+# Exit: 0 green table clean AND old process exited 1 on the exact emptyString
+#   mismatch; 2 extraction/provenance failure; 1 any unexpected table result.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../../.." && pwd)
 probe="$root/test/manual-test/kit/FishKeyEntryProbe.swift"
@@ -43,17 +46,25 @@ if grep -qE 'XCTest|XCUIApplication|XCUIElement|^import ' "$work/classifier-code
 fi
 wc -l "$work/classifier-code.swift"
 
-echo "== provenance: pre-repair guard fragments in blob $old_ref =="
+echo "== extraction: verbatim pre-repair isEmpty from blob $old_ref =="
 git -C "$root" show "$old_ref:test/manual-test/kit/FishKeyEntryProbe.swift" > "$work/old-probe.swift"
-grep -F -q 'guard let value = field.value as? String, !value.isEmpty else' "$work/old-probe.swift" \
-  || { echo "FAIL: blob $old_ref lacks the old guard's read" >&2; exit 2; }
-grep -F -q 'return value == "Not set"' "$work/old-probe.swift" \
-  || { echo "FAIL: blob $old_ref lacks the old placeholder comparison" >&2; exit 2; }
-grep -F -q 'require(false, "Secure API key state is unavailable")' "$work/old-probe.swift" \
-  || { echo "FAIL: blob $old_ref lacks the old fail-closed branch" >&2; exit 2; }
-echo "provenance OK: old guard expressions found verbatim in $old_ref"
+for fragment in 'guard let value = field.value as? String, !value.isEmpty else' \
+                'return value == "Not set"' \
+                'require(false, "Secure API key state is unavailable")'; do
+  grep -F -q "$fragment" "$work/old-probe.swift" \
+    || { echo "FAIL: blob $old_ref lacks fragment: $fragment" >&2; exit 2; }
+done
+awk 'index($0, "private func isEmpty(_ field: XCUIElement) throws -> Bool {") {grab=1}
+     grab {print}
+     grab && $0 == "  }" {exit}' "$work/old-probe.swift" > "$work/old-isEmpty.swift"
+[ -s "$work/old-isEmpty.swift" ] || { echo "FAIL: verbatim isEmpty not extracted" >&2; exit 2; }
+grep -F -q 'guard let value = field.value as? String, !value.isEmpty else' "$work/old-isEmpty.swift" \
+  || { echo "FAIL: extracted isEmpty is not the verbatim guard" >&2; exit 2; }
+grep -cF 'field.value' "$work/old-isEmpty.swift" | grep -q '^1$' \
+  || { echo "FAIL: extracted isEmpty must contain exactly one field.value read" >&2; exit 2; }
+wc -l "$work/old-isEmpty.swift"
 
-echo "== compile + run: repaired classifier (green) =="
+echo "== compile + run: repaired classifier (green, must exit 0) =="
 {
   echo 'import Foundation'
   cat "$work/classifier.swift"
@@ -86,55 +97,85 @@ exit(failures == 0 ? 0 : 1)
 SWIFT
 } > "$work/new-main.swift"
 "$swiftc" -o "$work/new" "$work/new-main.swift"
-"$work/new" | tee "$work/new.out"
+set +e
+"$work/new" > "$work/new.out" 2>&1
+new_rc=$?
+set -e
+cat "$work/new.out"
+echo "GREEN-EXIT=$new_rc"
+[ "$new_rc" -eq 0 ] || { echo "FAIL: repaired classifier table must be green" >&2; exit 1; }
 
-echo "== compile + run: isolated copy of the pre-repair guard (red) =="
-cat > "$work/old-main.swift" <<'SWIFT'
+echo "== compile + run: VERBATIM pre-repair isEmpty (same acceptance table; must exit 1 on emptyString) =="
+{
+  cat <<'SWIFT'
 import Foundation
 
-// Isolated decision copy of the pre-repair isEmpty guard. Its three decisive
-// expressions were asserted verbatim inside blob 2e56559 above; the field read
-// is renamed raw and the XCTFail/throw branch becomes nil (unavailable).
-func oldGuardEmptyRead(_ raw: Any?) -> Bool? {
-  guard let value = raw as? String, !value.isEmpty else { return nil }
-  return value == "Not set"
+// Minimal host stand-ins so the verbatim pre-repair method compiles unchanged:
+// an XCUIElement that only carries the accessibility value, and the throwing
+// require the extracted method calls. Nothing else is reimplemented.
+struct XCUIElement { let value: Any? }
+func require(_ condition: Bool, _ message: String) throws {
+  if !condition { throw NSError(domain: "FishKeyEntryProbe", code: 1, userInfo: nil) }
 }
 
-let table: [(String, Any?, Bool?)] = [
-  ("nil", nil, nil),
-  ("int7", 7, nil),
-  ("double2_5", 2.5, nil),
-  ("boolFalse", false, nil),
-  ("arrayOfStrings", ["a", "b"], nil),
-  ("nsObject", NSObject(), nil),
-  ("emptyString", "", nil),
-  ("legacyPlaceholder", "Not set", true),
-  ("singleSpace", " ", false),
-  ("maskedBullets", "••••••", false),
-  ("publicSentinel", "OPENREADER_PUBLIC_FISH_SENTINEL_8437", false),
-  ("arbitrarySecret", "sk-example-000", false),
-  ("switchValueZero", "0", false),
+SWIFT
+  cat "$work/old-isEmpty.swift"
+  cat <<'SWIFT'
+
+// Adapts the verbatim method's result/throw to the SAME independently expected
+// classifications the repaired classifier is judged against: throw -> its
+// fail-closed unavailable; true -> empty; false -> nonempty.
+func oldIsRead(_ raw: Any?) -> String {
+  do {
+    return try isEmpty(XCUIElement(value: raw)) ? "empty" : "nonempty"
+  } catch {
+    return "unavailable"
+  }
+}
+
+let table: [(String, Any?, String)] = [
+  ("nil", nil, "unavailable"),
+  ("int7", 7, "unavailable"),
+  ("double2_5", 2.5, "unavailable"),
+  ("boolFalse", false, "unavailable"),
+  ("arrayOfStrings", ["a", "b"], "unavailable"),
+  ("nsObject", NSObject(), "unavailable"),
+  ("emptyString", "", "empty"),
+  ("legacyPlaceholder", "Not set", "empty"),
+  ("singleSpace", " ", "nonempty"),
+  ("maskedBullets", "••••••", "nonempty"),
+  ("publicSentinel", "OPENREADER_PUBLIC_FISH_SENTINEL_8437", "nonempty"),
+  ("arbitrarySecret", "sk-example-000", "nonempty"),
+  ("switchValueZero", "0", "nonempty"),
 ]
-let label: (Bool?) -> String = { read in read == nil ? "unavailable" : (read == true ? "empty" : "nonempty") }
 var failures = 0
 for (name, raw, expected) in table {
-  let actual = oldGuardEmptyRead(raw)
+  let actual = oldIsRead(raw)
   if actual != expected { failures += 1 }
-  print("CASE \(name) expected=\(label(expected)) actual=\(label(actual)) \(actual == expected ? "OK" : "MISMATCH")")
+  print("CASE \(name) expected=\(expected) actual=\(actual) \(actual == expected ? "OK" : "MISMATCH")")
 }
 print("RED-TABLE failures=\(failures)")
 exit(failures == 0 ? 0 : 1)
 SWIFT
+} > "$work/old-main.swift"
 "$swiftc" -o "$work/old" "$work/old-main.swift"
-"$work/old" | tee "$work/old.out"
+set +e
+"$work/old" > "$work/old.out" 2>&1
+old_rc=$?
+set -e
+cat "$work/old.out"
+echo "RED-EXIT=$old_rc"
 
-echo "== red capability: the repaired case must diverge =="
-grep -q 'CASE emptyString expected=empty actual=empty OK' "$work/new.out" \
-  || { echo "FAIL: repaired classifier does not classify an empty String read as empty" >&2; exit 1; }
-grep -q 'CASE emptyString expected=unavailable actual=unavailable OK' "$work/old.out" \
-  || { echo "FAIL: pre-repair guard does not characterize as unavailable on the empty String read" >&2; exit 1; }
-grep -q 'CASE nil expected=unavailable actual=unavailable OK' "$work/new.out" \
-  && grep -q 'CASE int7 expected=unavailable actual=unavailable OK' "$work/new.out" \
-  || { echo "FAIL: repaired classifier must keep nil/non-String unavailable (fail closed)" >&2; exit 1; }
+echo "== honest red acceptance =="
+[ "$old_rc" -eq 1 ] || { echo "FAIL: the verbatim pre-repair isEmpty must FAIL the shared acceptance table (exit 1), got $old_rc" >&2; exit 1; }
+grep -q 'CASE emptyString expected=empty actual=unavailable MISMATCH' "$work/old.out" \
+  || { echo "FAIL: exact emptyString failing-acceptance case missing" >&2; exit 1; }
+[ "$(grep -c 'MISMATCH' "$work/old.out")" -eq 1 ] \
+  || { echo "FAIL: the verbatim method must mismatch exactly the emptyString case" >&2; exit 1; }
+grep -q 'CASE legacyPlaceholder expected=empty actual=empty OK' "$work/old.out" \
+  && grep -q 'CASE nil expected=unavailable actual=unavailable OK' "$work/old.out" \
+  && grep -q 'CASE int7 expected=unavailable actual=unavailable OK' "$work/old.out" \
+  && grep -q 'CASE maskedBullets expected=nonempty actual=nonempty OK' "$work/old.out" \
+  || { echo "FAIL: old acceptance table lines missing" >&2; exit 1; }
 
-echo "RED/GREEN OK: pre-repair guard (blob $old_ref) classifies an empty String read as unavailable while the repaired classifier classifies it empty, with nil/non-String still unavailable and the full table green."
+echo "RED/GREEN OK: the verbatim pre-repair isEmpty (blob $old_ref) fails the shared acceptance table exactly at emptyString (expected=empty, actual=unavailable, exit 1); the repaired classifier passes the same table (exit 0). The earlier old-guard characterization table remains recorded in notes as characterization."
