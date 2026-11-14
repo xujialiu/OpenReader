@@ -174,6 +174,9 @@ describe('FishKeyEntryProbe HOST source contract', () => {
     expect(scanner).toContain('budget-seconds');
     expect(scanner).toContain('max-artifact-bytes');
     expect(scanner).toContain('min-prefix-chars');
+    expect(scanner).toContain('default=1, choices=(1,)');
+    expect(scanner).toContain('[-len(SENTINEL):]');
+    expect(scanner).not.toContain('self._check(');
     expect(scanner).toContain('report-path');
     expect(scanner).toContain('fish-api-key.txt still present at scan time');
     expect(scanner).toContain('no readable activity export');

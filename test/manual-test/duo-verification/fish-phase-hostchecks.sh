@@ -162,9 +162,11 @@ mk_tree() { # FAKEROOT
   { printf 'fake object '; printf '%s' "OPENREADER_PUBLIC_FISH_SENTINEL_8437"; printf '\n'; } \
     > "$f/A/public-probe/build/Build/Intermediates.noindex/ManualTests.build/Debug-iphonesimulator/LockScreenProbe.build/Objects-normal/arm64/FishKeyEntryProbe.o"
 }
-scan() { # FAKE_ROOT -> exit code of scanner
-  python3 "$scanner" --attempt "$1/A" --prep "$1/prep" \
-    --repo-source "$1/repo/FishKeyEntryProbe.swift" --runner-source "$runner"
+scan() { # FAKE_ROOT [SCANNER_OPTIONS...] -> exit code of scanner
+  local tree=$1
+  shift
+  python3 "$scanner" --attempt "$tree/A" --prep "$tree/prep" \
+    --repo-source "$tree/repo/FishKeyEntryProbe.swift" --runner-source "$runner" "$@"
 }
 T="$work/tree-clean"; mk_tree "$T"
 SOUT=$(scan "$T" 2>&1) && scan_rc=0 || scan_rc=$?
@@ -175,14 +177,25 @@ SOUT=$(scan "$T" 2>&1) && scan_rc=0 || scan_rc=$?
 echo "== scanner: negative injections =="
 inject_case() { # NAME EXPECTED_RC SETUP_FN
   local name=$1 expect_rc=$2 setup=$3
+  shift 3
   local t="$work/tree-$name"
   mk_tree "$t"
   "$setup" "$t"
-  local rc=0; scan "$t" >/dev/null 2>&1 || rc=$?
-  if [ "$rc" -eq "$expect_rc" ]; then
-    note "HOSTCHECK-OK   scanner $name exit $rc"
+  local rc=0; scan "$t" "$@" >/dev/null 2>&1 || rc=$?
+  if [ "$rc" -eq "$expect_rc" ] && python3 - "$t/A/privacy-scan-report.json" "$expect_rc" <<'PY'
+import json, sys
+report = json.load(open(sys.argv[1]))
+expected = int(sys.argv[2])
+assert report['verdict'] == {0: 'PRIVACY-CLEAN', 1: 'PRIVACY-NOT-QUALIFIED', 2: 'PRIVACY-HOLD'}[expected]
+if expected == 1:
+    assert report['leaks'], 'a crash is not detected leakage'
+if expected == 2:
+    assert report['holds'], 'a crash is not a recorded coverage hold'
+PY
+  then
+    note "HOSTCHECK-OK   scanner $name exit $rc with matching verdict/evidence"
   else
-    note "HOSTCHECK-FAIL scanner $name: expected exit $expect_rc got $rc"; failures=$((failures+1))
+    note "HOSTCHECK-FAIL scanner $name: expected exit $expect_rc and matching verdict/evidence, got $rc"; failures=$((failures+1))
   fi
 }
 inject_plain() { printf 'leak OPENREADER_PUBLIC_FISH_SENTINEL_8437 plain\n' >> "$1/A/public-probe/test-T.log"; }
@@ -240,9 +253,12 @@ report = json.load(open(sys.argv[1]))
 assert report["verdict"] == "PRIVACY-NOT-QUALIFIED", report["verdict"]
 assert any(l.get("type_activity") for l in report["leaks"]), report["leaks"]
 PY
+inject_one_char() { printf "Type 'O...' into SecureTextField\n" >> "$1/A/public-probe/test-T.log"; }
 inject_case truncated-single-quoted-leak 1 inject_truncated_single
 inject_case truncated-double-quoted-leak 1 inject_truncated_double
+inject_case one-character-prefix-leak 1 inject_one_char
 inject_case perchar-reconstruction-leak 1 inject_perchar
+inject_case artifact-size-bound-hold 2 inject_type --max-artifact-bytes 32
 check "truncated prefix flagged as shared-prefix leak" ok python3 - "$work/tree-truncated-single-quoted-leak/A/privacy-scan-report.json" <<'PY'
 import json, sys
 report = json.load(open(sys.argv[1]))

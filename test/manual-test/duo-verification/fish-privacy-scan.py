@@ -16,13 +16,12 @@ hung for minutes on the retained diagnostics log. This scanner therefore:
 
 - FAILS FAST on readable `Type` activity payloads before any expensive binary
   work: single- OR double-quoted payloads, full or TRUNCATED (ellipsis) — a
-  payload that shares a leading run with the sentinel of at least
-  --min-prefix-chars characters is a definite NOT QUALIFIED. A recovered
-  prefix alone is a leak; no plaintext input echo can qualify.
+  payload exposing even one leading sentinel character is NOT QUALIFIED.
+  --min-prefix-chars accepts only 1: a caller cannot weaken that boundary.
+  A recovered prefix alone is a leak; no plaintext input echo can qualify.
 - Reconstructs chronological one-character typing linearly: consecutive
-  single-character payloads accumulate into a stream, and a stream sharing a
-  sentinel prefix of at least --min-prefix-chars characters is a definite
-  NOT QUALIFIED. There is no wildcard backtracking anywhere.
+  single-character payloads accumulate into a sentinel-length bounded stream.
+  There is no wildcard backtracking anywhere.
 - Keeps the full encoded forms (UTF-8/16 LE/BE, hex, base64, URL/JSON
   escapes) as byte-pattern negative controls over every artifact.
 - Bounds its work: an explicit runtime budget (--budget-seconds) and a
@@ -115,8 +114,8 @@ class PrefixState:
         # Chronological one-character reconstruction: length-1 payloads extend
         # the stream; anything else starts a new run.
         if len(payload) == 1:
-            self.stream += payload
-            self._check(self.stream, "typed-stream", where)
+            self.stream = (self.stream + payload)[-len(SENTINEL):]
+            self._chunk(self.stream, "typed-stream", where)
         else:
             self.stream = ""
 
@@ -146,9 +145,11 @@ def main() -> int:
                         help="total runtime budget; breach records coverage uncertainty as a HOLD")
     parser.add_argument("--max-artifact-bytes", type=int, default=256 * 1024 * 1024,
                         help="per-artifact size cap; breach records coverage uncertainty as a HOLD")
-    parser.add_argument("--min-prefix-chars", type=int, default=4,
-                        help="minimum shared leading characters that count as a recovered prefix")
+    parser.add_argument("--min-prefix-chars", type=int, default=1, choices=(1,),
+                        help="compatibility option: one exposed input character is disqualifying")
     args = parser.parse_args()
+    if args.budget_seconds <= 0 or args.max_artifact_bytes <= 0:
+        parser.error("runtime and artifact bounds must be positive")
 
     started = time.monotonic()
     attempt = os.path.abspath(args.attempt)
@@ -271,6 +272,8 @@ def main() -> int:
         path = artifacts[key]
         if not os.path.isfile(path) or os.path.getsize(path) == 0:
             continue
+        if os.path.getsize(path) > args.max_artifact_bytes:
+            continue  # manifest already records the size-cap coverage HOLD
         if not budget_checkpoint(f"Type payload analysis of {key}"):
             break
         try:
@@ -278,8 +281,12 @@ def main() -> int:
         except UnicodeDecodeError:
             continue  # byte-pattern sweep below still applies; decode gap recorded
         for payload, truncated, _line in type_payloads(text):
+            if not budget_checkpoint(f"Type payload analysis of {key}"):
+                break
             prefix.feed(payload, "type-payload-truncated" if truncated else "type-payload",
                         f"{key} ({path})")
+            if prefix.hits:
+                break  # one confirmed echo suffices; do not accumulate unbounded hits
         prefix.stream = ""  # typing chronology is per file, never across files
     for hit in prefix.hits:
         leaks.append({"artifact": hit["where"], "encoding": hit["kind"], "payload": hit["payload"],
@@ -336,7 +343,11 @@ def main() -> int:
             if not budget_checkpoint(f"byte sweep of {key}"):
                 break
             try:
-                data = open(path, "rb").read()
+                with open(path, "rb") as handle:
+                    data = handle.read(args.max_artifact_bytes + 1)
+                if len(data) > args.max_artifact_bytes:
+                    holds.append(f"artifact {key} grew past its size cap; coverage uncertain")
+                    continue
             except OSError as error:
                 holds.append(f"unreadable artifact {key}: {error}")
                 continue
