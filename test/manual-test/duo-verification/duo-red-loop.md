@@ -15,6 +15,14 @@ bash test/manual-test/duo-verification/duo-red-loop.sh --replay \
 # Expected exit 1: HOST_REPLAY outcome=APP_RED, four valid cycles, one failed.
 ```
 
+## Fresh native-lane parameters and limits
+
+The live shell retains historical defaults for replay, but an admitted lane must replace them from fresh receipts: `OPENREADER_DEVICE` and `HUB_PID`/`HUB_WINDOW_TITLE` identify the owned target, `OPENREADER_EXPECT_VIEWPORT`/`OPENREADER_CLOSED_VIEWPORT`/`OPENREADER_OUTWARD_VIEWPORT` identify each measured CDP viewport, `OPENREADER_NATIVE_WIDTH`/`OPENREADER_NATIVE_HEIGHT` identify the native press frame, `OPENREADER_PRESS_X_OFFSET`/`OPENREADER_PRESS_Y_OFFSET` record a separately qualified DOM-to-native mapping, and `OPENREADER_CAPTURE_DISPLAY` selects the active screenshot display. One fresh iOS 27.1 lane measured app frame 386×678, CDP viewport 386×662 and Device Hub window (206,123,1100,800); its +21-point press Y mapping is lane evidence only, not a universal inset.
+
+`duo-wash-measure.py` requires a Python interpreter with Pillow and NumPy. If the selected interpreter lacks NumPy, a valid native baseline can still be captured but the phase must return `CONTROL_INCOMPLETE`; do not add a project dependency or report an app failure. A redirected Metro log may omit harness console lines after restart while the app Debug Log retains fresh `[probe]`/`[hx]` records; use an explicit prefix-preserving Debug Log bridge and monotone harness sequence when that occurs.
+
+The completion boundary is strict: a fresh range/lookup/paint/handle baseline followed by a missing log, dependency, identity, viewport, capture or cleanup control is `CONTROL_INCOMPLETE`. It is neither `APP_RED` nor `PASS`; historical Beta18 native loss records remain historical and no application fix or native no-repro claim follows from an incomplete current lane.
+
 Replay enters the actual shell driver **before any native prerequisites**, then
 calls the same verdict functions used by its live `phase`, `cleanup`, `cycle`
 and `summary` commands. It reads retained public captured-shape JSON, never
