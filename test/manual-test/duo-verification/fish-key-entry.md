@@ -1,22 +1,9 @@
 # Fish secure-field credential setup probe
 
-**Source status: HOST-repaired after one failed native attempt; NOT NATIVE QUALIFIED.**
-The first public-sentinel invocation (attempt-01, iOS 27.1, `1.0.4 (30)-beta19-debug`,
-2026-11-15 00:00) failed at its first precondition in 1.101 s — `Secure API key state is
-unavailable` — before any tap or typed character: the pre-repair guard conflated an
-empty String read with nil and non-String, and the raw log does not establish which
-of the three occurred. The current source adds the pure `FishKeyEntryFieldRead`
-classifier — an empty actual String is `.empty`, any other actual String is
-`.nonempty`, and nil or a non-String is `.unavailable` and must stop before input —
-and it also supports the legacy `Not set` String representation the pre-repair probe
-read as empty; the actual native representation of an empty field on this runtime is
-still unknown until the qualified attempt measures it. The repair is host-proven by
-[fish-classifier-red-green.sh](fish-classifier-red-green.sh): the VERBATIM pre-repair
-`isEmpty` (extracted from blob `2e56559`, compiled with minimal host stand-ins) FAILS
-the same 13-case acceptance table exactly at `emptyString expected=empty actual=unavailable`
-(exit 1) while the repaired classifier passes it (exit 0). The earlier old-guard
-table that characterized the old decision with `expected=unavailable` remains
-recorded in notes as characterization.
+**Source status: attempt-02 SPENT — the public probe PASSED natively (1 test, 0 failures, 6.857 s) and the transport PRIVACY FAILED. The real-input method is PERMANENTLY DISABLED.**
+On 2026-11-15 the single renewed public-sentinel invocation ran once on the owned Duo under the one guarded admission: the field precondition held, the public sentinel was typed while masked, observed nonempty, and cleared back to `Not set` — `Executed 1 test, with 0 failures (0 unexpected) in 6.857 seconds`. At t=3.67s the framework itself logged and titled the activity `Type 'OPENREADER_PUBLIC_...' into "Not set" SecureTextField` — an 18-character truncated prefix of the typed input, echoed by XCTest into the test log, the activity export and the retained diagnostics. **PRIVACY FAIL**: no plaintext input echo qualifies, and a truncated prefix alone is a leak. The empty-field read is now known to be an actual String that the `FishKeyEntryFieldRead` classifier classifies `.empty` (nil and non-String were ruled out by the passing precondition); whether it is the empty String or the legacy `Not set` String is unresolved by design, because the classifier accepts both.
+
+The offline scanner that round also carried a HOST performance defect: its per-character `.{0,300}` backtracking regex hung for minutes on the retained 558 KB diagnostics session log and would have reported a FALSE PRIVACY-CLEAN, because it only matched the full 36-character sentinel. The retained scanner is deterministic and bounded: it fails fast on readable single- or double-quoted `Type` payloads (full or truncated, and chronological one-character reconstruction) against a minimum shared-prefix bound, keeps the full encoded forms as negative controls, and enforces an explicit runtime budget and per-artifact size cap that record coverage uncertainty as HOLD. A byte-scan CLEAN is not a semantic or image privacy pass.
 
 [FishKeyEntryProbe.swift](../kit/FishKeyEntryProbe.swift) prepares credential
 entry; it is not app-feature verification or evidence that a key works. It reuses
@@ -156,11 +143,13 @@ try {
 JS
 ```
 
-## First: one PUBLIC-only native qualification
+## The one public qualification: SPENT (attempt-02, 2026-11-15)
 
-The sentinel is public, **36 ASCII characters**. With the original absence
-and exclusive ownership gates above, run exactly one public invocation inside
-the admitted phase:
+The sentinel is public, **36 ASCII characters**. attempt-02 ran exactly one
+public invocation under the one guarded admission and is now SPENT — its
+outcome is recorded above (native PASS, transport PRIVACY FAIL). The
+invocation, retained for the record only (never rerun; a new attempt needs a
+newly reviewed dedicated path and fresh authorization):
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode-27.1.0.app/Contents/Developer \
@@ -205,55 +194,30 @@ logging/diagnostic settings and field behavior. Do not suppress diagnostics
 just to hide a leak; changing the logging route requires a new qualification,
 not an extra attempt under this authorization.
 
-## Only after PASS: one real-input attempt — LOCKED
+## Real input: PERMANENTLY DISABLED in this probe
 
-This method stays locked: it runs only after a reviewed passing public/native
-privacy qualification AND a separate explicit approval; do not execute it as
-part of the public phase. Keep Fish disabled and the field empty with no
-intervening writer. Replace only the owned **staging file** whose contents are
-still the public sentinel. The existing `loadSettings()` process supplies only
-the required Fish value; never ask a model to read the settings/key and never
-echo it. This local process does not create a Provider or make a request. It
-catches errors with a fixed message rather than dumping settings/parser errors:
-
-```sh
-npx tsx --input-type=module <<'JS'
-import { lstatSync, readFileSync, writeFileSync } from 'node:fs';
-import { loadSettings } from './test/manual-test/kit/node-kit.ts';
-const dir = '/tmp/openreader-fish-key-entry-duo-8437-attempt-02';
-try {
-  const path = dir + '/fish-api-key.txt';
-  const parent = lstatSync(dir), file = lstatSync(path);
-  if (!parent.isDirectory() || parent.uid !== process.getuid() ||
-      (parent.mode & 0o777) !== 0o700 || !file.isFile() ||
-      file.uid !== process.getuid() || file.nlink !== 1 ||
-      (file.mode & 0o777) !== 0o600 ||
-      readFileSync(path, 'utf8') !== 'OPENREADER_PUBLIC_FISH_SENTINEL_8437') throw Error();
-  const key = loadSettings().fish.apiKey.trim();
-  if (!/^[\x21-\x7e]{1,512}$/.test(key) ||
-      key === 'OPENREADER_PUBLIC_FISH_SENTINEL_8437') throw Error();
-  writeFileSync(path, key, { flag: 'w', mode: 0o600 });
-} catch { console.error('Private staging refused'); process.exitCode = 2; }
-JS
-
-DEVELOPER_DIR=/Applications/Xcode-27.1.0.app/Contents/Developer \
-  bash test/manual-test/kit/run-probe.sh FishKeyEntryProbe "$DUO_UDID" \
-  "$ATTEMPT/real-probe" --mode real-input-privacy-qualified \
-  -only-testing:testPrivateInputIntoEmpty
-```
-
-The native process alone reads the staged real value for masked typing. Its
-1–512 printable-ASCII byte bound is transport safety, **not** a Fish credential
-format/validity claim. It rejects newline/control-key payloads, empty/unreadable
-or unsafe files, the sentinel, and nonempty/revealed/locked/ambiguous fields or
-an `API key:` error footnote. It does not clear a real value, press the eye,
-Enable or Test connection. Always select the single method; default/incorrect
-modes fail closed. There is at most **ONE public attempt and, only after its
-reviewed PASS, ONE real attempt**; any failure ends this authorization. Do not
-repeat real typing because rc was ambiguous or a save seems delayed. Delete the
-staged file in `finally` even on failure/cancellation; retain the private raw
-evidence and report only redacted booleans/fixed failures, never the key or
-field value.
+The real-input method is permanently disabled at source level.
+`testPrivateInputIntoEmpty` carries a hard barrier as its first statement — a
+fixed `XCTest input privacy failed: the typed input prefix leaked into
+framework activity (attempt-02); this real-input method is permanently
+disabled` failure raised before any staged-file read, tap or typing, not
+gated on mode or caller approval. attempt-02 measured the transport end to
+end: the probe's own control PASSED (empty → public-nonempty → empty, 6.857 s,
+Fish still disabled, Keychain path untouched) while the framework echoed a
+truncated 18-character prefix of the typed input (`Type 'OPENREADER_PUBLIC_...`
+at t=3.67s) into the test log, the activity export and the retained
+diagnostics — PRIVACY FAIL. The old key-staging recipe that stood here
+(a host-file replacement driven by the app's local settings reader via
+`loadSettings`, feeding the disabled method's private mode string) is RETIRED
+and must not be
+reconstructed: never stage a real key for this probe. A DIFFERENT credential
+transport (one that does not inject text through the framework's typed-input
+path — for example an owner-entered key on this simulator, reviewed under its
+own authorization) requires a separate owner decision; this probe grants no
+such permission, and no alternate transport has been implemented or authorized
+here. Any future credential verification still goes through the existing
+normal app presence/resave/connection-check route with its own network
+authorization.
 
 ## What typing cannot establish
 
@@ -267,5 +231,8 @@ method directly reads/writes/resets Keychain. A nonempty masked field and
 XCTest rc=0 do **not** prove final autosave, persistence, correct credential,
 Provider response or feature acceptance. A later separately authorized phase
 must use the existing normal app presence/resave/connection-check route to
-verify the actual credential (and obtain any network authorization). No fake
-sentinel Enable/connection request is allowed here or as a qualification step.
+verify the actual credential (and obtain any network authorization) — a different credential transport is therefore an owner
+decision, and any
+credential ENTRY transport other than this probe's disabled XCTest typing is a
+separate owner decision. No fake sentinel Enable/connection request is allowed
+here or as a qualification step.
