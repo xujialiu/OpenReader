@@ -139,12 +139,19 @@ final class FontSizeProbe: XCTestCase {
   }
 
   /// Closes the sheet `testStepperLadderDisabledEndsAndFontPage` left open,
-  /// after the external light/dark screenshots have been taken against it.
+  /// after the external light/dark screenshots have been taken against it. The
+  /// Appearance drawer's own dismissal is `Back from Appearance` (drawer.tsx's
+  /// `Back from ${title}`), which returns to the More actions sheet; that
+  /// sheet's `Sheet Grabber` drag is what actually closes it. The capture is
+  /// the judgement, as everywhere in this file.
   func testCloseAppearanceSheet() throws {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
     app.activate()
-    if app.buttons["Close Appearance"].waitForExistence(timeout: 5) {
-      app.buttons["Close Appearance"].tap()
+    if app.buttons["Back from Appearance"].waitForExistence(timeout: 5) {
+      app.buttons["Back from Appearance"].tap()
+    }
+    if app.buttons["Sheet Grabber"].waitForExistence(timeout: 3) {
+      app.buttons["Sheet Grabber"].swipeDown()
     }
     capture("appearance-closed", app)
   }
@@ -190,7 +197,7 @@ final class FontSizeProbe: XCTestCase {
     XCTAssertTrue(app.buttons["Increase font size"].waitForExistence(timeout: 3))
     let increase = app.buttons["Increase font size"]
     for _ in 0..<8 { increase.tap() } // 16 -> 24: a big enough reflow to see re-centring, not just survive it
-    app.buttons["Close Appearance"].tap()
+    app.buttons["Back from Appearance"].tap()
     // A font change reflows and re-centres; give the settle frames and the
     // scroll itself time before looking.
     Thread.sleep(forTimeInterval: 1.0)
@@ -203,8 +210,57 @@ final class FontSizeProbe: XCTestCase {
     XCTAssertTrue(app.buttons["Decrease font size"].waitForExistence(timeout: 3))
     let decrease = app.buttons["Decrease font size"]
     for _ in 0..<8 { decrease.tap() } // 24 -> 16
-    app.buttons["Close Appearance"].tap()
+    app.buttons["Back from Appearance"].tap()
     capture("highlight-size-restored", app)
+  }
+
+  /// #363 full-app verification on an owner-original book: with the reader
+  /// already open on a prose section (opened by the harness, as in
+  /// `testStepFontSizeUpTo32`), a real coordinate tap sets the paused-sentence
+  /// highlight with no playback, a real stepper ladder 16 → 24 leaves the same
+  /// text highlighted and painted after the reflow, and 24 → 16 restores the
+  /// owner's default. The tap point (dy 0.55, mid-page body text) was chosen
+  /// from this run's own screenshots of Atomic Habits' introduction at 16
+  /// (attempt /tmp/openreader-font-363-verify-01, atomic-intro-16.png): dense
+  /// justified body text with room below the footer-free mid page. A tap that
+  /// lands between two lines silently does nothing, by design — the before/after
+  /// attachments are the judgement, as in the short-fixture test.
+  func testHighlightPaintSurvivesSizeChangeOnOriginalBook() throws {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    app.activate()
+    XCTAssertTrue(waitForReaderReady(app), "Expected a reader already open")
+    if app.buttons["Pause"].exists { app.buttons["Pause"].tap() }
+    waitForLayout(app)
+    capture("original-before-tap", app)
+
+    let word = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55))
+    word.tap()
+    Thread.sleep(forTimeInterval: 0.8)
+    capture("original-after-tap", app)
+
+    app.buttons["More actions"].tap()
+    XCTAssertTrue(app.buttons["Appearance"].waitForExistence(timeout: 3))
+    app.buttons["Appearance"].tap()
+    XCTAssertTrue(app.staticTexts["16"].waitForExistence(timeout: 3), "Expected to start from 16")
+    let increase = app.buttons["Increase font size"]
+    XCTAssertTrue(increase.waitForExistence(timeout: 3))
+    for _ in 0..<8 { increase.tap() } // 16 -> 24: a big enough reflow to judge the paint, not noise
+    XCTAssertTrue(app.staticTexts["24"].waitForExistence(timeout: 3), "Expected 24 after eight increases")
+    capture("original-sheet-at-24", app)
+    app.buttons["Back from Appearance"].tap()
+    Thread.sleep(forTimeInterval: 1.0)
+    capture("original-after-size-change", app)
+
+    // Restore the owner's Font Size before leaving.
+    app.buttons["More actions"].tap()
+    XCTAssertTrue(app.buttons["Appearance"].waitForExistence(timeout: 3))
+    app.buttons["Appearance"].tap()
+    XCTAssertTrue(app.buttons["Decrease font size"].waitForExistence(timeout: 3))
+    let decrease = app.buttons["Decrease font size"]
+    for _ in 0..<8 { decrease.tap() } // 24 -> 16
+    XCTAssertTrue(app.staticTexts["16"].waitForExistence(timeout: 3))
+    app.buttons["Back from Appearance"].tap()
+    capture("original-restored-16", app)
   }
 
   /// Real touches moving Font Size from 16 to 32, for the cross-Document
@@ -223,7 +279,7 @@ final class FontSizeProbe: XCTestCase {
     let increase = app.buttons["Increase font size"]
     for _ in 0..<16 { increase.tap() }
     XCTAssertTrue(app.staticTexts["32"].waitForExistence(timeout: 3))
-    app.buttons["Close Appearance"].tap()
+    app.buttons["Back from Appearance"].tap()
     capture("stepped-to-32", app)
   }
 
@@ -274,7 +330,7 @@ final class FontSizeProbe: XCTestCase {
     for _ in 0..<8 { increase.tap() } // 16 -> 24
     XCTAssertTrue(app.staticTexts["24"].waitForExistence(timeout: 3))
     capture("ipad-appearance-24", app)
-    app.buttons["Close Appearance"].tap()
+    app.buttons["Back from Appearance"].tap()
     capture("ipad-body-text-24", app)
 
     // Restore to 16 before leaving.
@@ -284,7 +340,7 @@ final class FontSizeProbe: XCTestCase {
     let decrease = app.buttons["Decrease font size"]
     for _ in 0..<8 { decrease.tap() } // 24 -> 16
     XCTAssertTrue(app.staticTexts["16"].waitForExistence(timeout: 3))
-    app.buttons["Close Appearance"].tap()
+    app.buttons["Back from Appearance"].tap()
     capture("ipad-restored-16", app)
   }
 }
