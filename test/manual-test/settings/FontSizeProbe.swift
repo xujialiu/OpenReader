@@ -219,7 +219,7 @@ final class FontSizeProbe: XCTestCase {
   /// `testStepFontSizeUpTo32`), a real coordinate tap sets the paused-sentence
   /// highlight with no playback, a real stepper ladder 16 → 24 leaves the same
   /// text highlighted and painted after the reflow, and 24 → 16 restores the
-  /// owner's default. The tap point (dy 0.55, mid-page body text) was chosen
+  /// test's starting size. The tap point (dy 0.55, mid-page body text) was chosen
   /// from this run's own screenshots of Atomic Habits' introduction at 16
   /// (attempt /tmp/openreader-font-363-verify-01, atomic-intro-16.png): dense
   /// justified body text with room below the footer-free mid page. A tap that
@@ -251,7 +251,7 @@ final class FontSizeProbe: XCTestCase {
     Thread.sleep(forTimeInterval: 1.0)
     capture("original-after-size-change", app)
 
-    // Restore the owner's Font Size before leaving.
+    // Restore the test's starting Font Size before leaving.
     app.buttons["More actions"].tap()
     XCTAssertTrue(app.buttons["Appearance"].waitForExistence(timeout: 3))
     app.buttons["Appearance"].tap()
