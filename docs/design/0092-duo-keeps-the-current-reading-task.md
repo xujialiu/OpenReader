@@ -78,7 +78,7 @@ Hiding or showing the controls must not resize the reading page or move the pass
 
 Word Lookup and the Document's actions use the width of the Drawer itself. They do not keep an unused strip for controls on the page behind it. Ordinary content margins and bottom avoidance remain. This does not change Drawer Height, make Drawers full-height pages, or remove the centered width limit on iPad and Mac.
 
-These are the agreed visible changes in #362. Implementation and native evidence remain distinct from final acceptance of all supported layouts.
+The visible arrangement in #362 is implemented and accepted for the scoped, tested phone and tablet layouts. This does not certify every supported layout or erase the separate continuity and untested-device limits below.
 
 ## The expanded Player gives space back to the Document
 
