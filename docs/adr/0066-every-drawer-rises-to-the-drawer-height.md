@@ -56,6 +56,12 @@ narrowed scope. Expanded Mac Escape and complete native windowed verification
 are deferred, not passed, as recorded in
 [decision 0085](../design/0085-the-app-fits-ipad-and-mac-windows.md#drawers-stay-near-the-bottom-of-the-app-window).
 
+## Phone sheet side-space amendment (#362)
+
+Phone Drawer content ignores horizontal container safe space at the shared SwiftUI presentation boundary, in addition to the existing bottom-only ignore modifier. The phone sheet already covers the page's vertical-bar region; retaining the background's horizontal avoidance inside that sheet wastes its own available width. Ordinary row/header padding and explicit home-indicator/bottom content padding remain. The horizontal modifier stays present even at zero side insets, avoiding a modifier-chain replacement during folds. The tablet/Mac fitted frame, width cap and horizontal policy remain unchanged.
+
+Native inspection on the reported outer window distinguishes the surface from its content: the sheet is 450 points wide at x8, while its inherited right safe inset is 76. Share's right gap changes from 100 to 24 points after the boundary change. These scoped geometry observations do not establish Dictionary input, every detent or cross-device acceptance; #362 tracks those gates.
+
 ## What was there
 
 `src/app/sheet.tsx`'s `Sheet` is `<Modal visible transparent animationType="slide">`

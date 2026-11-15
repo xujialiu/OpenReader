@@ -25,4 +25,16 @@ describe('the reader title fits beside a system side bar (#346)', () => {
       expect(title.props.lines).toBe(2);
     } finally { await act(async () => view.unmount()); }
   });
+
+  it('gives a top-overlay title the reclaimed button space without changing type size (#362)', async () => {
+    Object.assign(insets, { left: 0, right: 84 });
+    let view!: ReactTestRenderer;
+    await act(async () => { view = create(createElement(ReaderTitle, { title: 'A long Document name', reserveButtons: false })); });
+    try {
+      const title = view.root.find((node) => String(node.type) === 'NameText');
+      expect(title.props.width).toBe(466 - 84 - 2 * 16);
+      expect(title.props.lines).toBe(2);
+      expect(Object.assign({}, ...title.props.style)).toMatchObject({ fontSize: 17 });
+    } finally { await act(async () => view.unmount()); }
+  });
 });

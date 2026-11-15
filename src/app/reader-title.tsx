@@ -29,6 +29,10 @@
  * **Cut after a whole word**, as the Library's rows are (`NameText`, design
  * 0060). The unseen copy is laid out at the full width the title may take,
  * because the title's own box shrinks to its words.
+ *
+ * With a native vertical bar (#362), the same title floats at the usable top.
+ * `reserveButtons=false` keeps ordinary 16-point edges instead of button space;
+ * type size, two lines and the accessible full name remain unchanged.
  */
 
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -41,10 +45,12 @@ import { barTitle } from './text-styles';
 /** The room each side of the title leaves for a button and the gap before it, in points (measured, above). */
 export const TITLE_SIDE = 81;
 
-export function ReaderTitle({ title }: { title: string }) {
+export function ReaderTitle({ title, reserveButtons = true }: { title: string; reserveButtons?: boolean }) {
   const { width, fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const room = Math.max(0, width - insets.left - insets.right - 2 * TITLE_SIDE);
+  // On a vertical bar the buttons live beside the page, not beside this title.
+  const side = reserveButtons ? TITLE_SIDE : 16;
+  const room = Math.max(0, width - insets.left - insets.right - 2 * side);
   return (
     <View>
       <NameText name={title} lines={2} width={room} accessibilityRole="header" allowFontScaling={false}

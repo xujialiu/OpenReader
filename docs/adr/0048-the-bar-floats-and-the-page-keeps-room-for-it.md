@@ -8,6 +8,10 @@ _The product argument is [design 0048](../design/0048-collapsing-leaves-the-page
 Issue #67. It revises decision 4 of [ADR 0020](0020-the-player-rides-the-existing-seek.md)
 ("collapsing leaves one play button")._
 
+## Vertical-bar title band (#362)
+
+On windows where UIKit reports a vertical bar, native Back/More items remain in that bar while the custom two-line title floats at the usable top. The native horizontal title is empty and its background transparent. `ReaderScreen` reports the overlay's measured positive height to the existing held `barHeight`, instead of using the empty native bar's height. Hiding chrome changes only the overlay's opacity and native-header visibility; the reserved band, PortalHost and WebView remain. Without a vertical bar, the native-header-height path below is unchanged. [ADR 0057](0057-the-readers-title-is-drawn-by-the-app.md) records the trait boundary and paint control; native collapse/resize continuity remains a separate #362 verification gate.
+
 ## What was done
 
 - **One state.** `reading-view.tsx` computes `chrome = !(collapsed && notes.length === 0)`,

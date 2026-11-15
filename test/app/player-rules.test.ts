@@ -427,7 +427,9 @@ describe('the navigation bar comes and goes with the player, and floats (#67, AD
     // The header height is zero while the bar is hidden; the room kept for it
     // must not follow, or every hide and show would move the text by that much.
     // Since #68 the Reading holds it, so it also outlives the Reader screen.
-    pin(code('reader-screen.tsx'), 'if (shownBar > 0) setBarHeight(shownBar);', 'reader-screen.tsx');
+    const screen = code('reader-screen.tsx');
+    pin(screen, 'const height = verticalBar ? titleHeight : shownBar;', 'reader-screen.tsx');
+    pin(screen, 'if (height > 0) setBarHeight(height);', 'reader-screen.tsx');
   });
 
   it('leaves a Reading Button that shows the player and never plays or pauses', () => {
@@ -441,7 +443,8 @@ describe('the navigation bar comes and goes with the player, and floats (#67, AD
 describe('the Document’s name in the bar takes two lines before it is cut (#85, ADR 0057)', () => {
   it('is the app’s own title in the reader, and still the screen’s title for the back menu', () => {
     const screen = code('reader-screen.tsx');
-    pin(screen, 'headerTitle: () => <ReaderTitle title={title} />,', 'reader-screen.tsx');
+    pin(screen, "headerTitle: verticalBar ? '' : () => <ReaderTitle title={title} />,", 'reader-screen.tsx');
+    pin(screen, '<ReaderTitle title={title} reserveButtons={false} />', 'reader-screen.tsx');
     // The back button's long-press menu names the screen by `title`.
     pin(screen, '      title,\n', 'reader-screen.tsx');
   });
@@ -471,7 +474,8 @@ describe('the Document’s name in the bar takes two lines before it is cut (#85
     // starts at 333 of 402 points and the phone leaves about 12 before it.
     const title = code('reader-title.tsx');
     pin(title, 'export const TITLE_SIDE = 81;', 'reader-title.tsx');
-    pin(title, 'const room = Math.max(0, width - insets.left - insets.right - 2 * TITLE_SIDE);', 'reader-title.tsx');
+    pin(title, 'const side = reserveButtons ? TITLE_SIDE : 16;', 'reader-title.tsx');
+    pin(title, 'const room = Math.max(0, width - insets.left - insets.right - 2 * side);', 'reader-title.tsx');
     pin(title, 'maxWidth: room', 'reader-title.tsx');
   });
 });

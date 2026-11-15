@@ -27,6 +27,7 @@ interface Seen {
   adopted: { at: number; position: ReadingPosition } | null;
 }
 
+vi.mock('../../modules/open-reader-window', () => ({ WindowTraitsObserver: () => null }));
 const seen = vi.hoisted(() => [] as Seen[]);
 /** Each open waits here until the test lets it finish, as reading a 34 MB file does. */
 const opening = vi.hoisted(() => new Map<string, () => void>());

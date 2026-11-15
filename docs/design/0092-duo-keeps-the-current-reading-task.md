@@ -70,6 +70,16 @@ The speed popover is included in safe-area avoidance. It keeps the existing nati
 
 The Library and its Search, selection actions and return-to-Reading button also stay beside the system's reserved side area. Settings uses that same usable area for its existing cards and fields. Navigation, selection, keyboard and editing behavior is unchanged; this extends the same avoidance rule, not a new Library or Settings layout.
 
+## Reader controls give the top and the Drawers back to the text
+
+When Duo puts navigation at the side, More actions belongs with the phone's own side controls rather than taking another place above the Document. The Document name stays near the top of the usable page, centered and able to take two lines. It avoids the camera and occupied side, but keeps no empty space for buttons that are no longer beside it.
+
+Hiding or showing the controls must not resize the reading page or move the passage being viewed. A longer name may need a taller title area; shrinking its letters or cutting it to one line was not selected.
+
+Word Lookup and the Document's actions use the width of the Drawer itself. They do not keep an unused strip for controls on the page behind it. Ordinary content margins and bottom avoidance remain. This does not change Drawer Height, make Drawers full-height pages, or remove the centered width limit on iPad and Mac.
+
+These are the agreed visible changes in #362. Implementation and native evidence remain distinct from final acceptance of all supported layouts.
+
 ## The expanded Player gives space back to the Document
 
 The compact-Player repair keeps every existing operation directly reachable. When there is nearly enough width for two rows, the card's own side clearance gives way before another row is added. The card still floats clear of the system's reserved areas. The Document's Font Size and Margins do not change.

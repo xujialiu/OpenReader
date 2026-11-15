@@ -17,7 +17,8 @@
  * swipe, the Document's own name, and More actions on the right. The name is
  * the one part drawn by the app, on up to two lines (`reader-title.tsx`, #85).
  * The bar floats over the page and goes when the player collapses (#67, ADR
- * 0048); the edge swipe works either way.
+ * 0048); the edge swipe works either way. With a native vertical bar, More
+ * joins that bar and the same two-line title floats at the usable top (#362).
  *
  * It never shows nothing. A blank screen and a crashed app look identical, which
  * is the reason the screen this replaces existed (ADR 0018's launch crash
@@ -27,11 +28,12 @@
  */
 
 import { useHeaderHeight } from '@react-navigation/elements';
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { type LayoutChangeEvent, type NativeSyntheticEvent, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PortalHost } from 'react-native-teleport';
 
+import { type VerticalBarEdge, WindowTraitsObserver } from '../../modules/open-reader-window';
 import { DEBUG_MODE } from '../debug/mode';
 import { AppearanceSheet } from './appearance-sheet';
 import { HeaderButton, INK, Note } from './controls';
@@ -50,6 +52,15 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
   const entry = useMemo(() => library.entries.find((one) => one.id === id) ?? null, [library.entries, id]);
   const [appearance, setAppearance] = useState(false);
   const [actions, setActions] = useState(false);
+  const [verticalBar, setVerticalBar] = useState(false);
+  const [titleHeight, setTitleHeight] = useState(0);
+  const observeVerticalBar = useCallback((event: NativeSyntheticEvent<{ edge: VerticalBarEdge }>) => {
+    setVerticalBar(event.nativeEvent.edge !== 'none');
+  }, []);
+  const measureTitle = useCallback((event: LayoutChangeEvent) => {
+    const height = event.nativeEvent.layout.height;
+    if (height > 0) setTitleHeight(height);
+  }, []);
 
   /**
    * The title the header shows, held here rather than read from `entry`.
@@ -79,10 +90,22 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
     navigation.setOptions({
       // Still set: the back button's long-press menu names the screen by it.
       title,
-      headerTitle: () => <ReaderTitle title={title} />,
+      // An empty native title removes the horizontal band while keeping the
+      // system's vertical Back/More items. The two-line title floats below.
+      headerTitle: verticalBar ? '' : () => <ReaderTitle title={title} />,
+      // UIKit still draws the empty bar's background above the screen. Keep it
+      // clear so it cannot paint over the compact title; its own View is opaque.
+      headerStyle: verticalBar ? { backgroundColor: 'transparent' } : undefined,
+      // UIKit places a native item in Duo's vertical bar; a custom React view
+      // stays in the horizontal header. Other platforms keep the existing view.
+      unstable_headerRightItems: () => [{
+        type: 'button', label: 'More actions', accessibilityLabel: 'More actions',
+        icon: { type: 'sfSymbol', name: 'ellipsis' },
+        onPress: () => setActions(true),
+      }],
       headerRight: () => <HeaderButton label="More actions" icon="more" onPress={() => setActions(true)} />,
     });
-  }, [navigation, title]);
+  }, [navigation, title, verticalBar]);
 
   const mine = reading.current?.id === id ? reading.current : null;
 
@@ -108,15 +131,16 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   /**
-   * How tall the bar is, remembered while it is hidden: the header height is
-   * zero then, and the space the page keeps for the bar must not go with it, or
-   * every hide and show would move the text by that much.
+   * The positive title-band height survives hiding chrome. A horizontal bar
+   * reports its native height; with a vertical bar the title overlay is measured
+   * instead. Neither hide/show path changes the reader slot or WebView size.
    */
   const shownBar = headerHeight - insets.top;
   const { setBarHeight } = reading;
   useEffect(() => {
-    if (shownBar > 0) setBarHeight(shownBar);
-  }, [shownBar, setBarHeight]);
+    const height = verticalBar ? titleHeight : shownBar;
+    if (height > 0) setBarHeight(height);
+  }, [shownBar, verticalBar, titleHeight, setBarHeight]);
 
   // WALKTHROUGH-HARNESS
   useHarnessCommands((command: HarnessCommand) => {
@@ -128,6 +152,14 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       {/* Where the page is moved to while this screen shows it (`reading-host.tsx`). */}
       <PortalHost name={readerSlot(id)} style={styles.slot} />
+      <WindowTraitsObserver style={styles.traitObserver} pointerEvents="none" onVerticalBarChange={observeVerticalBar} />
+      {verticalBar ? (
+        <View testID="ReaderTitleOverlay" pointerEvents="none" onLayout={measureTitle}
+          accessibilityElementsHidden={!chrome}
+          style={[styles.titleOverlay, { left: insets.left, right: insets.right, opacity: chrome ? 1 : 0 }]}>
+          <ReaderTitle title={title} reserveButtons={false} />
+        </View>
+      ) : null}
       {waiting ? (
         <View style={[StyleSheet.absoluteFill, styles.waiting, { marginLeft: insets.left, marginRight: insets.right }]}>
           <Text style={styles.waitingWords}>{entry && !mine?.note ? `Reading ${title}…` : `${title} would not open.`}</Text>
@@ -162,6 +194,8 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
 const styles = StyleSheet.create({
   screen: { backgroundColor: INK.page, flex: 1 },
   slot: { flex: 1 },
+  traitObserver: { position: 'absolute', width: 1, height: 1, top: 0, left: 0 },
+  titleOverlay: { position: 'absolute', top: 0, paddingVertical: 8, alignItems: 'center', backgroundColor: INK.page },
   waiting: { alignItems: 'flex-start', backgroundColor: INK.page, gap: 12, justifyContent: 'center', padding: 24 },
   waitingWords: { ...TEXT.subhead, color: INK.quiet },
 });

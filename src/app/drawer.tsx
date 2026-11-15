@@ -316,6 +316,10 @@ export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, ba
           environment('colorScheme', colours.scheme),
           // Down to the sheet's bottom edge, under the home indicator, so a list can run on to it (`DrawerBottom`).
           ignoreSafeArea({ regions: 'container', edges: 'bottom' }),
+          // A phone sheet covers the side bar; its content belongs to the
+          // sheet's own bounds, not the background page's reserved side strip.
+          // Keep the modifier present through folds, including zero-inset poses.
+          ...(tablet ? [] : [ignoreSafeArea({ regions: 'container', edges: 'horizontal' })]),
           ...(tablet ? [
             presentationSizing('fitted', { fitted: { horizontal: true, vertical: true } }),
             // Keep this modifier present from the first presentation. Adding it

@@ -18,7 +18,7 @@ vi.mock('react-native', () => ({
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => safeArea }));
 vi.mock('@expo/ui/swift-ui', () => ({ BottomSheet: 'BottomSheet', Group: 'Group', Host: 'Host', RNHostView: 'RNHostView' }));
 vi.mock('@expo/ui/swift-ui/modifiers', () => ({
-  environment: () => ({}), ignoreSafeArea: () => ({}), presentationBackground: () => ({}), presentationDragIndicator: () => ({}),
+  environment: () => ({}), ignoreSafeArea: (safeArea: unknown) => ({ safeArea }), presentationBackground: () => ({}), presentationDragIndicator: () => ({}),
   frame: (value: unknown) => ({ frame: value }),
   presentationSizing: (sizing: unknown, options: unknown) => ({ sizing, options }),
   interactiveDismissDisabled: (disabled: boolean) => ({ interactiveDismissDisabled: disabled }),
@@ -155,6 +155,35 @@ describe('the window-relative native tablet/Mac Drawer contract (#361)', () => {
     expect(d.sizing()).toBeUndefined();
     expect(d.dismissalGuard()).toBeUndefined();
     expect(d.closers()).toHaveLength(0);
+  });
+
+  it('lets phone sheet content fill its own horizontal bounds without dropping bottom padding (#362)', async () => {
+    Object.assign(platform, { isPad: false, constants: { interfaceIdiom: 'phone' } });
+    Object.assign(screen, { width: 466, height: 678 });
+    Object.assign(safeArea, { right: 84 });
+    const d = await drawer();
+    const areas = () => d.modifiers().filter((m: Record<string, unknown>) => m.safeArea).map((m: Record<string, unknown>) => m.safeArea);
+    expect(areas()).toEqual([
+      { regions: 'container', edges: 'bottom' },
+      { regions: 'container', edges: 'horizontal' },
+    ]);
+    const count = d.modifiers().length;
+    Object.assign(screen, { width: 951, height: 669 });
+    Object.assign(safeArea, { right: 0 });
+    await d.update();
+    expect(d.modifiers()).toHaveLength(count);
+    expect(areas()).toHaveLength(2);
+    const body = view().root.findAll((node) => String(node.type) === 'View' && node.props.onAccessibilityEscape)[0];
+    expect(body.props.style[1].paddingBottom).toBe(safeArea.bottom + 16);
+  });
+
+  it('does not change tablet/Mac horizontal content avoidance (#362)', async () => {
+    safeArea.right = 84;
+    const d = await drawer();
+    expect(d.modifiers().filter((m: Record<string, unknown>) => m.safeArea)).toEqual([
+      { safeArea: { regions: 'container', edges: 'bottom' } },
+    ]);
+    expect(d.frame()).toEqual({ idealWidth: 580, idealHeight: 1180 });
   });
 
   it('removes the Mac cross without removing Share', async () => {

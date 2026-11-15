@@ -18,6 +18,10 @@ The cut falls after a whole word, "Volume Three: The…" rather than
 "Volume Three: The Lo…", as it does in the Library (decision 0060). A name that
 fits on one line looks exactly as before.
 
+## Duo's side controls
+
+On Duo, when the phone places navigation at the side, More actions joins those controls and the name sits near the top of the usable reading area instead of between two horizontal buttons. The same centered letters, second line and whole-word cut remain. It keeps ordinary edge space rather than reserving room for absent buttons. Showing or hiding controls still must not resize the page. This is the agreed exception in #362; the horizontal arrangement below remains on other windows.
+
 ## The same letters, on two lines
 
 Both lines are in the phone's own title letters, at the same size and weight

@@ -237,6 +237,10 @@ What it cannot prove:
   section document, is not measured. `highlighter.ts` counts moves before the
   second finger lands as a one-finger drag.
 
+## Duo chrome and Drawer width (#362)
+
+[The native geometry and painted-title recipe](duo-chrome.md) covers the real rail item, compact top title, phone actions/lookup content width, the opaque-empty-bar clipping control, and the separate input/continuity gates. Its Python checks preserve native trees and accept explicit measured rail geometry; they are not substitutes for real taps or native painted-title evidence.
+
 ## The reader's title in the navigation bar (#85, `rename.sh`, `ReaderTitleProbe.swift`)
 
 Set the display name with the app stopped and measure the bar from

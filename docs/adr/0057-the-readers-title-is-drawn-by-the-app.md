@@ -9,6 +9,14 @@ Issue #85. The bar itself, its transparency, its height and the room the page
 keeps for it are [ADR 0048](0048-the-bar-floats-and-the-page-keeps-room-for-it.md)'s
 and do not change._
 
+## Vertical-bar amendment (#362)
+
+When UIKit reports a vertical bar, `ReaderScreen` retains `title` for the back menu but gives the native header an empty `headerTitle` and a transparent background. A real native `unstable_headerRightItems` ellipsis enters the system rail; the old `headerRight` remains the non-iOS fallback. `ReaderTitle` is then a top overlay with eight-point vertical padding and sixteen-point horizontal edge allowances, rather than the ordinary `TITLE_SIDE` button reservations. Its font, two lines, whole-word cut and accessibility heading remain the same.
+
+`modules/open-reader-window` reports `traitCollection.verticalBarEdge` from a noninteractive Expo view inside the actual Reader window. It registers the public trait dependencies and emits only changes. API availability and compile-SDK guards return `none` on older systems/SDKs; device names, dimensions and hinge guesses do not select this arrangement. Without a vertical bar, the existing custom native-header title and inherited header background return.
+
+The overlay's measured height is the reserved title band; opacity hides it with chrome without resizing the WebView. An empty native bar alone is insufficient: UIKit can still paint its opaque background across a title whose accessibility frame is correct. The transparent native background and opaque overlay are both required. Native geometry and the separate painted-ink control are documented in `test/manual-test/library-and-reader/duo-chrome.md`; final cross-device/input acceptance is tracked in #362.
+
 ## Why the bar cannot do it
 
 `UINavigationItem.title` is laid out by the navigation bar on one line, and
