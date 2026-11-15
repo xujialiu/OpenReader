@@ -17,7 +17,7 @@ python3 test/manual-test/kit/ios_guard.py run --wait 900 --timeout 90 \
 
 For Dictionary/Translation, use a new output directory and `--surface lookup`. Pass `--title` for another Document. Each output directory is new, preserving earlier failures.
 
-The ordinary-text, outer/right-rail check requires More actions inside the measured rail, the title within 20 points of the usable top, and either Share within 32 points of the window right edge (native sheet gap plus ordinary content padding) or the lookup segments centered on the native sheet grabber. These thresholds distinguish the reported broad strip and top gap; they do not certify other poses, accessibility sizes or painted geometry.
+The ordinary-text, outer/right-rail check requires More actions inside the measured rail, the title within 20 points of the usable top, and either Share within 32 points of the window right edge (native sheet gap plus ordinary content padding) or the lookup heading's centred host box on the native sheet grabber (within 4 points; the segmented control's own union may sit a few points off its intrinsic width and is recorded as context). These thresholds distinguish the reported broad strip and top gap; they do not certify other poses, accessibility sizes or painted geometry.
 
 A saved native tree can be replayed with `--tree PATH` without touching a device. Exit 0 is geometry PASS, 1 is a measured FAIL and 69 is BLOCKED/missing prerequisites. Native geometry is not proof of a delivered tap.
 

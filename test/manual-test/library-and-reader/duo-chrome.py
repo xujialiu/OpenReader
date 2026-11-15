@@ -44,12 +44,33 @@ def inspect(tree, args):
         checks["actions_no_reserved_side_strip"] = 0 <= gap <= args.max_share_gap
         values["shareRightGap"] = gap
     else:
-        x, _, _, _ = ax.frame(find("Dictionary"))
+        dx, _, dw, _ = ax.frame(find("Dictionary"))
         tx, _, tw, _ = ax.frame(find("Translation"))
         gx, _, gw, _ = ax.frame(find("Sheet Grabber", "Button"))
-        centre = (x + tx + tw) / 2
+        # The centred heading container, not the segmented control's own ink:
+        # the SwiftUI Picker sizes to its intrinsic width and draws leading in
+        # the box DrawerTitle centres on the sheet, so the RadioButton union
+        # sits a few points off however well the drawer is centred. The box is
+        # the Group that hosts both segments and is strictly wider than their
+        # union; measuring it detects the inherited rail strip the proxy
+        # existed for (ios-qa-01, 2026-11-15: host 68/330 centred on the
+        # grabber at 233, union 225 — 8 from the Picker's intrinsic width).
+        ux, uw = dx, (tx + tw) - dx
+        dict_y = ax.frame(find("Dictionary"))[1]
+        hosts = []
+        for n in nodes:
+            if n.get("type") != "Group":
+                continue
+            fx, fy, fw, _ = ax.frame(n)
+            if abs(fy - dict_y) < 1 and fw > uw + 2:
+                hosts.append((fx, fw))
+        if not hosts:
+            raise RuntimeError("No heading host group wider than the segments")
+        hx, hw = min(hosts, key=lambda one: one[1])
+        centre = hx + hw / 2
         checks["lookup_heading_centred_on_sheet"] = abs(centre - (gx + gw / 2)) <= 4
-        values.update(lookupHeadingCentre=centre, sheetGrabberCentre=gx + gw / 2)
+        values.update(lookupHeadingCentre=centre, sheetGrabberCentre=gx + gw / 2,
+                      lookupHeadingHostWidth=hw, segmentedUnionCentre=(ux + uw / 2))
     return {"outcome": "PASS" if all(checks.values()) else "FAIL",
             "scope": "Duo outer/right rail, ordinary text; geometry only",
             "checks": checks, "values": values}
