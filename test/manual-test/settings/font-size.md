@@ -13,11 +13,30 @@ Both have an `x-small` badge in each heading and a `12px` note.
 
 To put them on a simulator without the picker, copy them into the app's `Documents/Inbox/` (`xcrun simctl get_app_container SIMULATOR_UDID top.xujialiu.openreader data`) and write the walkthrough harness's `{"seq":N,"do":"add","file":"Sized Fixture Rem.epub"}` to `Documents/harness.json`, with a new `seq` for every command. The Library entry is named after the file. `{"do":"shut"}` and then `{"do":"open","id":"sha256:…"}` open one. A `{"do":"js","code":"return …"}` answer arrives in the Metro log as its own line, `HX PROBE …` (#113).
 
-Read these in each section document: `getComputedStyle(…).fontSize` of `p`, `h1`, `.badge` and `.note`, and `getPropertyValue('-webkit-text-size-adjust')` of the root. `{"do":"settings","patch":{"appearance":{"font":null,"size":20}}}` changes the size through the same `setSettings` the sheet calls. The expected values are in `notes/NOTES_2026-09-21.md` (11:31). The Rem fixture's body text lands on the chosen size, with its heading, badge and note in proportion. The Small fixture's is 12px, and it reads 133.33% at 16. The first open of Small is shown at 12px until its first chapter has been counted, then redrawn once at 16. Each Document's decided size is in `Documents/body-text-sizes.json` (`{"version":1,"sizes":{…}}`). Delete an entry to have it counted again on the next open. The short fixture has 883 characters in all, so it is never decided and is counted again on every open.
+Read these in each section document: `getComputedStyle(…).fontSize` of `p`, `h1`, `.badge` and `.note`, and `getPropertyValue('-webkit-text-size-adjust')` of the root. `{"do":"settings","patch":{"appearance":{"font":null,"size":20}}}` changes the size through the same `setSettings` the sheet calls. The expected values are in `notes/NOTES_2026-09-21.md` (11:31). The Rem fixture's body text lands on the chosen size, with its heading, badge and note in proportion. The Small fixture's is 12px, and it reads 133.33% at 16. The first open of Small is shown at 12px until its first chapter has been counted, then redrawn once at 16. Each Document's decided size is in `Documents/body-text-sizes.json` (`{"version":2,"sizes":{…}}`, ADR 0092). Version-1 answers are automatically ignored and remeasured because Contents or small print could have established them before prose. Delete an entry to have it counted again on the next open. The short fixture has 883 characters in all, so it is never decided and is counted again on every open.
 
 The same measurement on an iPad simulator needs the patched library. `postinstall` applies `patches/@epubjs-react-native+core+1.4.8.patch`, which asks the reader's WebView for its mobile content mode. Without it, an iPad reports the percentage and draws every size unchanged (ADR 0030).
 
 What this does not establish: the stepper's own touches, the number between − and +, the highlight still painting after a change, and the spoken Utterance staying centred. Those need real touches and screenshots.
+
+## Real Documents with front matter longer than the threshold (#363)
+
+Use the owner's original `Atomic Habits.epub` and `My Vampire System 1-250.epub`, copied into a session-owned simulator through the **Real books** recipe. Keep the originals unchanged and outside the repository. The current Debug app and a connected worktree-specific Metro are prerequisites; no Provider or playback is required.
+
+1. Open each Document from its beginning, then browse to prose (Atomic Habits' introduction, spine 5; My Vampire System's first chapter, spine 2). At Font Size 24 the computed dominant prose size must be within 0.03px of 24 in both. Before #363, Atomic Habits reads 30.016px because its copyright/Contents already cross the 2,000-character threshold.
+2. Read computed sizes without copying book text:
+
+   ```sh
+   node test/manual-test/kit/hx.cjs SIMULATOR_UDID '{}' --code-file test/manual-test/settings/body-text-probe.js
+   ```
+
+   Read the fresh `HX PROBE` answer from the Debug Log/Metro and match `section` to the prose section, not an adjacent Contents/cover view. The probe reports dominant size/count, smallest sampled size, headings and adjustment, not semantic Body Text eligibility. It scans up to 5,000 non-space characters plus the node reaching that bound. It is a measurement, not a touch test.
+3. Check Font Size 16, 24 and 32 on both. Heading/body and note/body ratios must stay constant where those elements exist. Use real Appearance stepper touches for at least one change, then check the visible page and computed result. Do not flatten special sizes.
+4. Reopen both and confirm the version-2 cache supplies approximately 15.01px for Atomic Habits and 16px for My Vampire System. A small rounding error in the final size is expected from the existing hundredth-pixel baseline rounding.
+5. For migration, terminate only the session-owned app, stage a version-1 `body-text-sizes.json` with Atomic Habits wrongly recorded as 12px, then relaunch/open prose. Require a version-2 corrected answer and the same chosen Appearance. Preserve/compare the session's settings and Reading Positions around this check; no owner-device file may be edited.
+6. Set a paused sentence highlight, change size through Appearance, and verify the highlight still paints on the same text after reflow. This needs real input and a screenshot, not only a correct `CSS.highlights` range.
+
+A standalone WKWebView replay of original XHTML/styles/resources can isolate sampling failures, but its stand-in rendition/manager is not full-app acceptance. The host stand-in tests cover eligibility and old-cache rejection, not drawn sizes. A still-unmarked non-body passage styled as prose remains an evidence limit (ADR 0092).
 
 ## The stepper, the highlight and the iPad with real touches (`FontSizeProbe.swift`)
 

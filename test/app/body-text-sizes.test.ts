@@ -36,6 +36,22 @@ describe('body text sizes on this device', () => {
     expect(readBodyTextSize(id('c'))).toBeNull();
   });
 
+  it('remeasures version-1 answers that could have been decided from front matter (#363)', () => {
+    disk.files.set('body-text-sizes.json', JSON.stringify({ version: 1, sizes: { [id('a')]: 12, [id('b')]: 16 } }));
+    expect(readBodyTextSize(id('a'))).toBeNull();
+    expect(readBodyTextSize(id('b'))).toBeNull();
+    writeBodyTextSize(id('a'), 15.01);
+    expect(JSON.parse(disk.files.get('body-text-sizes.json') ?? 'null')).toEqual({ version: 2, sizes: { [id('a')]: 15.01 } });
+    expect(readBodyTextSize(id('a'))).toBe(15.01);
+  });
+
+  it('keeps already remeasured version-2 answers when another Document is measured', () => {
+    disk.files.set('body-text-sizes.json', JSON.stringify({ version: 2, sizes: { [id('a')]: 15.01 } }));
+    writeBodyTextSize(id('b'), 16);
+    expect(readBodyTextSize(id('a'))).toBe(15.01);
+    expect(readBodyTextSize(id('b'))).toBe(16);
+  });
+
   it('reads a damaged file as nothing measured, rather than keeping a book from opening', () => {
     // It is a cache: the worst a lost entry costs is one count on the next open,
     // and the worst a thrown parse would cost is the reader itself.
@@ -45,10 +61,10 @@ describe('body text sizes on this device', () => {
     expect(readBodyTextSize(id('a'))).toBe(12);
 
     const sizes = { [id('a')]: 'large', [id('b')]: -1, [id('c')]: 14, [id('d')]: null };
-    disk.files.set('body-text-sizes.json', JSON.stringify({ version: 1, sizes }));
+    disk.files.set('body-text-sizes.json', JSON.stringify({ version: 2, sizes }));
     expect([id('a'), id('b'), id('c'), id('d')].map(readBodyTextSize)).toEqual([null, null, 14, null]);
     // A file of another version is not this one, whatever it holds.
-    disk.files.set('body-text-sizes.json', JSON.stringify({ version: 2, sizes: { [id('c')]: 14 } }));
+    disk.files.set('body-text-sizes.json', JSON.stringify({ version: 3, sizes: { [id('c')]: 14 } }));
     expect(readBodyTextSize(id('c'))).toBeNull();
     disk.files.set('body-text-sizes.json', '[12]');
     expect(readBodyTextSize(id('a'))).toBeNull();

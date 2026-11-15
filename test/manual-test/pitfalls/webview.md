@@ -1,5 +1,11 @@
 # Measuring inside the reader's WebView
 
+## Standalone WKWebView size replays (#363)
+
+- **A browser bundle of renderer code can throw before its replay starts.** The renderer imports build-variant code that reads `process.env`; a standalone WebView has no `process`. External file scripts reported only `Script error.`, while native `evaluateJavaScript` exposed `ReferenceError: Can't find variable: process`. Define the non-secret build environment in the diagnostic bundle, and require two successful Document results before asserting sizes. This is harness setup, not an app failure.
+- **Read access to a file tree is not same-origin access to each file iframe.** A standalone `loadFileURL(..., allowingReadAccessTo: root)` loaded section files but their `contentDocument` was null to the parent. Embed the unchanged section XHTML as `srcdoc` with its original file URL as the base for styles/resources; the frame inherits the parent origin. This replays real WebKit font computation but does not establish epub.js layout or full-app acceptance.
+- **Overlay installation preserves old probe output too.** A rerun saw two old error results and exited before the newly launched replay finished. Resolve the data container again after installation, remove only the diagnostic app's old result before launching, and require fresh, complete, error-free results with the expected Document identities. Neither a two-element array nor the runner's exit 0 alone qualifies the measurement.
+
 ## Measuring inside the reader's WebView
 
 - **`performance.now()` is coarsened to 1 ms.** Time N repetitions and divide.

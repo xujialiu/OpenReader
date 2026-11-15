@@ -19,6 +19,10 @@ import { offlineNative } from '../../modules/open-reader-offline';
 import type { DocumentId } from '../core/document';
 import { isPixelSize } from '../renderer/body-text';
 
+// Version 1 could permanently take Contents/small print for Body Text (#363).
+// It is measurement cache, not owner data: discard those answers and measure
+// eligible prose on the next open, without changing Appearance or positions.
+const CACHE_VERSION = 2;
 const file = () => new File(Paths.document, 'body-text-sizes.json');
 
 /** Every size that is a size, from a file of this version, and nothing from anything else. */
@@ -31,7 +35,7 @@ function readAll(): Record<string, number> {
   } catch {
     return {};
   }
-  const sizes = parsed && typeof parsed === 'object' && (parsed as { version?: unknown }).version === 1
+  const sizes = parsed && typeof parsed === 'object' && (parsed as { version?: unknown }).version === CACHE_VERSION
     ? (parsed as { sizes?: unknown }).sizes : null;
   if (!sizes || typeof sizes !== 'object' || Array.isArray(sizes)) return {};
   const kept: Record<string, number> = {};
@@ -46,7 +50,7 @@ export function readBodyTextSize(id: DocumentId): number | null {
 
 /** Remember a Document's body text size, beside every other one already measured. */
 export function writeBodyTextSize(id: DocumentId, px: number): void {
-  const value = JSON.stringify({ version: 1, sizes: { ...readAll(), [id]: px } });
+  const value = JSON.stringify({ version: CACHE_VERSION, sizes: { ...readAll(), [id]: px } });
   try {
     if (offlineNative) offlineNative.writeJson(file().uri, value);
     else file().writeSync(value);

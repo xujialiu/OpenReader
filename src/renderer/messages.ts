@@ -117,8 +117,9 @@ export interface BlocksMessage {
   blocks: ReportedBlock[];
   /**
    * While the Document's body text size is being measured (ADR 0030): this
-   * section's characters by the size the Document itself set them in, counted
-   * until `COUNT_LIMIT` is reached. Null once it has been decided, or when there
+   * section's eligible prose characters by the size the Document set them in
+   * (ADR 0092). Sampling scans until `COUNT_LIMIT`, charging excluded text
+   * against that bound too. Null once it has been decided, or when there
    * was nothing to measure for.
    */
   sizes: CharactersBySize | null;

@@ -2,8 +2,9 @@
  * A Document's **body text size**: the size its own stylesheet sets most of its
  * text in, which is what the owner's Font Size is measured against (ADR 0030).
  *
- * The WebView counts the characters of each section it renders by the size the
- * Document set them in, and this decides from those counts. It is decided
+ * The WebView counts eligible prose characters of each section it renders by
+ * the size the Document set them in, excluding identifiable non-body text
+ * (ADR 0092), and this decides from those counts. It is decided
  * **once per Document**, from the first pages with enough text on them, and
  * then remembered for that Document — so a title page does not become the body
  * text, and an appendix set smaller than the chapters stays smaller than them.
@@ -18,9 +19,9 @@ import type { CharactersBySize } from './messages';
 export const PLAIN_BODY_TEXT_SIZE = 16;
 
 /**
- * How many characters are counted before the body text size is decided: more
- * than a title page or a page of small print in front of the first chapter
- * holds, and less than one chapter of prose.
+ * How many eligible prose characters are counted before the body text size is
+ * decided. Front matter can exceed this threshold, so it is excluded by the
+ * sampler rather than assumed to be short (#363, ADR 0092).
  */
 export const CHARACTERS_TO_DECIDE = 2000;
 

@@ -70,12 +70,20 @@ function declared(element: any, property: string): string | null {
  * whatever it was declared (CSS 2.1 section 9.7), as WebKit was measured to
  * answer for a floated span (#189).
  */
+function inheritedDeclaration(element: any, property: string): string | null {
+  for (let at = element; at?.nodeType === 1; at = at.parentNode) {
+    const value = declared(at, property);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
 function computedStyle(element: any) {
   let display = declared(element, 'display') ?? DISPLAY[String(element.tagName).toLowerCase()] ?? 'inline';
   const cssFloat = declared(element, 'float') ?? 'none';
   const position = declared(element, 'position') ?? 'static';
   if (display.startsWith('inline') && (cssFloat !== 'none' || position === 'absolute' || position === 'fixed')) display = 'block';
-  return { display, cssFloat, position, visibility: declared(element, 'visibility') ?? 'visible', textAlign: 'start', fontSize: '16px', getPropertyValue: () => '' };
+  return { display, cssFloat, position, visibility: declared(element, 'visibility') ?? 'visible', textAlign: inheritedDeclaration(element, 'text-align') ?? 'start', fontSize: inheritedDeclaration(element, 'font-size') ?? '16px', getPropertyValue: () => '' };
 }
 
 interface Listener {
@@ -98,7 +106,7 @@ export interface Section {
  * @param options.debugMode The program as a Debug Mode build has it, with
  * `renderer-log.ts` spliced in (ADR 0054). Absent: the plain program.
  */
-export function standInPage(options: { toc?: readonly unknown[]; debugMode?: boolean; resize?: (width: number, height: number, target?: string) => void } = {}) {
+export function standInPage(options: { toc?: readonly unknown[]; debugMode?: boolean; bodyTextSize?: number | null; resize?: (width: number, height: number, target?: string) => void } = {}) {
   const posted: any[] = [];
   /** What the program asked epub.js to display, in order. */
   const displays: unknown[] = [];
@@ -168,7 +176,7 @@ export function standInPage(options: { toc?: readonly unknown[]; debugMode?: boo
     getElementById: () => null, createElement: () => ({ style: {}, textContent: '' }), head: { appendChild() {} },
   };
   top.activeElement = top.body;
-  vm.runInContext(highlighterSource(undefined, undefined, undefined, options.debugMode ?? false), vm.createContext({ window, document: top, rendition, book, performance: window.performance, setTimeout, clearTimeout, console, Promise }));
+  vm.runInContext(highlighterSource(undefined, undefined, options.bodyTextSize, options.debugMode ?? false), vm.createContext({ window, document: top, rendition, book, performance: window.performance, setTimeout, clearTimeout, console, Promise }));
   const follow = linkHandler();
 
   /** A section epub.js has rendered: its links given epub.js's `onclick` first, then the content hook, as in epub.js's Contents. */

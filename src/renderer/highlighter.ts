@@ -1226,8 +1226,42 @@ ${constants}
     return anchors;
   }
 
-  /* This section's characters by the size the **Document** set them in, for the
-     bridge to decide its body text size from (ADR 0030). Reads only: the walk has
+  /* Whether this text is ordinary prose rather than navigation, a heading or
+     explicitly identified front matter/notes (#363). Cache the ancestor result:
+     a Contents with thousands of nested links must not walk its whole ancestry
+     again for each text node. Empty anchors are not links, and neither paragraph
+     length nor language decides eligibility. The original alignment is checked
+     separately on the text's own element, not an ancestor: a left-aligned
+     paragraph inside a centred container is still prose. */
+  function bodyTextElement(element, known) {
+    var path = [];
+    var eligible = true;
+    for (var at = element; at && at.nodeType === 1; at = at.parentNode) {
+      var cached = known.get(at);
+      if (cached !== undefined) {
+        eligible = cached;
+        break;
+      }
+      path.push(at);
+      var tag = String(at.tagName || '').toUpperCase();
+      var type = String(at.getAttributeNS('http://www.idpf.org/2007/ops', 'type') || at.getAttribute('epub:type') || '').toLowerCase();
+      var role = String(at.getAttribute('role') || '').toLowerCase();
+      if (HEADING[tag] || tag === 'NAV' || tag === 'ASIDE' || tag === 'HEADER' || tag === 'FOOTER' || tag === 'FIGCAPTION' ||
+          (tag === 'A' && at.hasAttribute('href')) ||
+          /(^|\\s)(toc|landmarks|page-list|loi|lot|titlepage|halftitlepage|copyright-page|cover|dedication|epigraph|footnote|footnotes|endnote|endnotes|rearnote|rearnotes|bibliography|index|colophon)(\\s|$)/.test(type) ||
+          /(^|\\s)(heading|navigation|doc-toc|doc-pagelist|doc-cover|doc-dedication|doc-epigraph|doc-footnote|doc-endnote|doc-endnotes|doc-bibliography|doc-index|doc-colophon|doc-credits|doc-pagebreak)(\\s|$)/.test(role)) {
+        eligible = false;
+        break;
+      }
+    }
+    for (var i = 0; i < path.length; i++) known.set(path[i], eligible);
+    return eligible;
+  }
+
+  /* This section's eligible prose characters by the size the **Document** set
+     them in, for the bridge to decide its body text size from (ADR 0030, #363).
+     Navigation and small print must not decide before the first prose arrives.
+     Reads only: the walk has
      already found the text nodes, and each costs one computed style of its
      element, cached per element.
 
@@ -1237,8 +1271,9 @@ ${constants}
      APPEARANCE declares it on every element. What that division leaves is exact
      only up to floating point, and body-text.ts, which is tested, rounds it.
 
-     It stops at the text node that reaches COUNT_LIMIT characters, whatever the
-     length of the section: the owner ruled out a stall to measure a book (#17). */
+     It stops at the text node that reaches COUNT_LIMIT scanned characters,
+     including excluded text: rejecting a long Contents must not turn this into
+     a search through the entire section (#17). */
   function sizesOf(contents, found) {
     var win = contents.window;
     var adjust = String(win.getComputedStyle(contents.document.documentElement).getPropertyValue('-webkit-text-size-adjust') || '');
@@ -1246,6 +1281,7 @@ ${constants}
     if (!(factor > 0)) factor = 1;
     var bySize = new Map();
     var seen = new Map();
+    var eligible = new Map();
     var counted = 0;
     for (var i = 0; i < found.length && counted < COUNT_LIMIT; i++) {
       var parts = found[i].parts;
@@ -1254,14 +1290,16 @@ ${constants}
         if (!element) continue;
         var characters = parts[j].node.data.replace(/\\s+/g, '').length;
         if (!characters) continue;
+        counted += characters;
+        if (!bodyTextElement(element, eligible)) continue;
         var px = seen.get(element);
         if (px === undefined) {
-          px = parseFloat(win.getComputedStyle(element).fontSize) / factor;
+          var style = win.getComputedStyle(element);
+          px = element.hasAttribute(OWN_ALIGNMENT) || OWN_ALIGNMENTS[String(style.textAlign || '')] ? 0 : parseFloat(style.fontSize) / factor;
           seen.set(element, px);
         }
         if (!(px > 0)) continue;
         bySize.set(px, (bySize.get(px) || 0) + characters);
-        counted += characters;
       }
     }
     var sizes = [];

@@ -12,6 +12,8 @@ half of ADR 0021, and ADR 0029's list, are unchanged. So is the architecture:
 Appearance is still one stylesheet the page already has, and it still arrives
 as finished CSS that `appearanceCss` builds on the React Native side.
 
+**Sampling and cache are revised by [ADR 0092](0092-body-text-evidence-excludes-identifiable-non-body-text.md):** only eligible prose supplies size evidence, excluded text still consumes the scan bound, and version-1 cached answers are remeasured. The original measurements below remain the reason for proportional text-size-adjust.
+
 ## The rule
 
 ```css

@@ -12,9 +12,9 @@ that names the script or probe you are about to run.
   `native-reference.sh` with `NativeReferenceProbe.swift`, `design-shots.sh`
   with `DesignShotsProbe.swift`, `ProviderFreezeProbe.swift`.
 - [font-size.md](font-size.md) (#17, ADR 0030): Font Size against Documents that
-  set their own body text size, on an iPhone and an iPad, and the stepper and
-  the highlight by real touches. `fixtures/sized-fixtures.ts`,
-  `FontSizeProbe.swift`.
+  set their own body text size, on an iPhone and an iPad, front-matter sampling
+  and cache migration (#363), and the stepper/highlight by real touches.
+  `fixtures/sized-fixtures.ts`, `body-text-probe.js`, `FontSizeProbe.swift`.
 - [text-alignment.md](text-alignment.md) (#32, #33, ADR 0034): what Left and
   Justify reach in a Document, the Alignment menu inside the Appearance drawer,
   仙逆's CJK justification, and the light theme. `fixtures/alignment-fixture.ts`,
