@@ -98,6 +98,29 @@ and what is committed is what was measured, never their text.
 
 ## Pitfalls
 
+- **A Device Hub pose receipt is not a Duo screenshot proof.** On the iOS 27.1
+  release capture, the Hub's pose click returned a synthetic dispatch receipt
+  with no target-side verification. The click was accepted only after fresh
+  `simctl io --display=1/3` captures showed the expected outer and inner native
+  dimensions and the current app content. Keep both the dispatch receipt and
+  the resulting images; do not infer a pose from the click response or from a
+  resized/cropped image.
+- **A Debug Metro can bundle successfully while the first `ios_ready.py --metro`
+  CDP probe finds no target.** The 1.0.5 Duo launch logged a completed
+  `index.ts` bundle and a running app, while the first bounded readiness record
+  reported `found 0 (connected: none)`. No reboot or recovery was used; a later
+  bounded readiness check against the same running app and Metro passed. Keep
+  the first BLOCKED record and rerun the readiness check once after the initial
+  bundle settles, rather than calling the environment healthy from the Metro
+  log alone.
+- **Local StoreKit can fail before the first transaction on a fresh simulator.**
+  The attached formal `StoreKitSessionUI` protocol ran in `establish` mode on a
+  fresh iPhone 17/iOS 26.5 and a fresh iPhone Duo/iOS 27.1. Both runs reached
+  `PROBE-MODE establish` with zero transactions, then failed while
+  `SKTestSession` saved or cleared configuration (`SKInternalErrorDomain Code=3`
+  on iOS 26.5; `SKServiceErrorDomain Code=2` with underlying Code=4 on iOS
+  27.1). Treat this as blocked local StoreKit evidence, not a passing purchase
+  gate or an app purchase regression, and retain each raw `test.log`/xcresult.
 - **`ax.frame(node)` returns an `(x, y, width, height)` tuple, not the raw tree's frame dictionary.** A tablet verification tail indexed it by key and raised `TypeError` after the title, real More opening and width snapshots were already captured. Keep that guard's exit 1, distinguish valid pre-failure observations from the failed whole phase, and unpack the tuple. A later timeout-wrapped drag/closed check/shutdown was not admitted through `ios_guard`; retain it as a cleanup/protocol exception, not guarded dismissal acceptance. Input or cleanup follow-ups need their own admission even when individually bounded.
 - **A zero-height native navigation bar can still paint across a title with a correct accessibility frame.** The compact Duo title read y8 with its full native dimensions, yet the empty bar's opaque background left only 834 of the complete reference's 6,130 dark pixels. Clearing the native header background only for the vertical-bar arrangement restored all 6,130, while the title's own overlay remained opaque. The geometry-only check could not catch this: use the separate painted-title control in [Duo chrome](library-and-reader/duo-chrome.md), and discard diagnostic navigation overrides by a clean final launch.
 - **A full native AX tree can exceed a tool's text-read limit.** Parsing a truncated pretty-printed tree produced a JSON syntax error although the saved file was complete. Parse the complete artifact with a host JSON parser and emit a bounded metadata summary; do not classify the truncated tool response as malformed native output.

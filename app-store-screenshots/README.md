@@ -60,6 +60,35 @@ system's text recognition, so the touch lands on it whatever the layout.
 Look at every picture before uploading: the lookup's definition and where
 the paused word falls change from run to run.
 
+## iPhone Duo captures
+
+The iPhone Duo has two App Store screenshot families. Create a session-owned
+`iPhone Duo` on iOS 27.1 and run the current free Release app with Xcode 27.1;
+the Duo orientation module is only compiled by that SDK. Use the 27.1 Device
+Hub pose controls and read the actual display after every pose input. The
+outer display is display 1 and the inner display is display 3:
+
+```sh
+UDID=DUO_UDID
+OUT=/tmp/openreader-duo-screenshots
+mkdir -p "$OUT"
+xcrun simctl io "$UDID" screenshot --display=1 "$OUT/outer.png"
+xcrun simctl io "$UDID" screenshot --display=3 "$OUT/inner.png"
+```
+
+Capture a paused reader with a highlighted word in both poses. The accepted
+native sizes are `1398 × 2034` or `2034 × 1398` for the outer display and
+`2007 × 2853` or `2853 × 2007` for the inner display. Inspect the actual image
+dimensions; do not upscale, crop, or rotate a capture from the other display.
+Apple accepts PNG or JPEG without an alpha channel. Simulator PNGs can carry a
+fully opaque alpha plane, so convert the retained screenshot to RGB before
+uploading and verify the resulting mode has no `A` channel.
+
+Keep the guest volume at zero and check it immediately before any Play. A
+Device Hub click receipt is only an input dispatch; the pose is accepted from
+the resulting display dimensions and the rendered app content. The screenshot
+still needs the same visual review as the iPhone and iPad sets.
+
 ## Uploading
 
 App Store Connect → the version → Media Manager. Put each folder's four files
