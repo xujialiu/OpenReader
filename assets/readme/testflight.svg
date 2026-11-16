@@ -6,32 +6,22 @@
   Revision: ef308e0010ab09eb7fece015626ea6df5a90a078
   Permission: "You are free to use this SVG however you like. No attribution is necessary."
 
-  Adapted viewport to the button bounds and its size to 120 x 40 for the README.
+  Matched the App Store badge's viewport, continuous corner contours, gray
+  border, icon column and text baselines at 120 x 40 for the README.
+  Blue gradient, blueprint grid and 1.55-second propeller animation retained.
+  Border contours: https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-app-store/black/en-us
 
   Typography is SF Pro Display Medium converted to vector outlines
   so rendering is identical on every system (no web font required).
   Glyphs are laid out with Core Text pair-kerning (Av, Te, etc.).
   Avoid SVG filters on text — they rasterize and look soft on GitHub.
 -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="12 16 297 108" width="120" height="40" preserveAspectRatio="none" role="img" aria-label="Available on TestFlight">
-  <!--
-    Grid pitch = 27, square cells.
-    Badge width = 11 × 27 = 297 → exactly 1 full cell on left and right.
-    badge: x=12 y=16 w=297 h=108 (h = 4 × 27)
-    right edge = 309
-  -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 119.66407 40" width="120" height="40" role="img" aria-label="Available on TestFlight">
   <defs>
     <linearGradient id="bgFill" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#92D3FF"/>
       <stop offset="40%" stop-color="#4DACFF"/>
       <stop offset="100%" stop-color="#1A6BE8"/>
-    </linearGradient>
-
-    <!-- Inner rim: sky blue (top) → deep blue (bottom) -->
-    <linearGradient id="innerBorder" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#B6E6FF"/>
-      <stop offset="45%" stop-color="#4A9EE8"/>
-      <stop offset="100%" stop-color="#0C419F"/>
     </linearGradient>
 
     <radialGradient id="hubDisc" cx="50%" cy="50%" r="50%">
@@ -48,13 +38,17 @@
       <stop offset="100%" stop-color="#6AB8F0" stop-opacity="0"/>
     </linearGradient>
 
-    <filter id="badgeShadow" x="-10%" y="-12%" width="120%" height="140%">
-      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#1A4A96" flood-opacity="0.26"/>
-    </filter>
-
+    <!-- The same outer and inner contours as the App Store badge. -->
+    <path id="badgeOutline" d="M110.13477,0H9.53468c-.3667,0-.729,0-1.09473.002-.30615.002-.60986.00781-.91895.0127A13.21476,13.21476,0,0,0,5.5171.19141a6.66509,6.66509,0,0,0-1.90088.627A6.43779,6.43779,0,0,0,1.99757,1.99707,6.25844,6.25844,0,0,0,.81935,3.61816a6.60119,6.60119,0,0,0-.625,1.90332,12.993,12.993,0,0,0-.1792,2.002C.00587,7.83008.00489,8.1377,0,8.44434V31.5586c.00489.3105.00587.6113.01515.9219a12.99232,12.99232,0,0,0,.1792,2.0019,6.58756,6.58756,0,0,0,.625,1.9043A6.20778,6.20778,0,0,0,1.99757,38.001a6.27445,6.27445,0,0,0,1.61865,1.1787,6.70082,6.70082,0,0,0,1.90088.6308,13.45514,13.45514,0,0,0,2.0039.1768c.30909.0068.6128.0107.91895.0107C8.80567,40,9.168,40,9.53468,40H110.13477c.3594,0,.7246,0,1.084-.002.3047,0,.6172-.0039.9219-.0107a13.279,13.279,0,0,0,2-.1768,6.80432,6.80432,0,0,0,1.9082-.6308,6.27742,6.27742,0,0,0,1.6172-1.1787,6.39482,6.39482,0,0,0,1.1816-1.6143,6.60413,6.60413,0,0,0,.6191-1.9043,13.50643,13.50643,0,0,0,.1856-2.0019c.0039-.3106.0039-.6114.0039-.9219.0078-.3633.0078-.7246.0078-1.0938V9.53613c0-.36621,0-.72949-.0078-1.09179,0-.30664,0-.61426-.0039-.9209a13.5071,13.5071,0,0,0-.1856-2.002,6.6177,6.6177,0,0,0-.6191-1.90332,6.46619,6.46619,0,0,0-2.7988-2.7998,6.76754,6.76754,0,0,0-1.9082-.627,13.04394,13.04394,0,0,0-2-.17676c-.3047-.00488-.6172-.01074-.9219-.01269-.3594-.002-.7246-.002-1.084-.002Z"/>
+    <path id="badgeSurface" d="M8.44483,39.125c-.30468,0-.602-.0039-.90429-.0107a12.68714,12.68714,0,0,1-1.86914-.1631,5.88381,5.88381,0,0,1-1.65674-.5479,5.40573,5.40573,0,0,1-1.397-1.0166,5.32082,5.32082,0,0,1-1.02051-1.3965,5.72186,5.72186,0,0,1-.543-1.6572,12.41351,12.41351,0,0,1-.1665-1.875c-.00634-.2109-.01464-.9131-.01464-.9131V8.44434S.88185,7.75293.8877,7.5498a12.37039,12.37039,0,0,1,.16553-1.87207,5.7555,5.7555,0,0,1,.54346-1.6621A5.37349,5.37349,0,0,1,2.61183,2.61768,5.56543,5.56543,0,0,1,4.01417,1.59521a5.82309,5.82309,0,0,1,1.65332-.54394A12.58589,12.58589,0,0,1,7.543.88721L8.44532.875H111.21387l.9131.0127a12.38493,12.38493,0,0,1,1.8584.16259,5.93833,5.93833,0,0,1,1.6709.54785,5.59374,5.59374,0,0,1,2.415,2.41993,5.76267,5.76267,0,0,1,.5352,1.64892,12.995,12.995,0,0,1,.1738,1.88721c.0029.2832.0029.5874.0029.89014.0079.375.0079.73193.0079,1.09179V30.4648c0,.3633,0,.7178-.0079,1.0752,0,.3252,0,.6231-.0039.9297a12.73126,12.73126,0,0,1-.1709,1.8535,5.739,5.739,0,0,1-.54,1.67,5.48029,5.48029,0,0,1-1.0156,1.3857,5.4129,5.4129,0,0,1-1.3994,1.0225,5.86168,5.86168,0,0,1-1.668.5498,12.54218,12.54218,0,0,1-1.8692.1631c-.2929.0068-.5996.0107-.8974.0107l-1.084.002Z"/>
     <clipPath id="badgeClip">
-      <rect id="badgeShape" x="12" y="16" width="297" height="108" rx="32" ry="32"/>
+      <use href="#badgeSurface"/>
     </clipPath>
+
+    <!-- Square 10-pixel grid, centered horizontally within the badge. -->
+    <pattern id="blueprintGrid" x="9.832035" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
+      <path d="M10 0H0V10" stroke="#9AD4FF" stroke-opacity="0.42" stroke-width="0.35" fill="none" shape-rendering="crispEdges"/>
+    </pattern>
 
     <!--
       Blade geometry:
@@ -88,36 +82,14 @@
     <path id="textTestFlight" d="M9.59 0.00L13.96 0.00L13.96 -24.41L22.58 -24.41L22.58 -28.18L0.96 -28.18L0.96 -24.41L9.59 -24.41ZM29.38 0.41C34.36 0.41 37.52 -2.56 38.18 -5.82L38.22 -6.04L34.22 -6.04L34.16 -5.88C33.63 -4.34 31.97 -3.05 29.47 -3.05C26.11 -3.05 23.98 -5.31 23.91 -9.20L38.46 -9.20L38.46 -10.62C38.46 -16.80 34.92 -20.94 29.16 -20.94C23.40 -20.94 19.69 -16.64 19.69 -10.21L19.69 -10.20C19.69 -3.71 23.34 0.41 29.38 0.41ZM29.18 -17.48C31.93 -17.48 33.93 -15.74 34.28 -12.19L23.96 -12.19C24.34 -15.62 26.45 -17.48 29.18 -17.48ZM49.41 0.41C54.26 0.41 57.77 -2.17 57.77 -5.92L57.77 -5.94C57.77 -8.89 56.17 -10.55 51.97 -11.52L48.63 -12.29C46.43 -12.81 45.59 -13.67 45.59 -14.94L45.59 -14.96C45.59 -16.60 47.01 -17.68 49.28 -17.68C51.66 -17.68 53.07 -16.43 53.32 -14.63L53.34 -14.49L57.30 -14.49L57.29 -14.73C57.07 -18.22 54.14 -20.94 49.28 -20.94C44.55 -20.94 41.35 -18.42 41.35 -14.75L41.35 -14.73C41.35 -11.74 43.28 -9.86 47.19 -8.96L50.55 -8.20C52.75 -7.68 53.50 -6.91 53.50 -5.59L53.50 -5.57C53.50 -3.91 51.97 -2.85 49.43 -2.85C46.84 -2.85 45.43 -3.96 45.04 -5.86L45.00 -6.05L40.82 -6.05L40.84 -5.88C41.27 -2.13 44.28 0.41 49.41 0.41ZM68.24 0.41C69.10 0.41 69.90 0.31 70.39 0.23L70.39 -3.03C70.08 -2.99 69.71 -2.95 69.26 -2.95C67.48 -2.95 66.54 -3.57 66.54 -5.66L66.54 -17.19L70.39 -17.19L70.39 -20.55L66.54 -20.55L66.54 -25.90L62.23 -25.90L62.23 -20.55L59.28 -20.55L59.28 -17.19L62.23 -17.19L62.23 -5.41C62.23 -1.31 64.18 0.41 68.24 0.41ZM74.38 0.00L78.75 0.00L78.75 -11.80L90.86 -11.80L90.86 -15.49L78.75 -15.49L78.75 -24.41L91.97 -24.41L91.97 -28.18L74.38 -28.18ZM95.43 0.00L99.65 0.00L99.65 -28.18L95.43 -28.18ZM106.27 -23.71C107.66 -23.71 108.73 -24.80 108.73 -26.13C108.73 -27.48 107.66 -28.57 106.27 -28.57C104.90 -28.57 103.81 -27.48 103.81 -26.13C103.81 -24.80 104.90 -23.71 106.27 -23.71ZM104.16 0.00L108.38 0.00L108.38 -20.55L104.16 -20.55ZM121.74 7.25C127.54 7.25 131.17 4.12 131.17 -0.57L131.17 -20.55L126.93 -20.55L126.93 -17.05L126.84 -17.05C125.62 -19.38 123.36 -20.94 120.47 -20.94C115.25 -20.94 111.82 -16.89 111.82 -10.45L111.82 -10.43C111.82 -4.02 115.21 0.02 120.37 0.02C123.32 0.02 125.66 -1.41 126.84 -3.63L126.93 -3.63L126.93 -0.82C126.93 2.05 125.08 3.85 121.72 3.85C119.08 3.85 117.30 2.95 116.74 1.64L116.66 1.48L112.48 1.48L112.50 1.66C113.12 4.80 116.46 7.25 121.74 7.25ZM121.56 -3.42C118.22 -3.42 116.13 -6.07 116.13 -10.37L116.13 -10.39C116.13 -14.63 118.22 -17.32 121.56 -17.32C124.77 -17.32 126.93 -14.61 126.93 -10.39L126.93 -10.37C126.93 -6.13 124.79 -3.42 121.56 -3.42ZM135.49 0.00L139.71 0.00L139.71 -11.89C139.71 -15.10 141.64 -17.32 144.55 -17.32C147.52 -17.32 149.24 -15.29 149.24 -11.89L149.24 0.00L153.46 0.00L153.46 -12.70C153.46 -17.66 150.57 -20.94 146.17 -20.94C143.11 -20.94 140.90 -19.55 139.80 -17.17L139.71 -17.17L139.71 -28.18L135.49 -28.18ZM164.75 0.41C165.61 0.41 166.41 0.31 166.89 0.23L166.89 -3.03C166.58 -2.99 166.21 -2.95 165.76 -2.95C163.98 -2.95 163.05 -3.57 163.05 -5.66L163.05 -17.19L166.89 -17.19L166.89 -20.55L163.05 -20.55L163.05 -25.90L158.73 -25.90L158.73 -20.55L155.78 -20.55L155.78 -17.19L158.73 -17.19L158.73 -5.41C158.73 -1.31 160.68 0.41 164.75 0.41Z"/>
   </defs>
 
-  <!-- Badge body: width = 11 grid cells -->
-  <g filter="url(#badgeShadow)">
-    <rect x="12" y="16" width="297" height="108" rx="32" ry="32" fill="url(#bgFill)"/>
-  </g>
-
-  <!-- Interior grid: pitch 27, 1 full cell inset on every side -->
+  <use href="#badgeOutline" fill="#a6a6a6"/>
+  <use href="#badgeSurface" fill="url(#bgFill)"/>
   <g clip-path="url(#badgeClip)">
-    <g stroke="#9AD4FF" stroke-opacity="0.42" stroke-width="1" fill="none" shape-rendering="crispEdges">
-      <line x1="39"  y1="16" x2="39"  y2="124"/>
-      <line x1="66"  y1="16" x2="66"  y2="124"/>
-      <line x1="93"  y1="16" x2="93"  y2="124"/>
-      <line x1="120" y1="16" x2="120" y2="124"/>
-      <line x1="147" y1="16" x2="147" y2="124"/>
-      <line x1="174" y1="16" x2="174" y2="124"/>
-      <line x1="201" y1="16" x2="201" y2="124"/>
-      <line x1="228" y1="16" x2="228" y2="124"/>
-      <line x1="255" y1="16" x2="255" y2="124"/>
-      <line x1="282" y1="16" x2="282" y2="124"/>
-      <line x1="12" y1="43"  x2="309" y2="43"/>
-      <line x1="12" y1="70"  x2="309" y2="70"/>
-      <line x1="12" y1="97"  x2="309" y2="97"/>
-    </g>
+    <rect width="119.66407" height="40" fill="url(#blueprintGrid)"/>
   </g>
-
-  <!-- Inner rim border -->
-  <rect x="13.25" y="17.25" width="294.5" height="105.5" rx="30.75" ry="30.75"
-        fill="none" stroke="url(#innerBorder)" stroke-width="1.75"/>
 
   <!-- Propeller -->
-  <g transform="translate(68, 70)">
+  <g transform="translate(18.83, 20) scale(0.3)">
     <circle r="33" fill="url(#hubDisc)"/>
     <g>
       <use href="#fanTrail" fill="url(#fanGrad)"/>
@@ -138,18 +110,9 @@
     </g>
   </g>
 
-  <!--
-    Text as SF Pro Display Medium vector outlines with pair-kerning.
-    Soft depth via a pure-vector offset copy (no feDropShadow on text).
-  -->
-  <g transform="translate(112, 70)" shape-rendering="geometricPrecision">
-    <g transform="translate(0, 1)" fill="#0A3478" fill-opacity="0.22">
-      <use href="#textAvailable" transform="translate(0, -9.551)"/>
-      <use href="#textTestFlight" transform="translate(0, 26.664)"/>
-    </g>
-    <g fill="#ffffff">
-      <use href="#textAvailable" transform="translate(0, -9.551)"/>
-      <use href="#textTestFlight" transform="translate(0, 26.664)"/>
-    </g>
+  <!-- SF Pro outlines, scaled uniformly to the App Store text sizes and baselines. -->
+  <g fill="#ffffff" shape-rendering="geometricPrecision">
+    <use href="#textAvailable" transform="translate(35.56134, 14.69775) scale(0.36527)"/>
+    <use href="#textTestFlight" transform="translate(34.00487, 30.4961) scale(0.44)"/>
   </g>
 </svg>

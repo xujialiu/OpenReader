@@ -8,9 +8,11 @@ The README's App Store and TestFlight download buttons sit side by side at
 120 × 40 pixels. The TestFlight button is the animated SVG in
 `assets/readme/testflight.svg`, from
 [Lex Tang's gist](https://gist.github.com/lexrus/eadc04582835d9f16ea4d4448d0e8b2c).
-The author permits any use without attribution. Its viewport is cropped to
-the button bounds and fitted to the App Store button's size; the propeller
-animation is retained. The source and revision are in the SVG's comment.
+The author permits any use without attribution. Its viewport, continuous corner
+contours and gray border match the App Store button's; its icon column, text
+sizes and baselines follow the same layout. The blue gradient, square grid and
+1.55-second propeller animation are retained. The artwork and lettering scale
+uniformly. The source, revision and border source are in the SVG's comment.
 
 - **The TestFlight build feed follows by itself** (#150). It names the build the TestFlight Beta's public link installs: the highest Build Number in the group `public` that App Store Connect lists as Testing. The download button carries no build number.
   - `scripts/testflight-badge.mjs` asks the App Store Connect API. `.github/workflows/pages.yml` runs it every hour and publishes the answer as `testflight.json` on the project's site. The feed keeps the Shields endpoint format for diagnostics; the README uses the download button above. An hourly run deploys only when the answer has changed.
