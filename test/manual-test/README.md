@@ -130,6 +130,18 @@ and what is committed is what was measured, never their text.
   and fresh-binary manifest, and do not call that run a same-binary comparison.
   Use the guarded CLI cache for binary-controlled evidence; use the IDE run only
   as a separately labelled supported-UI control.
+- **A cached StoreKit CLI probe can stay RED until Xcode first performs a normal Run.**
+  On the same iOS 27.1 Duo, `Product > Test` failed before the first
+  transaction, while `Product > Run` with the scheme's LaunchAction StoreKit
+  file produced `storekitd`'s `saveConfigurationData` and `Initialized with
+  server XcodeTest` records. After waiting 25 seconds and stopping that Run,
+  the unchanged cached formal CLI probe turned GREEN (`Trial#id0`, passed
+  test01); the full guarded establish then passed with `Trial#id1`, `Unlock#id2`,
+  `Purchase, 30 days left` and `Purchase, Unlocked`. Fix: for a fresh local
+  StoreKit establish, use the supported Run → Stop activation sequence before
+  the cached CLI/full wrapper, and retain both the pre-activation RED and
+  post-activation GREEN logs. This is an Xcode/StoreKit service prerequisite,
+  not evidence that the app silently changed.
 - **`ax.frame(node)` returns an `(x, y, width, height)` tuple, not the raw tree's frame dictionary.** A tablet verification tail indexed it by key and raised `TypeError` after the title, real More opening and width snapshots were already captured. Keep that guard's exit 1, distinguish valid pre-failure observations from the failed whole phase, and unpack the tuple. A later timeout-wrapped drag/closed check/shutdown was not admitted through `ios_guard`; retain it as a cleanup/protocol exception, not guarded dismissal acceptance. Input or cleanup follow-ups need their own admission even when individually bounded.
 - **A zero-height native navigation bar can still paint across a title with a correct accessibility frame.** The compact Duo title read y8 with its full native dimensions, yet the empty bar's opaque background left only 834 of the complete reference's 6,130 dark pixels. Clearing the native header background only for the vertical-bar arrangement restored all 6,130, while the title's own overlay remained opaque. The geometry-only check could not catch this: use the separate painted-title control in [Duo chrome](library-and-reader/duo-chrome.md), and discard diagnostic navigation overrides by a clean final launch.
 - **A full native AX tree can exceed a tool's text-read limit.** Parsing a truncated pretty-printed tree produced a JSON syntax error although the saved file was complete. Parse the complete artifact with a host JSON parser and emit a bounded metadata summary; do not classify the truncated tool response as malformed native output.
