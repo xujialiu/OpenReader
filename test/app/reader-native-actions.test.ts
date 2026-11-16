@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { ReaderScreen } from '../../src/app/reader-screen';
 
 const held = vi.hoisted(() => ({ current: { id: 'book', chrome: true, opened: true }, show: vi.fn(), left: vi.fn(), setBarHeight: vi.fn() }));
+const theme = vi.hoisted(() => ({ colors: { background: '#111114' } }));
+vi.mock('@react-navigation/native', () => ({ useTheme: () => theme }));
 vi.mock('../../modules/open-reader-window', () => ({ WindowTraitsObserver: 'WindowTraitsObserver' }));
 vi.mock('react-native', () => ({ StyleSheet: { create: (styles: unknown) => styles }, Text: 'Text', View: 'View' }));
 vi.mock('@react-navigation/elements', () => ({ useHeaderHeight: () => 82 }));
@@ -21,6 +23,48 @@ vi.mock('../../src/app/controls', () => ({ HeaderButton: 'HeaderButton', Note: '
 vi.mock('../../src/app/walkthrough-harness', () => ({ useHarnessCommands: () => {} }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const ofType = (name: string) => (node: ReactTestInstance) => String(node.type) === name;
+
+describe('the horizontal title hides document lettering within the existing bar (#366)', () => {
+  it('paints the current page colour while keeping the same floating reader slot across theme and controls changes', async () => {
+    const setOptions = vi.fn();
+    const props = { route: { params: { id: 'book' } }, navigation: { setOptions } };
+    let view!: ReactTestRenderer;
+    theme.colors.background = '#111114';
+    held.current.chrome = true;
+    await act(async () => { view = create(createElement(ReaderScreen, props as never)); });
+    try {
+      // Navigator defaults and setOptions are shallow-merged: an explicit
+      // undefined would discard the page-coloured default, not inherit it.
+      const options = () => Object.assign(
+        { headerStyle: { backgroundColor: theme.colors.background } },
+        ...setOptions.mock.calls.map(([value]) => value),
+      );
+      const slot = view.root.find(ofType('PortalHost'));
+      const slotStyle = slot.props.style;
+      for (const page of ['#111114', '#ffffff']) {
+        theme.colors.background = page;
+        await act(async () => { view.update(createElement(ReaderScreen, props as never)); });
+        for (const chrome of [true, false, true]) {
+          held.current.chrome = chrome;
+          await act(async () => { view.update(createElement(ReaderScreen, props as never)); });
+          expect(options()).toMatchObject({
+            headerTransparent: true, headerShown: chrome,
+            headerStyle: { backgroundColor: page },
+          });
+          // Paint only: no extra height, padding, fade or replacement page.
+          expect(Object.keys(options().headerStyle)).toEqual(['backgroundColor']);
+          expect(view.root.find(ofType('PortalHost'))).toBe(slot);
+          expect(slot.props.style).toBe(slotStyle);
+          expect(view.root.findAllByProps({ testID: 'ReaderTitleOverlay' })).toHaveLength(0);
+        }
+      }
+    } finally {
+      theme.colors.background = '#111114';
+      held.current.chrome = true;
+      await act(async () => view.unmount());
+    }
+  });
+});
 
 describe('More actions participates in the native bar arrangement (#362)', () => {
   it('registers a native ellipsis item and opens the same actions Drawer', async () => {
@@ -79,7 +123,7 @@ describe('More actions participates in the native bar arrangement (#362)', () =>
       await act(async () => observer.props.onVerticalBarChange({ nativeEvent: { edge: 'none' } }));
       expect(header().headerTitle()).toMatchObject({ type: 'ReaderTitle' });
       expect(view.root.findAllByProps({ testID: 'ReaderTitleOverlay' })).toHaveLength(0);
-      expect(header().headerStyle).toBeUndefined();
+      expect(header().headerStyle).toEqual({ backgroundColor: theme.colors.background });
       expect(view.root.find(ofType('PortalHost'))).toBe(slot);
     } finally {
       held.current.chrome = true;

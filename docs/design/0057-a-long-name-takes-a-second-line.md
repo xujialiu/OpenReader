@@ -51,6 +51,14 @@ names was turned down: the page keeps room for the strip, so every book with a
 long name would have started lower on the screen than every book with a short
 one.
 
+## Separating the name from the document
+
+The agreed visual direction for #366 is a background in the reading page's own colour that completely hides document lettering behind the name. The background stays within the existing title bar's footprint: no fade, no larger covered area and no extra space above or below it. Text scrolling behind the bar is hidden rather than allowed to compete with the name.
+
+This change applies to horizontal title arrangements. Duo's side-control arrangement keeps its existing page-coloured title background and position; it is not redesigned for this change.
+
+The background comes and goes with the controls without itself moving the document's text or changing the space it is laid out in. The existing rule for putting away the Player while Browsing still holds: the page first returns to the Reading (decision 0050). The two-line title, its size and the phone's own Back and More actions buttons remain unchanged.
+
 ## What it costs
 
 The phone draws its own titles on one line only, and there is no way to ask it

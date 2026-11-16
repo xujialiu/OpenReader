@@ -1,11 +1,10 @@
 import { createElement } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
-
-import { createLocator, readingPlaceAt, stampPlace, type DocumentId, type LibraryEntry, type ReadingPosition } from '../../src/core/document';
 import { ReaderScreen } from '../../src/app/reader-screen';
 import { ReadingHost } from '../../src/app/reading-host';
 import { DEFAULT_SETTINGS } from '../../src/app/settings';
+import { createLocator, type DocumentId, type LibraryEntry, type ReadingPosition, readingPlaceAt, stampPlace } from '../../src/core/document';
 
 /**
  * Which place taken from another device the Reading hands `<ReadingView>` as
@@ -27,6 +26,7 @@ interface Seen {
   adopted: { at: number; position: ReadingPosition } | null;
 }
 
+vi.mock('@react-navigation/native', () => ({ useTheme: () => ({ colors: { background: '#fff' } }) }));
 vi.mock('../../modules/open-reader-window', () => ({ WindowTraitsObserver: () => null }));
 const seen = vi.hoisted(() => [] as Seen[]);
 /** Each open waits here until the test lets it finish, as reading a 34 MB file does. */

@@ -28,6 +28,7 @@
  */
 
 import { useHeaderHeight } from '@react-navigation/elements';
+import { useTheme } from '@react-navigation/native';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { type LayoutChangeEvent, type NativeSyntheticEvent, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -48,6 +49,7 @@ import { type HarnessCommand, useHarnessCommands } from './walkthrough-harness';
 export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
   const { id } = route.params;
   const { settings, setSettings, library } = useShell();
+  const { colors } = useTheme();
   const reading = useHeldReading();
   const entry = useMemo(() => library.entries.find((one) => one.id === id) ?? null, [library.entries, id]);
   const [appearance, setAppearance] = useState(false);
@@ -93,9 +95,10 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
       // An empty native title removes the horizontal band while keeping the
       // system's vertical Back/More items. The two-line title floats below.
       headerTitle: verticalBar ? '' : () => <ReaderTitle title={title} />,
-      // UIKit still draws the empty bar's background above the screen. Keep it
-      // clear so it cannot paint over the compact title; its own View is opaque.
-      headerStyle: verticalBar ? { backgroundColor: 'transparent' } : undefined,
+      // An explicit undefined overrides the navigator's page colour and makes
+      // the floating horizontal bar see-through (#366). Paint it, not its layout.
+      // The empty vertical bar stays clear above its own opaque title overlay.
+      headerStyle: { backgroundColor: verticalBar ? 'transparent' : colors.background },
       // UIKit places a native item in Duo's vertical bar; a custom React view
       // stays in the horizontal header. Other platforms keep the existing view.
       unstable_headerRightItems: () => [{
@@ -105,7 +108,7 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
       }],
       headerRight: () => <HeaderButton label="More actions" icon="more" onPress={() => setActions(true)} />,
     });
-  }, [navigation, title, verticalBar]);
+  }, [navigation, title, verticalBar, colors.background]);
 
   const mine = reading.current?.id === id ? reading.current : null;
 
@@ -113,11 +116,11 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
    * The navigation bar comes and goes with the player (#67, ADR 0048), and it
    * **floats over the page** to do it, as the player does.
    *
-   * An opaque bar takes its height out of the page, so hiding it would give the
-   * page that height back: the WebView would resize, the text would move by the
+   * A bar in the layout takes its height out of the page, so hiding it would
+   * give that height back: the WebView would resize, the text would move by the
    * bar's height, and epub.js destroys every view on a resize (`highlighter.ts`,
-   * "the blank open"). A transparent bar with the page's own colour looks the
-   * same while it is shown, and the page under it is the same size either way.
+   * "the blank open"). A floating bar painted in the page's own opaque colour
+   * keeps document lettering out of the title without changing the page's size.
    * The page starts below the status bar, which stays: the clock is the owner's,
    * and the text never runs under it.
    *
