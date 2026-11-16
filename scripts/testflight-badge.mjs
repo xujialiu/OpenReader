@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Prints the README's TestFlight badge (#150): which build the TestFlight
+ * Prints the TestFlight build feed (#150): which build the TestFlight
  * Beta's public link installs, as the JSON a shields.io endpoint badge reads.
  *
  *     {"schemaVersion":1,"label":"TestFlight","message":"1.0.0 (7)","color":"0D96F6"}

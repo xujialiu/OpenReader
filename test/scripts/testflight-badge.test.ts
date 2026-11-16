@@ -7,11 +7,11 @@ import { describe, expect, it } from 'vitest';
 import { badge, PUBLIC_LINK, testedBuild, token, TOKEN_LIFE } from '../../scripts/testflight-badge.mjs';
 
 /**
- * #150: the README's TestFlight badge names the build the TestFlight Beta's
+ * #150: the TestFlight build feed names the build the TestFlight Beta's
  * public link installs, and nobody types it. scripts/testflight-badge.mjs asks
  * App Store Connect, `.github/workflows/pages.yml` publishes its answer as
- * testflight.json beside the site, and the badge reads that file through
- * shields.io.
+ * testflight.json beside the site in Shields endpoint format. The README's
+ * download button links to the same public invitation without naming a build.
  *
  * The badge was 1.0.0 (5) for as long as a person kept it, a build that never
  * entered external testing, while the link installed 6 and then 7. What is
@@ -113,14 +113,10 @@ describe('#150: the token a read is made with', () => {
   });
 });
 
-describe('#150: the README reads the file the workflow publishes', () => {
+describe('#150: the published build feed and the README share the public link', () => {
   const PUBLISHED = 'https://xujialiu.github.io/OpenReader/testflight.json';
   const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
   const workflow = readFileSync(join(ROOT, '.github', 'workflows', 'pages.yml'), 'utf8');
-
-  it('draws the badge from testflight.json on the project site', () => {
-    expect(readme).toContain(`https://img.shields.io/endpoint?url=${encodeURIComponent(PUBLISHED)}`);
-  });
 
   it('names no build of its own, which is how the badge fell behind', () => {
     expect(readme).not.toMatch(/TestFlight-\d/);

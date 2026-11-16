@@ -1,27 +1,30 @@
 # TestFlight badge and README installation badges
 
 Read when checking the public TestFlight link's build, diagnosing a stale
-badge, or changing README installation badges. For credentials, read
+build feed, or changing README installation badges. For credentials, read
 [App Store Connect API access](app-store-connect.md#testflight-and-api-access).
 
-README.md says which build people can install (MEMORY/documentation.md,
-"README.md").
+The README's App Store and TestFlight download buttons sit side by side at
+120 × 40 pixels. The TestFlight button is the animated SVG in
+`assets/readme/testflight.svg`, from
+[Lex Tang's gist](https://gist.github.com/lexrus/eadc04582835d9f16ea4d4448d0e8b2c).
+The author permits any use without attribution. Its viewport is cropped to
+the button bounds and fitted to the App Store button's size; the propeller
+animation is retained. The source and revision are in the SVG's comment.
 
-- **The TestFlight badge follows by itself** (#150). It names the build the TestFlight Beta's public link installs: the highest Build Number in the group `public` that App Store Connect lists as Testing. No commit names a build.
-  - `scripts/testflight-badge.mjs` asks the App Store Connect API. `.github/workflows/pages.yml` runs it every hour and publishes the answer as `testflight.json` on the project's site, and the badge reads that file through shields.io. An hourly run deploys only when the answer has changed.
-  - So the badge is up to an hour behind App Store Connect, and then as long again as shields.io and GitHub cache the image.
+- **The TestFlight build feed follows by itself** (#150). It names the build the TestFlight Beta's public link installs: the highest Build Number in the group `public` that App Store Connect lists as Testing. The download button carries no build number.
+  - `scripts/testflight-badge.mjs` asks the App Store Connect API. `.github/workflows/pages.yml` runs it every hour and publishes the answer as `testflight.json` on the project's site. The feed keeps the Shields endpoint format for diagnostics; the README uses the download button above. An hourly run deploys only when the answer has changed.
+  - The published feed can be up to an hour behind App Store Connect.
   - To read the build now:
 
     ```bash
     node --env-file="$HOME/.secrets/openreader/app-store-connect-api.env" scripts/testflight-badge.mjs
     ```
 
-  - To make the badge follow now: `gh workflow run pages.yml`.
+  - To refresh the published feed now: `gh workflow run pages.yml`.
   - It reads `none` when no build in `public` is in testing, or the public link is off.
-  - If App Store Connect cannot be read, the run fails and GitHub mails the owner. The badge keeps the last build, and a push still publishes the site.
+  - If App Store Connect cannot be read, the run fails and GitHub mails the owner. The feed keeps the last build, and a push still publishes the site.
   - GitHub stops a scheduled workflow after 60 days without activity in the repository. Turn it on again under Actions → Pages.
-- **When a Version goes live on the App Store:**
-  - Add Apple's "Download on the App Store" badge to README.md, linking to https://apps.apple.com/app/id6817809106. Add both addresses to `PAGES_MAY_NAME`.
-  - The TestFlight badge stays beside it.
+- **When changing installation badges:** keep the two buttons together at the same size, with the App Store button linking to https://apps.apple.com/app/id6817809106 and TestFlight to https://testflight.apple.com/join/vjC8QejW. Every absolute README address belongs on `PAGES_MAY_NAME`.
   - Run `bash scripts/readme-preview.sh` and give the owner `.docs/README.html` to look at before committing.
 

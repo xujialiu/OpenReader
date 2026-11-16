@@ -5,12 +5,15 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/iOS-17.2%2B-0071E3?style=flat-square&logo=apple" alt="iOS 17.2+">
-  <a href="https://testflight.apple.com/join/vjC8QejW"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fxujialiu.github.io%2FOpenReader%2Ftestflight.json&label=TestFlight&style=flat-square&logo=apple" alt="TestFlight build"></a>
   <a href="https://github.com/xujialiu/OpenReader/commits/main"><img src="https://img.shields.io/github/last-commit/xujialiu/OpenReader?style=flat-square&label=Last%20commit" alt="Last commit"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square" alt="License"></a>
 </p>
 
-<p align="center"><a href="https://apps.apple.com/app/id6817809106"><img src="https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-app-store/black/en-us" height="40" alt="Download on the App Store"></a></p>
+<p align="center">
+  <a href="https://apps.apple.com/app/id6817809106"><img src="https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-app-store/black/en-us" width="120" height="40" alt="Download on the App Store"></a>
+  &nbsp;
+  <a href="https://testflight.apple.com/join/vjC8QejW"><img src="assets/readme/testflight.svg" width="120" height="40" alt="Available on TestFlight"></a>
+</p>
 
 <p align="center"><img src="assets/readme/reading.gif" width="320" alt="OpenReader reading Chapter I of Pride and Prejudice aloud in the dark theme: the word being spoken highlighted over its sentence, and the page following the lines"></p>
 

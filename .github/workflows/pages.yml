@@ -3,8 +3,8 @@
 # render every design file and ADR as a page.
 #
 # It also publishes testflight.json beside them (#150): the build the
-# TestFlight Beta's public link installs, which the README's badge reads
-# through shields.io. scripts/testflight-badge.mjs asks App Store Connect for
+# TestFlight Beta's public link installs, in Shields endpoint format for
+# diagnostics. scripts/testflight-badge.mjs asks App Store Connect for
 # it. The file is written here and is in no commit. Every hour the `testflight`
 # job asks again, and an hourly run deploys only when the answer has changed.
 name: Pages
