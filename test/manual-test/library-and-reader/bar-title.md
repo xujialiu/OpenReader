@@ -43,8 +43,65 @@ build (a full-res 1206×2622 PNG), then compare glyph masks — binarise y
 70–95 pt by the ink threshold and compute IoU. The measured pair agreed to a
 1 px vertical offset (IoU 0.80 raw, 0.94 shifted 1 px; identical pixel counts
 4802 = 4802, identical x-extent 149.33–252.67 and centre 201.0). Do **not**
-pixel-diff the whole bar band: the bar is translucent, so the page behind
-(differs whenever margins differ) ghosts into the diff.
+pixel-diff the whole bar band to compare the title glyphs: the other controls
+and the system material's shading can differ between captures. The shown
+horizontal bar must not reveal document lettering behind it. For the painted
+band use `title-band.py`; use `title-opacity-diff.py` to check that different
+hidden text does not leave different glyph shapes in the bar.
+
+## Painted horizontal band and its opacity (#366)
+
+`title-band.py SCREENSHOT TREE.json TITLE --bar-frame x,y,w,h --band-x0 64
+--band-x1 336 --expect-page-rgb 255,255,255 [--rest-screenshot REST.png]
+[--report OUT]` asserts, from pixels alone: the screen's modal colour is the
+expected page colour (a sheet dimmer or a wrongly staged theme fails here);
+the band behind the title holds no ink outside the title box; no fade ramp;
+the paint covers exactly the supplied native bar frame (measured on the
+runtime under test — on iPhone 17 / iOS 26.5 the bar is `RNSNavigationBar
+(0 62; 402 54)`, so the band is y 62–116 pt, not the older 54–108); real text
+scrolled to the boundary reappears immediately below it; and with
+`--rest-screenshot` (a same-chrome at-rest capture) the backing ends exactly
+where the page's reserved room ends. Scale derives from the PNG against the
+tree's Application width; paired images must share dimensions. Exit 0 PASS,
+1 FAIL, 69 BLOCKED. `--self-test` runs deterministic synthetic controls
+(clean, band ink, dimmer, missing heading, wrong expected colour, wrong bar
+frame) in-process.
+
+`title-opacity-diff.py A.png B.png --bar-frame x,y,w,h --window-width-pt 402`
+is the opacity counterfactual control: two captures of the same bar and scroll
+position with DIFFERENT real text hidden behind it must differ by zero
+structured pixels inside the band (≤16/255) while the visible page below
+differs (that control proves the comparator works; a pair whose below-band
+region does not differ is BLOCKED as unproven). Used with the runtime-only
+LLDB transparent-bar override it proves the paint is what hides the text.
+
+Prerequisites and limits: Pillow on the host; the Debug app with its Metro for
+probes and gestures; the bar frame, button-exclusion x range and expected page
+colour are per-runtime measured inputs (the tools take them as required
+arguments and make no cross-runtime claims); screenshots must be full-res PNGs
+of the same device (3× on this phone). The dark theme page colour on this
+runtime is `17,17,20`.
+
+## Collapse without a layout jump
+
+Start the stability check already Following (`A`), paused, with the controls
+open and no note forcing them open. Capture one settled passage's identity
+and screen rectangle, then use real Collapse and Show presses. The same
+passage and rectangle must remain, along with the native and document viewport
+and iframe dimensions. A changed `scrollTop` alone is not a visible jump when
+the renderer trims content and compensates for it; compare the passage itself.
+
+Do not assert no movement across a collapse from Browsing (`M`). Putting away
+the Player deliberately returns the page to the Reading first, even while
+paused (design 0050). That is a different transition, not a layout-jump test.
+
+`kit/probes/passage-anchor.js` reports a visible paragraph's section, text
+fingerprint and screen coordinates. Use `kit/probe-answers.py capture` before
+sending each existing `hx.cjs --code-file` probe, then `collect --offset-file
+OFFSET --expect N`. The collector reads byte offsets, preserves raw timestamped
+answers and exits nonzero on incomplete or malformed data. Null or missing
+answers are never equal-state proof. Run `probe-answers.py --self-test` for its
+non-ASCII-prefix and malformed/incomplete-log controls.
 
 ## VoiceOver heading
 
