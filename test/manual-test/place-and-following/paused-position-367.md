@@ -92,3 +92,45 @@ Attempt dir `/tmp/openreader-click-367.2YD8RW`: `phase-t*.json` exit records,
 failed-attempt subfolders (each failure is kept with its cause). The probe and
 this recipe are committed on the verification branch for the parent to
 integrate before further claims rely on them.
+
+## Integrated narrow retest (2026-11-17, integrated source `666cc870` + #366 reader-title fix, JS-refreshed shell)
+
+After the parent integrated the probe/recipe commit and corrected this recipe
+(T1 was AXe-with-readback; later inputs XCTest; an unmeasured typing mechanism
+and a mismatched quotation fixed), a bounded re-run of the three core claims
+was executed on the same install (`integrated-retest/` under the attempt
+directory; no rebuild, no new recovery; fingerprints re-checked, 8/8 OK).
+
+**Corrected discrimination** (fixes the phase-t5d script flaw — its `sed`
+produced a literal `\1`, and it compared only the latest Library anchor): every
+tap claim now parses the numeric utterance from the app's own
+`[reading] seek to utterance N` line with a Python regex, asserts the numeric
+cursor changed, asserts the FULL local position changed (locator CFI, whole
+anchor, position Stamp **and** entry Stamp), freezes the exact post-tap choice
+file before leaving, and later matches the carrying upload against that frozen
+file — document id, whitespace-normalized full anchor, position Stamp at and
+device — not a text prefix.
+
+- **ON retained**: open cursor 63 ("Just like humans ascend toward divinity,"),
+  one genuine XCUITest tap → utterance 60 with CFI, anchor, position Stamp and
+  entry Stamp all proven moved; the frozen choice survived leave/reopen
+  byte-identically at utterance 60, paused, no playback. (`phase-ir1.json`
+  attempt2: C1 PASS.)
+- **Sync contract**: working control = 17 ordinary PUTs (gaps 9.9–959 s);
+  snapshot 17; a second real paused choice frozen before leaving (utterance 63
+  back on "Just like humans…", new position Stamp); **no PUT within 8 s** of
+  the touch; the ordinary stop/leave upload matched the frozen choice on
+  document id, normalized full anchor and position Stamp (PUT #18 era;
+  `davstate/puts/` inspected); PUTs target only `xujialiu-positions.json` and
+  contain no settings. (`phase-ir1.json` attempt2: C3 PASS.)
+- **OFF unchanged**: real switch flip to OFF asserted in-XCTest and in
+  `settings.json`; a genuine tap moved the cursor 63→60 numerically with the
+  saved entry byte-identical; leave/reopen restored the frozen choice 63
+  numerically and byte-identically. (`phase-ir1.json` attempt2 C2 pre-leave
+  + `phase-ir2.json` reopen: PASS.)
+
+Delivery after the retest: app open on the Library, paused, playback stopped
+(none used), Metro 8367 alive, setting left OFF, sync still enabled against
+the session-controlled DAV. `recoveryCount` unchanged at 1; AXe stayed hollow,
+so every input was the XCUITest probe and every state read a harness answer,
+Debug-Log line or container file.
