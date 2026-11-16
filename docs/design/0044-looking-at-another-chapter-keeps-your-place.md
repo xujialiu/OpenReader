@@ -49,14 +49,52 @@ Play starts without saving that choice.
 **Tapping a sentence still moves the reading**, and so do the buttons that go
 back and forward a sentence or a paragraph. Those point at a sentence and mean
 "read from here". While paused, the highlight moves and the next Play starts
-there, but your saved place stays where speech stopped. Leaving without
+there, but by default your saved place stays where speech stopped. Leaving without
 playing comes back to that saved place, not the sentence you only pointed at.
 The new sentence becomes your place only when speech starts there. Waiting for
 a voice to answer, or a refused Play, saves no unheard sentence.
 
-Saving every tap was turned down because an accidental tap while paused could
-replace the place on every device. The cost is that choosing where to start is
-only kept while this Reading stays open; to keep the new place, read from it.
+Saving every tap was turned down as the default because an accidental tap
+while paused could replace the place on every device. The cost is that choosing
+where to start is only kept while this Reading stays open; to keep the new
+place under the default behaviour, read from it.
+
+## Keeping a paused choice
+
+_The optional behaviour below extends the default in [#367](https://github.com/xujialiu/OpenReader/issues/367)._
+
+An optional setting, off by default, lets a sentence tapped while paused become
+the saved place without starting speech. The four buttons that go back or
+forward a sentence or a paragraph do the same. Scrolling, choosing a chapter
+in the contents and looking up words do not save a new place.
+
+This is the same Reading Position the other devices share, not a second place
+kept only for reopening on this phone. The setting applies to all Documents on
+the device. Turning it on does not save a sentence chosen before it was turned
+on; only subsequent taps and skips save their choices. Turning it off does not
+undo a place already saved.
+
+A new paused choice is saved on this device immediately and moves the Document
+to the front of its Library, even though nothing was spoken. It reaches the
+other devices at the existing sync moments, rather than making a server
+request for every tap or skip. The normal newer-position rule still applies:
+an older incoming place cannot replace the new choice, but a genuinely newer
+place from another device can. Choosing the already-saved position again
+renews neither its Stamp nor the Document's place in Library recency. A skip
+that cannot move past the document's boundary does neither as well.
+
+The switch itself is kept on this device only, independently of the Reading
+Positions that do sync. It lives in Settings → General, in a Reading position
+group before Reading aloud. Its label is “Save position while paused”; the one
+explanation is “Applies to sentence taps and the sentence and paragraph
+buttons.” It uses the phone's own switch.
+
+The default protects a listener's last heard sentence from an accidental tap.
+The optional behaviour lets someone choose a place to keep without having to
+listen to it first. Making this the default was turned down because it would
+remove that protection for everyone. Keeping a second, device-only place was
+turned down because returning on another device would mean returning to a
+different sentence.
 
 ## Looking, and coming back
 

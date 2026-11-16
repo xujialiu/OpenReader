@@ -10,7 +10,7 @@ Metro 8367 (node 90386) served every run; every relaunch pinned
 `recoveryCount` 1 (one target-only shutdown+boot, spent on the AXe hollow-tree
 wedge below).
 
-## The one probe every input went through
+## The XCTest input probe
 
 `PositionChoiceProbe.swift` (this folder) is an env-driven XCUITest single-test
 driver (`POS_ACTION=button|toggle|alert|point|query|swipe|type`, with
@@ -20,9 +20,9 @@ action's effect). It exists because the AXe accessibility tree on this device
 went **hollow twice** (a bare Application node with no children for minutes;
 one recorded shutdown+boot restored it, and it recurred after later
 terminate+launch cycles) while XCTest, CDP/harness, screenshots and container
-file reads stayed healthy. Every real touch, switch flip, Consent answer and
-Sync-screen typing in this verification is this probe; ax.py was used only for
-the early Settings-tree reads while it was still alive. Run it through
+file reads stayed healthy. After that wedge, native input used this probe.
+T1 used AXe touches with fresh native-tree and saved-file readback; later
+sentence taps, skips, Consent answers and Sync-screen typing used XCTest. Run it through
 `kit/run-probe.sh` with `TEST_RUNNER_POS_...` env keys; note that a FAILED run
 makes the runner terminate the target app, so scripts must relaunch and must
 not probe for state they only expect sometimes.
@@ -39,8 +39,8 @@ not probe for state they only expect sometimes.
   screenshot had been covered by a Library actions drawer).
 - **T2 no-provider save + OFF baseline** (`phase-t2b/t2c`): with the setting ON
   and **no Provider/key** (`enabledProviders: []`, `voice: ""`), one genuine
-  XCUITest tap on never-played Pride and Prejudice saved utterance 4's sentence
-  ("Yuan was born…"), moved both stamps, promoted it to the shelf top, with the
+  XCUITest tap in a never-played real EPUB saved its selected sentence,
+  moved both stamps, promoted it to the shelf top, with the
   fake-TTS journal at zero requests. With the setting OFF, Shadow Slave's first
   speech (real Play touch, Consent alert answered through the probe's native
   alert query after checking the recipient `127.0.0.1:8897`) saved S1; a
@@ -80,7 +80,7 @@ not probe for state they only expect sometimes.
   observable contract (no per-choice PUT, ordinary moments carry the choice).
 - The long-press opened the lookup drawer but no lookup was completed (no
   external dictionary call), so "selection with a completed lookup does not
-  save" is host-covered only.
+  save" is not separately verified by this device run.
 - iPad/Mac were not run: only this iPhone simulator had the authorized
   install. The changed logic is shared JS state; the native row renders from
   the same component on all targets.

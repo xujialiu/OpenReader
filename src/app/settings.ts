@@ -243,6 +243,8 @@ export interface AppSettings {
    * Library and the Settings screens as well as the page.
    */
   theme: ThemeSetting;
+  /** Explicit sentence taps and Skips while paused save the Reading Position immediately (#367). Off preserves speech-only saving. */
+  savePositionWhilePaused: boolean;
   /**
    * Whether the brackets around text are spoken with it — wherever they stand
    * in a sentence since #25 — which is the **Speech Text** (CONTEXT.md), and
@@ -488,6 +490,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Follow the system, which is the only default that is not a guess about the
   // room the owner is in.
   theme: 'system',
+  savePositionWhilePaused: false,
   // On, and the same list the desktop plugin starts from (ADR 0028).
   stripBrackets: true,
   bracketPairs: DEFAULT_BRACKET_PAIRS,

@@ -16,6 +16,19 @@ vi.mock('../../modules/open-reader-offline', () => ({ offlineNative: {
 } }));
 
 describe('local settings persistence', () => {
+  it('defaults paused position saving off, accepts only true and persists both values (#367)', () => {
+    expect(DEFAULT_SETTINGS.savePositionWhilePaused).toBe(false);
+    for (const value of [undefined, null, 'true', 'false', 1, 0, {}, []]) {
+      expect(parseSettings({ version: 1, settings: { savePositionWhilePaused: value } }).savePositionWhilePaused).toBe(false);
+    }
+    for (const savePositionWhilePaused of [true, false]) {
+      const settings = { ...DEFAULT_SETTINGS, savePositionWhilePaused };
+      writeSettings(settings);
+      expect(readSettings().savePositionWhilePaused).toBe(savePositionWhilePaused);
+      expect(engineIdentity(settings)).toBe(engineIdentity(DEFAULT_SETTINGS));
+    }
+  });
+
   it('upgrades the fixed free Fish Model, retains a selected Model and gives the engine a new identity', () => {
     const read = (fish: unknown) => parseSettings({ version: 1, settings: { fish } });
     for (const value of [undefined, '', '  ', null, 42]) expect(read({ model: value }).fish.model).toBe('s2.1-pro-free');

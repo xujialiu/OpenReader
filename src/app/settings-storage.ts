@@ -91,6 +91,7 @@ export function parseSettings(value: unknown): AppSettings {
       includeOwn: fish.includeOwn === true, includeManual: fish.includeManual === true, voices: string(fish.voices, '') },
     rate: typeof data.rate === 'number' && Number.isFinite(data.rate) && data.rate >= 0.5 && data.rate <= 4 ? data.rate : DEFAULT_SETTINGS.rate,
     theme: data.theme === 'dark' || data.theme === 'light' ? data.theme : 'system',
+    savePositionWhilePaused: data.savePositionWhilePaused === true,
     stripBrackets: data.stripBrackets !== false,
     // Kept exactly as it was typed, including a list that does not validate: the
     // owner edits this with the setting off, and a half-finished edit that the

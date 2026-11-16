@@ -117,6 +117,11 @@ export function GeneralScreen() {
           onChoose={(drawerHeight) => setSettings((was) => ({ ...was, drawerHeight }))} />
       </SettingsGroup>
 
+      <SettingsGroup title="Reading position" footer={<Footnote>Applies to sentence taps and the sentence and paragraph buttons.</Footnote>}>
+        <SwitchRow label="Save position while paused" value={settings.savePositionWhilePaused}
+          onChange={(savePositionWhilePaused) => setSettings((was) => ({ ...was, savePositionWhilePaused }))} />
+      </SettingsGroup>
+
       {/* The pauses have a card of their own, above the brackets' and under the
           header both share, because the sentence under the brackets' card is
           not true of them: a pause is added as the reading plays, so a

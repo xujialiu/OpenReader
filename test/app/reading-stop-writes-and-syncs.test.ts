@@ -1,4 +1,4 @@
-import { createElement, useEffect, useMemo } from 'react';
+import { createElement, useEffect, useMemo, useState } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -40,6 +40,8 @@ const world = vi.hoisted(() => ({
   folder: { file: null as string | null },
   /** The shell's sync handle, for the one sync moment the shell itself owns: the app going to the background. */
   sync: null as null | { poke(trigger: string): void },
+  shell: null as Shell | null,
+  contents: null as null | { onGo(section: number, fragment?: string): void },
 }));
 
 vi.mock('react-native', () => ({
@@ -129,7 +131,7 @@ vi.mock('../../src/app/use-provider-secrets', () => ({ useProviderKey: () => ({ 
 vi.mock('../../src/app/body-text-sizes', () => ({ readBodyTextSize: () => null, writeBodyTextSize: () => {} }));
 vi.mock('../../src/app/use-lookup', () => ({ useLookup: () => ({ selection: null, stopPronunciation() {} }) }));
 vi.mock('../../src/app/lookup-drawer', () => ({ LookupDrawer: () => null }));
-vi.mock('../../src/app/contents-sheet', () => ({ ContentsSheet: () => null }));
+vi.mock('../../src/app/contents-sheet', () => ({ ContentsSheet: (props: NonNullable<typeof world.contents>) => { world.contents = props; return null; } }));
 vi.mock('../../src/app/voice-sheet', () => ({ VoiceSheet: () => null }));
 vi.mock('../../src/app/player', () => ({ Player: (props: NonNullable<typeof world.player>) => { world.player = props; return null; } }));
 vi.mock('../../src/app/document-cover', () => ({ useDocumentCover: () => null }));
@@ -177,14 +179,16 @@ function Open() {
   return null;
 }
 /** What `shell.tsx` holds for every screen: the Library, the sync transport and the settings, in the real context. */
-function ShellProbe() {
+function ShellProbe({ initialSettings = SETTINGS }: { initialSettings?: AppSettings }) {
+  const [settings, setSettings] = useState(initialSettings);
   const library = useLibrary();
-  const { sync, last } = useSync(SETTINGS, library, WEBDAV);
+  const { sync, last } = useSync(settings, library, WEBDAV);
   useEffect(() => { world.sync = sync; }, [sync]);
   const value = useMemo<Shell>(
-    () => ({ settings: SETTINGS, setSettings() {}, library, secretsWritten: 0, secretRevisions: {}, noteSecretWritten() {}, sync, syncLast: last }),
-    [library, sync, last],
+    () => ({ settings, setSettings, library, secretsWritten: 0, secretRevisions: {}, noteSecretWritten() {}, sync, syncLast: last }),
+    [settings, library, sync, last],
   );
+  useEffect(() => { world.shell = value; }, [value]);
   return createElement(ShellContext.Provider, { value }, createElement(ReadingHost, null, createElement(Open)));
 }
 
@@ -193,9 +197,9 @@ const settle = async () => {
 };
 
 /** The Document open, its section reported and Play pressed: the Reading plays, on the first sentence. */
-async function playing(sentences: readonly string[] = TWO, start = true) {
+async function playing(sentences: readonly string[] = TWO, start = true, initialSettings = SETTINGS) {
   let tree!: ReactTestRenderer;
-  await act(async () => { tree = create(createElement(ShellProbe)); });
+  await act(async () => { tree = create(createElement(ShellProbe, { initialSettings })); });
   await settle();
   await act(async () => { world.page!.onBlocks!(blocks(sentences), { index: 0, href: 's0.xhtml', spine: 1 }); });
   await settle();
@@ -226,7 +230,7 @@ beforeEach(() => {
     id: DOCUMENT, format: 'epub', publicationId: null, publicationIdSource: 'none', title: 'A novel', position: null,
     stamp: { at: 1, device: 'iPhone-test0001' },
   } satisfies LibraryEntry];
-  world.folder.file = null; world.sync = null;
+  world.folder.file = null; world.sync = null; world.shell = null; world.contents = null;
 });
 afterEach(() => { vi.useRealTimers(); });
 
@@ -417,6 +421,188 @@ describe('only speech moves the Reading Position (#96)', () => {
     expect(held().library).toBe(SIX[4]); // Periodic write without another cursor change.
     await act(async () => { world.remote!('pause'); });
     await settle();
+    expect(held()).toEqual({ library: SIX[4], folder: SIX[4] });
+    await reading.down();
+  });
+});
+
+describe('saving paused choices is an opt-in (#367)', () => {
+  const enabled = { ...SETTINGS, savePositionWhilePaused: true };
+  const entry = () => world.shell!.library.current(DOCUMENT)!;
+  const tap = async (at: number) => {
+    await act(async () => { world.page!.onTap!(at); });
+    await settle();
+  };
+  const pause = async () => {
+    await act(async () => { world.remote!('pause'); });
+    await settle();
+  };
+
+  it.each([
+    ['tap', 4], ['next-sentence', 2], ['previous-sentence', 0],
+    ['next-paragraph', 2], ['previous-paragraph', 0],
+  ] as const)('a paused %s saves immediately, promotes the Document, syncs ordinarily and reopens there', async (action, target) => {
+    const reading = await playing(SIX, true, enabled);
+    await reading.hear();
+    await pause();
+    const before = entry();
+    const uploaded = world.folder.file;
+    vi.setSystemTime(Date.now() + 1); // Inside the speech write throttle, not twenty seconds later.
+    await act(async () => {
+      if (action === 'tap') world.page!.onTap!(target);
+      else world.player!.onSkip(action);
+    });
+    await settle();
+    expect(world.player!.playing).toBe(false);
+    expect(entry().position?.anchor.exact).toBe(SIX[target]);
+    expect(entry().position!.stamp.at).toBeGreaterThan(before.position!.stamp.at);
+    expect(entry().stamp.at).toBeGreaterThan(before.stamp.at);
+    expect(held().library).toBe(SIX[target]); // On disk before another Pause or leave.
+    expect(world.folder.file).toBe(uploaded); // No per-choice network sync.
+    const stored = world.disk.entries;
+    await act(async () => { world.sync!.poke('background'); });
+    await settle();
+    expect(held().folder).toBe(SIX[target]);
+    await reading.down();
+    const reopened = await playing(SIX, false, enabled);
+    expect(world.shown.at(-1)).toBe(target);
+    expect(world.disk.entries).toEqual(stored);
+    await reopened.down();
+  });
+
+  it('saves a never-played Document with no enabled Provider and moves it ahead of another Document', async () => {
+    const first = world.disk.entries[0] as LibraryEntry;
+    const other = { ...first, id: ('sha256:' + 'e'.repeat(64)) as DocumentId, title: 'Another document', stamp: { ...first.stamp, at: 2 } };
+    world.disk.entries.push(other);
+    const reading = await playing(SIX, false, { ...enabled, enabledProviders: [], voice: '' });
+    expect(world.shell!.library.entries[0].id).toBe(other.id);
+    await tap(4);
+    expect(held().library).toBe(SIX[4]);
+    expect(world.shell!.library.entries[0].id).toBe(DOCUMENT);
+    expect(world.audio.handlers).toBeNull(); // Saving is not building a speech engine.
+    expect(world.player!.playing).toBe(false);
+    await reading.down();
+  });
+
+  it('does not renew either Stamp for a repeated position or a boundary Skip, even on leave', async () => {
+    const reading = await playing(SIX, false, enabled);
+    await tap(5);
+    const stored = world.disk.entries;
+    vi.setSystemTime(Date.now() + 20_000);
+    await tap(5);
+    await act(async () => { world.player!.onSkip('next-sentence'); });
+    await settle();
+    await pause();
+    await reading.down();
+    expect(world.disk.entries).toEqual(stored);
+  });
+
+  it('does not save retroactively on enable, and disabling never rolls back a saved choice', async () => {
+    const reading = await playing(SIX, false);
+    await tap(4);
+    expect(held().library).toBeNull();
+    await act(async () => { world.shell!.setSettings((was) => ({ ...was, savePositionWhilePaused: true })); });
+    await settle();
+    expect(held().library).toBeNull();
+    await tap(4); // Same cursor, but this is the first saved choice.
+    expect(held().library).toBe(SIX[4]);
+    const stored = world.disk.entries;
+    await act(async () => { world.shell!.setSettings((was) => ({ ...was, savePositionWhilePaused: false })); });
+    await settle();
+    await tap(2);
+    await reading.down();
+    expect(world.disk.entries).toEqual(stored);
+    const reopened = await playing(SIX, false);
+    expect(world.shown.at(-1)).toBe(4);
+    await reopened.down();
+  });
+
+  it('a boundary Skip cannot save an earlier unsaved choice after enabling', async () => {
+    const reading = await playing(SIX, false);
+    await tap(5);
+    await act(async () => { world.shell!.setSettings((was) => ({ ...was, savePositionWhilePaused: true })); });
+    await settle();
+    await act(async () => { world.player!.onSkip('next-sentence'); });
+    await settle();
+    expect(held().library).toBeNull();
+    expect(entry().stamp.at).toBe(1);
+    await tap(5); // An explicit sentence tap, unlike a boundary Skip, is a new choice.
+    expect(held().library).toBe(SIX[5]);
+    await reading.down();
+  });
+
+  it('does not persist Contents, restored highlights, reported Blocks or a settings repaint', async () => {
+    const reading = await playing(SIX, false, enabled);
+    await act(async () => { world.contents!.onGo(0); });
+    await settle();
+    expect(held().library).toBeNull();
+    await tap(4);
+    await reading.down();
+    const reopened = await playing(SIX, false, enabled);
+    const stored = world.disk.entries;
+    vi.setSystemTime(Date.now() + 20_000);
+    await act(async () => {
+      world.contents!.onGo(0);
+      world.page!.onBlocks!(blocks(SIX), { index: 0, href: 's0.xhtml', spine: 1 });
+      world.shell!.setSettings((was) => ({ ...was, rate: 2 }));
+    });
+    await settle();
+    await reopened.down();
+    expect(world.disk.entries).toEqual(stored);
+  });
+
+  it('keeps a saved choice against older arrivals, but takes a newer place without writing over it on leave', async () => {
+    const reading = await playing(SIX, false, enabled);
+    await tap(4);
+    const local = world.shell!.library.positionsItems()[0];
+    const remote = (at: number) => ({ ...local, locator: blocks(SIX)[2].cfi!, anchor: { exact: SIX[2], prefix: '', suffix: '' }, stamp: { at, device: 'desktop' } });
+    await act(async () => { world.shell!.library.adopt([remote(local.stamp.at - 1)]); });
+    await settle();
+    expect(held().library).toBe(SIX[4]);
+    await act(async () => { world.shell!.library.adopt([remote(local.stamp.at + 1)]); });
+    await settle();
+    expect(world.shown.at(-1)).toBe(2);
+    const stored = world.disk.entries;
+    await reading.down();
+    expect(world.disk.entries).toEqual(stored);
+    expect(held().library).toBe(SIX[2]);
+  });
+
+  it('a new paused choice supersedes a place retained while playing before the stop effect runs', async () => {
+    const reading = await playing(SIX, true, enabled);
+    const local = world.shell!.library.positionsItems()[0];
+    const remote = { ...local, locator: blocks(SIX)[2].cfi!, anchor: { exact: SIX[2], prefix: '', suffix: '' }, stamp: { at: Date.now() + 1, device: 'desktop' } };
+    await act(async () => { world.shell!.library.adopt([remote]); });
+    await settle();
+    expect(world.player!.playing).toBe(true);
+    await act(async () => { world.remote!('pause'); world.page!.onTap!(4); });
+    await settle();
+    expect(held().library).toBe(SIX[4]);
+    expect(entry().position!.stamp.at).toBeGreaterThan(remote.stamp.at);
+    await reading.down();
+    expect(held()).toEqual({ library: SIX[4], folder: SIX[4] });
+  });
+
+  it('a playing seek waiting for its Clip cannot save an unheard position, even if paused later', async () => {
+    const reading = await playing(SIX, true, enabled);
+    world.provider.hold = SIX[4];
+    await tap(4);
+    expect(world.provider.answer).not.toBeNull();
+    expect(held().library).toBe(SIX[0]);
+    await pause();
+    await act(async () => { world.provider.answer!(); });
+    await settle();
+    await reading.down();
+    expect(held()).toEqual({ library: SIX[0], folder: SIX[0] });
+  });
+
+  it('subsequent speech still advances beyond the paused choice', async () => {
+    const reading = await playing(SIX, false, enabled);
+    await tap(3);
+    await act(async () => { world.player!.onPlay(); });
+    await settle();
+    await reading.hear();
+    await pause();
     expect(held()).toEqual({ library: SIX[4], folder: SIX[4] });
     await reading.down();
   });

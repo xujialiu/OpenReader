@@ -156,8 +156,8 @@ export interface ReadingViewProps {
    * drawer's choice is (#327, ADR 0089).
    */
   onVoiceChooser?(choose: ((provider: ProviderId, voice: string) => void) | null): void;
-  /** Where speech got to. Called on a Clip boundary at most every `POSITION_INTERVAL_MS`, at every stop of the Reading (#155), and once more on the way out. */
-  onReached(place: ReadingPlace): void;
+  /** Speech is throttled and flushed at stop/leave. An opted-in paused choice is immediate and also promotes the Document (#367). */
+  onReached(place: ReadingPlace, source?: 'paused-choice'): void;
   /**
    * How tall the navigation bar over the top of the page is, in points, whether
    * or not it is shown (#67). The screen measures it; the page keeps that much
@@ -282,10 +282,12 @@ export function ReadingView({
   const onStopped = useCallback((place: ReadingPlace | null) => stoppedRef.current(place), []);
   const speechRef = useRef<(place: ReadingPlace | null) => void>(() => {});
   const onSpeech = useCallback((place: ReadingPlace | null) => speechRef.current(place), []);
+  const pointedRef = useRef<(place: ReadingPlace) => void>(() => {});
+  const onPointed = useCallback((place: ReadingPlace) => pointedRef.current(place), []);
   /** Where the Reading reports the Sleep Timer's pause (#326); filled in beside the timer below. */
   const sleptRef = useRef<() => void>(() => {});
   const onSlept = useCallback(() => sleptRef.current(), []);
-  const reading = useReading(settings, { hasKey: keyPresence.state === 'held', writtenAt: credentialsWrittenAt }, position, document.identity.id, onStopped, onSpeech, onSlept);
+  const reading = useReading(settings, { hasKey: keyPresence.state === 'held', writtenAt: credentialsWrittenAt }, position, document.identity.id, onStopped, onSpeech, onSlept, onPointed);
   /** The lookup's pause is this screen's `pause`, defined below (#216). */
   const pauseRef = useRef<() => void>(() => {});
   const pauseForLookup = useCallback(() => pauseRef.current(), []);
@@ -410,6 +412,16 @@ export function ReadingView({
     onReachedRef.current = onReached;
   }, [onReached]);
   const writtenAtRef = useRef(0);
+
+  useEffect(() => {
+    pointedRef.current = (place) => {
+      // Explicit paused choices bypass the speech throttle, but retain the
+      // same writeback snapshot for stops/leave. No new sync moment (#367).
+      positionRef.current = place;
+      writtenAtRef.current = Date.now();
+      onReachedRef.current(place, 'paused-choice');
+    };
+  }, []);
 
   useEffect(() => {
     speechRef.current = (place) => {

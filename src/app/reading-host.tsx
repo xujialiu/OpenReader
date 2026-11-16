@@ -40,6 +40,7 @@ import { openDocument, type OpenDocument } from './document';
 import { ReadingView } from './reading-view';
 import { useShell } from './routes';
 import { selectSavedVoice, selectVoice } from './settings';
+import { samePlace } from './sync-items';
 import { useProviderKey } from './use-provider-secrets';
 
 /** What the screens are told about the Reading. */
@@ -160,9 +161,9 @@ export function ReadingHost({ children }: { children: ReactNode }) {
   const speaking = plays && !live.buffering;
   const speakingRef = useRef(false);
   /**
-   * Hearing a Document is what moves it up the Library (#228): here as speech
+   * Hearing a Document moves it up the Library (#228): here as speech
    * starts, and with each place written while it goes on (`reached`). Opening it
-   * moves nothing.
+   * moves nothing; opted-in paused choices are handled separately below (#367).
    */
   useEffect(() => {
     speakingRef.current = speaking;
@@ -253,12 +254,17 @@ export function ReadingHost({ children }: { children: ReactNode }) {
    * Bound to the Document that is open, never to whatever is held next: a view on its way out writes its own place.
    *
    * A place written while speech is heard (every ten seconds or so, and at its own pause) keeps the Document
-   * moving up the Library with it (#228). One written while paused, as a tapped sentence still is (#96), does not.
+   * moving up the Library with it (#228). An opted-in, changed paused choice
+   * does too (#367); a stop/leave flush alone never promotes it.
    */
-  const reached = useCallback((place: ReadingPlace) => {
+  const reached = useCallback((place: ReadingPlace, source?: 'paused-choice') => {
     if (!openedId) return;
+    if (source === 'paused-choice') {
+      const entry = library.current(openedId);
+      if (entry?.position && samePlace(entry.position, place, entry.format)) return;
+    }
     library.reached(openedId, place);
-    if (speakingRef.current) library.heard(openedId);
+    if (speakingRef.current || source === 'paused-choice') library.heard(openedId);
   }, [library, openedId]);
   const onChrome = useCallback(
     (chrome: boolean) => setLive((was) => (was.id === openedId ? (was.chrome === chrome ? was : { ...was, chrome }) : { id: openedId, playing: false, buffering: false, chrome, place: null })),

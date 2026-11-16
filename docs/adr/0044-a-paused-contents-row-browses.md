@@ -146,7 +146,7 @@ owner is listening.
   engine at `atRef ?? 0` and read the top of whatever had reported, which is
   #46's failure.
 
-## Only speech writes a Reading Position (#96)
+## By default, only speech writes a Reading Position (#96)
 
 `atRef` remains the playback cursor: a paused tap or Skip changes the highlight
 and where Play starts. `reachedRef` independently holds the last ReadingPlace
@@ -175,6 +175,34 @@ save no unheard sentence; Play after a tap still writes once speech starts.
 `use-reading-resume.test.ts` and `late-place-at-pause.test.ts` cover remote
 adoption and retention of a newer place until speech actually moves on. Native
 audio, page layout and transport are doubles, not device evidence.
+
+## Explicit paused choices can write the same position (#367)
+
+`savePositionWhilePaused` is a device-local boolean, explicitly parsed as true
+only and false by default. General offers the native `SwitchRow` before Reading
+aloud, in a Reading position group. It is outside `engineIdentity`: toggling it
+neither rebuilds speech nor retroactively saves the cursor.
+
+`pointAt` is the explicit sentence-tap/Skip boundary; internal `seekTo` remains
+unsaved, so Contents, resume, renumbering and repaint cannot acquire this
+permission. A changed choice while paused replaces `reachedRef`, clears a
+superseded `lateRef` and calls the separate `onPointed` callback. `ReadingView`
+writes immediately through `onReached(place, 'paused-choice')`, bypassing its
+speech throttle while retaining the snapshot for stop/leave. The host writes
+the position and promotes the Library entry independently; ordinary stop/leave
+flushes cannot promote it again. Neither a repeated saved position nor a Skip
+that stays at the boundary renews either Stamp. A tap on an unsaved cursor after
+enabling is still an explicit choice, unlike that inert Skip.
+
+The Positions File and synchronization triggers are unchanged. The new local
+Stamp participates in the existing newest-position merge; a later adopted
+position retires local writeback as before. A kept remote place already supplies
+the baseline, so a genuinely changed paused choice supersedes it even before
+the stop effect runs. The setting itself is not synchronized. A second
+local-only position was rejected because reopening and another device must
+name the same Reading Position; the throttled speech callback and generic
+cursor observation were rejected because they cannot distinguish an immediate
+explicit choice from ordinary restoration or repaint.
 
 ## Limits
 

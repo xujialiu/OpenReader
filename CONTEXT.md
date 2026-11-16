@@ -217,12 +217,9 @@ behind. It has nothing to do with Shared Settings.
 _Avoid_: export, send
 
 **Reading Position**:
-Where the reading is in a document: the sentence speech last reached, on this
-device or another. Only speech moves it. Pointing the reading at another
-sentence while paused changes where Play starts, but not the position, so
-leaving the reader without playing comes back to where speech stopped. One per
-document, overwritten as the owner reads, and not something the owner creates or
-sees in a list. It is a locator and a text anchor together.
+The sentence in a document the owner returns to, on this device or another.
+One per document, held as a Locator and a Text Anchor together, not a list of
+places the owner creates.
 _Avoid_: bookmark, progress, location, savedPosition
 
 **Browsing**:
@@ -232,9 +229,8 @@ _Avoid_: previewing, peeking, jumping, navigating
 
 **Skip**:
 Moving the reading back or forward by one sentence, or to the start of a
-paragraph. Unlike browsing, it moves the reading: while it plays, speech goes
-there and the reading position follows; while it is paused, only where Play
-starts moves.
+paragraph, rather than only moving the page as Browsing does. While paused,
+the chosen sentence is where Play starts.
 _Avoid_: jump, step, seek
 
 **Following**:
@@ -266,13 +262,10 @@ checked.
 _Avoid_: quote, snippet, excerpt, context
 
 **Stamp**:
-The wall-clock time something was last written, together with the device
-name of whoever wrote it, used to decide which of two copies wins. A library
-entry carries one that moves only when the owner adds the document or it is
-read aloud, on this device or another, and the Library lists the latest first;
-opening a document without playing it leaves it where it was. A reading
-position carries its own, which moves only when the reading moves somewhere
-new.
+The wall-clock time something was last written, together with the Device Name
+of whoever wrote it, used to decide which of two copies wins. A Library entry
+and its Reading Position carry separate stamps: one orders the Library by
+recency, and the other tells how new the position is.
 _Avoid_: timestamp, ts, version, clock
 
 **Device Name**:
