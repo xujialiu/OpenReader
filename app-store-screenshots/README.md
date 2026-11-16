@@ -1,7 +1,7 @@
 # App Store screenshots
 
 The screenshots on OpenReader's App Store page, and the script that makes
-them. Both sets show the same four screens, in this order:
+them. The iPhone and iPad sets show the same four screens, in this order:
 
 | File | Screen |
 | --- | --- |
@@ -14,6 +14,7 @@ them. Both sets show the same four screens, in this order:
 | --- | --- | --- | --- |
 | `iphone/` | iPhone 17 simulator | 1206 × 2622 | iPhone with Dynamic Island (medium display), the required iPhone set |
 | `ipad/` | iPad Pro 13-inch (M5) simulator | 2064 × 2752 | iPad 13" display |
+| `duo/` | iPhone Duo simulator, unfolded then folded | 2853 × 2007; 1398 × 2034 | iPhone Duo |
 
 ## What is on them
 
@@ -31,6 +32,7 @@ them. Both sets show the same four screens, in this order:
   copy's, without its Trial prompt in front of the first Play.
 - **The device**: dark appearance, US English, status bar at 9:41 with a full
   battery, and on iPad Full Screen Apps, so no window handle is drawn.
+  Duo captures retain its native vertical system bar and clock.
 
 ## Making them
 
@@ -39,6 +41,7 @@ Each step is a heavy simulator phase, so it runs under the shared iOS guard
 repository root:
 
 ```sh
+export DEVELOPER_DIR=/Applications/Xcode-27.1.0.app/Contents/Developer
 OUT=/tmp/openreader-screenshots
 # 1. The free role's Release app for the simulator. This rewrites ios/.
 python3 test/manual-test/kit/ios_guard.py run --wait 900 --timeout 1800 \
@@ -62,7 +65,9 @@ the paused word falls change from run to run.
 
 ## iPhone Duo captures
 
-The iPhone Duo has two App Store screenshot families. Create a session-owned
+The iPhone Duo has two displays in one App Store screenshot slot. The stored
+files are `duo/1-reading-unfolded.png` and `duo/2-reading-folded.png`.
+Create a session-owned
 `iPhone Duo` on iOS 27.1 and run the current free Release app with Xcode 27.1;
 the Duo orientation module is only compiled by that SDK. Use the 27.1 Device
 Hub pose controls and read the actual display after every pose input. The
@@ -91,17 +96,21 @@ still needs the same visual review as the iPhone and iPad sets.
 
 ## Uploading
 
-App Store Connect → the version → Media Manager. Put each folder's four files
-in its slot above, in file order. Smaller devices use the scaled-down set
+App Store Connect → the version → Media Manager. Put the four iPhone files,
+four iPad files and two Duo files in their respective slots above, in file
+order. Smaller devices use the scaled-down set
 unless one of their own is added. See
 [App Store Connect reference](../docs/app-store-connect.md#metadata-and-review),
 whose **Working in the page** covers the sign-in and blank pages.
 
 - **Replacing a set**: Remove All, then confirm. It removes the set from this
   version only; the pictures stay in the media library.
-- **The file input** of each slot sits in a shadow root, out of reach of
-  `document.querySelectorAll`. Claude in Chrome's `find` returns a ref to it,
-  and `file_upload` takes that ref with the four files in file order.
+- **The file input** belongs to the selected device slot. With Playwright MCP,
+  follow the visible-window and original-file-byte upload steps in
+  [the App Store Connect reference](../docs/app-store-connect.md#metadata-and-review)
+  if the browser rejects native file-path upload. The zero-size `DropZone`
+  accessibility button is a focus helper; its visible container is the drop
+  target.
 - **After an upload** a notice says the set serves every iPhone, or every
   iPad, size; OK closes it.
 - **Done** is every screenshot's `assetDeliveryState` reading `COMPLETE`, read
