@@ -111,18 +111,19 @@ file before leaving, and later matches the carrying upload against that frozen
 file — document id, whitespace-normalized full anchor, position Stamp at and
 device — not a text prefix.
 
-- **ON retained**: open cursor 63 ("Just like humans ascend toward divinity,"),
+- **ON retained**: open cursor 63,
   one genuine XCUITest tap → utterance 60 with CFI, anchor, position Stamp and
   entry Stamp all proven moved; the frozen choice survived leave/reopen
   byte-identically at utterance 60, paused, no playback. (`phase-ir1.json`
   attempt2: C1 PASS.)
 - **Sync contract**: working control = 17 ordinary PUTs (gaps 9.9–959 s);
-  snapshot 17; a second real paused choice frozen before leaving (utterance 63
-  back on "Just like humans…", new position Stamp); **no PUT within 8 s** of
+  snapshot 17; a second real paused choice frozen before leaving (utterance 63,
+  new position Stamp); **no PUT within 8 s** of
   the touch; the ordinary stop/leave upload matched the frozen choice on
   document id, normalized full anchor and position Stamp (PUT #18 era;
-  `davstate/puts/` inspected); PUTs target only `xujialiu-positions.json` and
-  contain no settings. (`phase-ir1.json` attempt2: C3 PASS.)
+  `davstate/puts/` inspected); the parent's final comparison also matched the
+  uploaded locator CFI against the frozen choice. PUTs target only
+  `xujialiu-positions.json` and contain no settings. (`phase-ir1.json` attempt2: C3 PASS.)
 - **OFF unchanged**: real switch flip to OFF asserted in-XCTest and in
   `settings.json`; a genuine tap moved the cursor 63→60 numerically with the
   saved entry byte-identical; leave/reopen restored the frozen choice 63
