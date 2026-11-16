@@ -15,3 +15,6 @@
 | 1.0.4 | 25 | Formal | Trial and Unlock | Off | Internal `owner` (automatic); the App Store candidate for 1.0.4, replacing build 22 | VALID | `35c4e82` |
 | 1.0.4 | 26 | Free test | None | Off | Internal `owner` (automatic); not in `public` | VALID | `35c4e82` |
 | 1.0.4 | 27 | Debug | None | On | Internal `owner` (automatic) | VALID | `35c4e82` |
+| 1.0.5 | 28 | Formal | Trial and Unlock | Off | Internal `owner` (automatic); the App Store candidate for 1.0.5 | VALID | `43b1927` |
+| 1.0.5 | 29 | Free test | None | Off | Internal `owner` (automatic); not in `public` | VALID | `43b1927` |
+| 1.0.5 | 30 | Debug | None | On | Internal `owner` (automatic) | VALID | `43b1927` |

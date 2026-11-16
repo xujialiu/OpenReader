@@ -56,6 +56,11 @@ saved reference values. Upload history belongs in notes and the confirmed
   `GET /v1/builds/{build}/betaBuildLocalizations`, then
   `PATCH /v1/betaBuildLocalizations/{id}` with `whatsNew`. The helper signs a
   write without a `scope`; a token scoped to the PATCH gets HTTP 405.
+- To verify a copy's group routing, query `/v1/builds` with `filter[app]`,
+  `filter[betaGroups]` and `filter[version]` (the Build Number), then match the
+  returned build ID. The build's `betaGroups` relationship supports assignment
+  and removal, not GET-related: requesting `/v1/builds/{build}/betaGroups`
+  returns 403. The badge script uses the supported group filter.
 
 ## Metadata and review
 
@@ -83,6 +88,16 @@ session: a submission whose click ends on the login page went through when
 the version reads `WAITING_FOR_REVIEW` with the formal build, and
 `/v1/reviewSubmissions?filter[app]=6817809106` lists it `WAITING_FOR_REVIEW`
 with a `submittedDate`.
+
+With Playwright MCP, keep the Chrome window visible while using controls:
+macOS window occlusion can make `document.visibilityState` read `hidden` and
+leave action-stability checks waiting. Activating the tab alone does not
+necessarily reveal the window. If file-path upload returns
+`DOM.setFileInputFiles: Not allowed`, load the actual PNG bytes through MCP,
+verify each SHA-256 against its local file, create `File` objects in a
+`DataTransfer`, assign its files to the media file input and dispatch `change`.
+This uses the normal uploader with the original image bytes. Read the resulting
+screenshots back through the API; the screenshot count alone is not completion.
 
 - **App Privacy.** Published:
   - **Other User Content**: App Functionality and Other Purposes;
@@ -125,6 +140,10 @@ with a `submittedDate`.
 - **Screenshots**
   - The uploaded sets and the script that makes them are in [`app-store-screenshots/`](../app-store-screenshots/README.md): reading with the spoken word highlighted, Word Lookup, the Download drawer and the Library, for iPhone and iPad.
   - Required slots: iPhone with Dynamic Island (medium display), 1206 × 2622 or 1179 × 2556; with iPad support (#319), iPad 13" display, 2064 × 2752 or 2048 × 2732. Recheck them in Media Manager against Apple's [screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/); use captures of the actual iPad layout, not enlarged phone screenshots.
+  - Duo has its own `APP_IPHONE_DUO` slot. Use native outer-display captures
+    at 1398 × 2034 or 2034 × 1398 and inner-display captures at 2007 × 2853
+    or 2853 × 2007. The set in `app-store-screenshots/duo/` shows unfolded
+    reading first, folded reading second. PNGs have no alpha channel.
   - Show only public-domain books, for example from Project Gutenberg.
   - Show no API key and no Provider's prices (ADR 0017).
 - **Review notes and demo key**

@@ -14,8 +14,16 @@ step 3).
 Use a new absolute `OUT` directory. Keep one admitted build lane; these
 commands belong inside a bounded phase under the shared iOS guard.
 
+Use Xcode 27.1 or newer through a task-local `DEVELOPER_DIR`; leave the global
+Xcode selection alone. The Duo scene policy compiles only with the UIKit 27.1
+SDK. An older toolchain can build successfully while omitting that policy.
+Check the actual SDK in each archived app's `DTSDKName` and Mach-O
+`LC_BUILD_VERSION`, and confirm that `DuoOrientationContainer` and
+`UIHingeInteraction` are present in the app binary.
+
 ```sh
 set -euo pipefail
+export DEVELOPER_DIR=/Applications/Xcode-27.1.0.app/Contents/Developer
 : "${RELEASE_COMMIT:?record the exact approved Beta-less upload commit}"
 test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
 git diff --quiet && git diff --cached --quiet
