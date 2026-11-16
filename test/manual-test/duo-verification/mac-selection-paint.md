@@ -1,7 +1,7 @@
 # Mac #355: selected `Even` loses its blue background
 
 **Fixture-local feedback, not complete Mac acceptance.** No native command
-below was run during the original preparation. Use the ios-tester explicitly
+below was run during the original preparation. Use the app-tester explicitly
 admitted by the parent for the Mac lane and its data permissions; do not assume
 another lane's status or select a model independently. A later native result
 requires its own retained, audited evidence. Do not rebuild, change

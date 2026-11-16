@@ -8,8 +8,8 @@ const configPath = '.mobilebuildmcp/config.yaml';
 const config = readFileSync(new URL(`../../${configPath}`, import.meta.url), 'utf8');
 
 // HOST configuration contracts only. Actual MCP tools/list parity and the
-// configured ios-tester startup need their separate registration-only smoke.
-describe('portable ios-tester MCP workflow configuration', () => {
+// configured app-agent startup need their separate registration-only smoke.
+describe('portable app-agent MCP workflow configuration', () => {
   it('keeps the project configuration outside the local-artifact ignore rule', () => {
     const result = spawnSync('git', ['check-ignore', '--no-index', '--', configPath], {
       cwd: root, encoding: 'utf8', timeout: 5000,

@@ -1,6 +1,6 @@
 # Finishing an app change
 
-In order: set the beta version, hand the tree to the tester, then leave the latest app running.
+In order: set the beta version, hand the frozen tree to the installer and tester, then leave the latest app running.
 
 ## Every app change carries a beta version
 
@@ -52,11 +52,11 @@ the Downloads manager turned down in #137, and beta9 is on the owner's phone, so
 narrows down which build is running. Seeing the change itself in the running app
 is what proves it is the latest.
 
-## Delegate final iOS verification
+## Delegate installation and final app verification
 
-After finishing app-code changes and local checks, the implementing agent must hand the final working tree to `ios-tester`. Its shared workflow is [.agents/ios-tester.md](../.agents/ios-tester.md); `.codex/agents/ios-tester.toml`, `.claude/agents/ios-tester.md` and `.pi/agents/ios-tester.md` reference that one source and define their respective model settings. Use the declared model and maximum effort; report an unavailable model rather than silently substituting another.
+After finishing app-code changes and local checks, follow the [app workflow](../docs/agents/app-workflow.md): freeze the final authoritative working tree, including uncommitted changes, dispatch `app-installer`, then hand its installation receipt to `app-tester`. The shared workflows are [.agents/app-installer.md](../.agents/app-installer.md) and [.agents/app-tester.md](../.agents/app-tester.md); the definitions under `.codex/agents/`, `.claude/agents/` and `.pi/agents/` select their model settings. Use the declared model and maximum effort; report an unavailable model rather than silently substituting another.
 
-Give the tester the issue/specification, changed interactions, verification already performed, simulator target and remaining risks. Keep app code stable during the run and follow the waiting rule in [delegation.md](delegation.md); do not duplicate its simulator work. After a failure, fix the reported defect and hand the updated tree back for verification. Completion requires the tester's result and the latest-app delivery below; the tester itself does not recursively delegate this step.
+Give both roles the common source/target/checkpoint handoff. Keep app code stable during the run and follow the waiting rule in [delegation.md](delegation.md); do not duplicate their simulator work. The tester selects relevant iPhone, iPad and Mac coverage; physical-device testing requires an explicit request, and Mac installation retains its own authorization gates. Installation/reinstallation requests return to the parent for `app-installer`. After a failure, fix the defect, update the installation as needed, then resume verification. Completion requires the tester's result and the latest-app delivery below. The parent serially dispatches these roles.
 
 Accept a tester's verdict only after checking it against its raw logs:
 - Check every XCTest run's `test.log` line `Executed … with N failures`, the retried runs included, and the raw lines behind each timing.
@@ -64,8 +64,8 @@ Accept a tester's verdict only after checking it against its raw logs:
 
 ## Finish with the latest app running in the simulator
 
-After every app change, update and launch the app in the simulator from the
-latest working-tree code, including uncommitted changes. Reload the current
+After every app change, have `app-installer` update and launch the app in the
+simulator from the latest working-tree code, including uncommitted changes. Reload the current
 bundle or rebuild and reinstall as needed; verify that the running app contains
 the final change, then exercise the changed interaction. Leave that latest app
 open for the owner to inspect, with playback stopped. Under

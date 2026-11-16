@@ -2,7 +2,7 @@
 
 **Preparation, not verification.** No simulator, native compilation, playback or
 system-window check ran when these controls were added. Run against the final
-parent revision with the default ios-tester, in one admitted lane. Script/host
+parent revision with the default app-tester, in one admitted lane. Script/host
 test success does not close an issue. Do not change the app or its Beta to run
 these tests. A genuine new app failure needs its own red, minimized feedback
 loop and ranked hypotheses before a repair.
@@ -280,7 +280,7 @@ Run these bounded states serially, not all Drawers stacked together:
 replace iOS scheduling and cannot prove this. `correct.elapsedMs` is a useful
 real native-source coordinate delivered through the bridge, but is not an
 independent measurement of rendered PCM. No reusable iOS app-output PCM capture
-through a display change was found in the kit during preparation. If ios-tester
+through a display change was found in the kit during preparation. If app-tester
 has no owned-target, pre-device-gain output capture compatible with simulator
 volume0, mark sample continuity BLOCKED and escalate the missing method. Never
 unmute the simulator/Mac, replace narration with a tone/new graph, or call

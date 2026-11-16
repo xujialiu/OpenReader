@@ -27,7 +27,7 @@ Guideline 2.1 request did. What App Review Information holds now is in
 - **The code is the owner's choice**: ask which commit. It need not be the
   build App Review is looking at.
 - **Built in a throwaway sub-worktree.** The two edits below are never
-  committed to `main`, so `main` and its Beta do not move and no `ios-tester`
+  committed to `main`, so `main` and its Beta do not move and no `app-tester`
   run is owed (MEMORY/app-change.md).
 - **Removed after Apple accepts the recording**, not straight after it, in case
   Apple asks for another: the Demo App from the phone, its App ID from the

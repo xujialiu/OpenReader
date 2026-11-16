@@ -14,12 +14,22 @@ inspection is the alternative. When the owner invokes
 [finish worktree](finish-worktree.md), release is already authorized: follow its
 ordering without another cleanup question.
 
+After authorization, the parent dispatches `resource-cleaner` with the ledger,
+retained evidence paths and accepted/merged sub-worktrees, following the
+[common handoff contract](../docs/agents/app-workflow.md). Its shared workflow
+is [.agents/resource-cleaner.md](../.agents/resource-cleaner.md); the harness
+definitions select its model and effort. Complete verification and stop active
+resource consumers before release. Preserve screenshots, raw logs and reports
+still needed for review, and persist useful accepted evidence in test records
+or issue comments before deleting scratch copies. Unmerged work stays intact.
+
 - **What release covers**: the Metros (with their `npm exec` parent and
   `esbuild` child) and helper servers, stopped; the simulators the session
   created, the one holding the latest app included, shut down and deleted;
-  and the session's build output and scratch files under `/tmp`, with any
-  `ios/` its prebuild created in the worktree. Simulators that existed before
-  the session stay as they were. Shared Xcode/iOS runtime packages, security
+  and the session's disposable build output and scratch files under `/tmp`,
+  with any `ios/` its prebuild created in the worktree. Retained evidence stays
+  available. Simulators that existed before the session stay as they were.
+  Shared Xcode/iOS runtime packages, security
   settings, and the shared iOS admission lock file are not session resources;
   leave them in place. In particular, never unlink an admission lock that
   another run may be holding or waiting on.
@@ -31,3 +41,7 @@ ordering without another cleanup question.
 - **The worktree**: if the branch is merged (`git merge-base --is-ancestor HEAD
   main`) and `./.worktrees/` is empty (AGENTS.md, "Sub-worktrees"), remind the
   owner that the worktree can be deleted. Do not delete it yourself.
+- **The cleaner's workspace**: leave its active cwd until it returns. The
+  parent retires that sub-worktree afterwards, under the usual merge,
+  working-tree and resource checks, and includes it in the final resource
+  report. Other active or unmerged sub-worktrees remain with a stated reason.

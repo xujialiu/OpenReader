@@ -2,7 +2,7 @@
 
 **HOST implementation only, NOT native acceptance.** No Apple-framework build,
 Simulator, Mac app, phone, LLDB, GUI, audio or route/volume operation was run to
-implement this tool. Parent review and the default ios-tester's single admitted
+implement this tool. Parent review and the default app-tester's single admitted
 lane own the next phase. Keep SDK58 and the parent's chosen Beta; this tool does
 not change versions or the Settings version format.
 
@@ -395,5 +395,5 @@ clean this observer. Uncertain cleanup means stop the diagnostic attempt and
 retain memory/app provenance until the tester safely retires that process.
 Record all started PID/port/device/build/control/capture resources. Host
 implementation started **none** of the native resources. Parent review accepts
-commits; default ios-tester qualifies the integrated candidate; no issue closure
+commits; default app-tester qualifies the integrated candidate; no issue closure
 or native PASS follows from code completion.

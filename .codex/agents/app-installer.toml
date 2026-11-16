@@ -1,0 +1,5 @@
+name = "app-installer"
+description = "Build, install and launch the specified working-tree app on a simulator and report source and version evidence."
+model = "gpt-6.1-terra"
+model_reasoning_effort = "max"
+developer_instructions = "Read .agents/app-installer.md from the repository root and follow its shared installation workflow."

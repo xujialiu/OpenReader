@@ -26,11 +26,12 @@ Each file under `MEMORY/` holds the rules for one kind of work. Read it in full 
 - **Interface** — [MEMORY/interface.md](MEMORY/interface.md): before adding or changing any text, screen, control or drawer the owner sees.
 - **Documentation** — [MEMORY/documentation.md](MEMORY/documentation.md): before writing to `docs/design/`, `docs/adr/`, a guide in `docs/`, `notes/`, `CONTEXT.md` or `README.md`, or when a term or decision changes.
 - **Delegation** — [MEMORY/delegation.md](MEMORY/delegation.md): before handing work to another agent, waiting on one, or running work in parallel.
-- **App change** — [MEMORY/app-change.md](MEMORY/app-change.md): after any change to app code, before calling it done: beta version, `ios-tester`, latest app left in the simulator.
+- **App workflow** — [docs/agents/app-workflow.md](docs/agents/app-workflow.md): before dispatching `app-installer`, `app-tester` or `resource-cleaner`: source identity, serial handoffs and evidence retention.
+- **App change** — [MEMORY/app-change.md](MEMORY/app-change.md): after any change to app code, before calling it done: beta version, `app-installer`, `app-tester`, latest app left in the simulator.
 - **Device testing** — [MEMORY/device-testing.md](MEMORY/device-testing.md): before running or writing a simulator, device or manual test, or playing any audio.
 - **Finish worktree** — [MEMORY/finish-worktree.md](MEMORY/finish-worktree.md): when the owner says `finish worktree`; verify, merge to `main`, push, close the resolved issues and release this session's resources.
 - **Commits** — [MEMORY/commits.md](MEMORY/commits.md): before writing any commit message.
-- **Cleanup** — [MEMORY/cleanup.md](MEMORY/cleanup.md): when all tasks are done and committed, before the final reply.
+- **Cleanup** — [MEMORY/cleanup.md](MEMORY/cleanup.md): when all tasks are done and committed, before the final reply: authorization and `resource-cleaner` handoff.
 - **Mac installation** — [MEMORY/mac-install.md](MEMORY/mac-install.md): before building for, installing on, replacing or diagnosing the owner's local Mac copy.
 - **iPhone** — [docs/install-on-iphone.md](docs/install-on-iphone.md): before installing on the owner's iPhone, fixing its signing or provisioning, or building a standalone Release for it. In anything committed, write its UDID as `IPHONE_UDID`; look up the real one with `xcrun devicectl list devices`.
 - **Demo App** — [docs/install-demo-on-iphone.md](docs/install-demo-on-iphone.md): before installing, rebuilding or removing a Demo App, or when App Review asks for a screen recording.

@@ -200,7 +200,7 @@ function installObserver({ snapshot, sourceRevision, receiptPath, optIn = proces
   const result = { enabled: true, modified: true, build, sourceFiles: FILES,
     before: { projectSHA256: hash(beforeProject), infoSHA256: hash(beforeInfo) },
     after: { projectSHA256: hash(afterProject), infoSHA256: hash(afterInfo) },
-    qualification: 'NOT_COMPILED_OR_RUN; actual SDK/header/link/load and default-absence artifacts need ios-tester',
+    qualification: 'NOT_COMPILED_OR_RUN; actual SDK/header/link/load and default-absence artifacts need app-tester',
     cleanup: 'Discard this external generated snapshot; never reuse its native product for ordinary Debug delivery' };
   fs.writeFileSync(receipt, JSON.stringify(result, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
   return result;

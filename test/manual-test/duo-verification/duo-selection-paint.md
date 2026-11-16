@@ -2,7 +2,7 @@
 
 **HOST-qualified oracle, not a completed native feedback loop.** No native input,
 app operation or app repair is part of this tool. Use the [acceptance recipe](duo-acceptance.md#phase-1--visible-selection-and-native-handles-350)
-and [kit](../kit/README.md) in the single admitted ios-tester lane later.
+and [kit](../kit/README.md) in the single admitted app-tester lane later.
 
 ## HOST command and evidence contract
 
@@ -60,7 +60,7 @@ painted glyphs/wash are not native handle presence, usability or a gesture proof
 
 The archive has no fresh native WebView frame (`app.webViews` was absent).
 A native driver is therefore **not supplied or claimed ready**. The admitted
-ios-tester must supply one small external `a3-paint-capture.sh` adapter, using
+app-tester must supply one small external `a3-paint-capture.sh` adapter, using
 `phase-a3.sh` as read-only recipe, not execute that original (it overwrites A3).
 Its arguments are explicit owned UDID, Metro deviceName, Metro URL, actual fold
 script and new OUT. Required setup/adapter contract:

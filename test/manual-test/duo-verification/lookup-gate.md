@@ -10,7 +10,7 @@ endpoint has been added.
 
 Read [Mac admission/M0–M7](platforms.md), [Mac installation rules](../../../MEMORY/mac-install.md),
 [installation guide](../../../docs/install-on-mac.md), [device rules](../../../MEMORY/device-testing.md)
-and the [manual-test kit](../README.md). Only the parent-admitted ios-tester
+and the [manual-test kit](../README.md). Only the parent-admitted app-tester
 operates the one native lane. This recipe authorizes no installation, launch,
 replacement, build, signing change, playback, purchase or Consent bypass. The
 parent chooses the Beta and stable source and preserves the whole container
@@ -231,6 +231,6 @@ atomic storage guarantee, so readers retry missing/partial JSON and require the
 fresh seq/run/action/time; they never accept an old status as recovery. Atomic
 command replacement alone does not prove the standalone app consumed it. The
 status bypass removes the Debug Log flush delay but its actual Mac latency and
-the native timed choreography must still be measured by ios-tester. No native
+the native timed choreography must still be measured by app-tester. No native
 call, build/install, owner container access or audio operation was performed
 while preparing this addition. #355 stays open for parent acceptance.

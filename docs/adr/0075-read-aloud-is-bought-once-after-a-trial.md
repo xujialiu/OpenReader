@@ -357,7 +357,7 @@ locked-by-default switch pointless for builds from source.
   line tools that use the `xcodebuild` command to start running an app … won't
   use the StoreKit Configuration File specified in your scheme." expo/expo
   #39912 says the same of `expo run:ios`, which launches through `simctl`.
-  `ios-tester`, which also launches through `simctl`, therefore sees no local
+  `app-installer`, which also launches through `simctl`, therefore sees no local
   StoreKit configuration. Sandbox purchases are tested on the iPhone with a
   Sandbox Apple Account.
 - **The Simulator may not complete a local purchase.** Apple Forums thread

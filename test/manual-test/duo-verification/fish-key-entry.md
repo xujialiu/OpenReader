@@ -15,7 +15,7 @@ this task. No app source, SDK, Version or Beta changes are needed.
 
 ## Admission and boundaries
 
-Native work belongs to the later `ios-tester`, after parent review. Use only the
+Native work belongs to the later `app-tester`, after parent review. Use only the
 session-owned Duo whose Metro is **8437** — `iPhone Duo ios353-fishpub-8437`,
 explicitly confirmed UDID `40DC7F6C-3500-480D-A0FB-147AEF50C609` (never an
 automatically chosen device) — running the frozen ordinary Debug

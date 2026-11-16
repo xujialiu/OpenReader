@@ -2,6 +2,12 @@
 
 Use this guide to run the current working-tree code on a local Mac simulator,
 including uncommitted changes.
+The parent assigns this delivery to `app-installer` under the
+[app workflow](agents/app-workflow.md), then hands its source/install receipt
+to `app-tester` for functional verification. The installer uses the explicitly
+handed-off authoritative source tree, which may differ from its own workspace.
+Heavy build/simulator phases use the [shared guard](../test/manual-test/kit/ios-verification.md);
+start persistent Metro separately and record it in the session resource ledger.
 For physical-device signing, provisioning profiles, and developer trust, see
 the [iPhone installation guide](install-on-iphone.md).
 The simulator does not need those physical-device steps and cannot install a
@@ -146,6 +152,11 @@ below.
 A build or launch that fails is in Troubleshooting below.
 
 ## Final delivery verification
+
+The installer establishes build, installation, launch, source and version
+identity; `app-tester` owns the interaction assertions below. A required
+reinstallation returns through the parent to the installer before testing
+resumes, retaining the same attempt and recovery budget.
 
 1. Open the page affected by the change and verify the visible result of the final code.
 2. Operate the changed control and check its result. When needed, save a simulator screenshot:

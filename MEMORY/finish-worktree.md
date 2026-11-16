@@ -7,7 +7,8 @@ ask for the same approvals again. If testing is still running, wait for its
 result first.
 
 1. **Verify.** Follow [app-change.md](app-change.md) for app changes, including
-   `ios-tester`, checking its raw logs and verifying the latest simulator app.
+   `app-installer`, `app-tester`, checking raw logs and verifying the latest
+   simulator app.
    Fix failures caused by this work and retest. Report pre-existing check
    failures separately; never call them passes. A failed or blocked acceptance
    test stops publication and issue closure.
@@ -31,13 +32,15 @@ result first.
    rule for this workflow.
 5. **Release.** Preserve useful verification results in committed test records
    or issue comments before deleting scratch artifacts. Release everything
-   this session created, following [cleanup.md](cleanup.md): Metro and helper
-   processes, session-created simulators, build output, generated native
+   this session created through `resource-cleaner`, following [cleanup.md](cleanup.md):
+   Metro and helper processes, session-created simulators, build output, generated native
    directories and temporary files. Merge accepted sub-worktrees, stop any
    processes using them, then remove them and delete their merged branches.
    Resources belonging to other live sessions, pre-existing simulators and
    shared services stay untouched. The owner's Orca worktree remains theirs
-   to delete; report when it is safe to remove.
+   to delete; report when it is safe to remove. Retain artifacts still needed
+   for review and unmerged work. After the cleaner returns, retire its own
+   workspace and include it in the release report.
 
 The final report names the published commit, verification outcome, closed and
 still-open issues, and resources removed or retained with a reason. Under this
