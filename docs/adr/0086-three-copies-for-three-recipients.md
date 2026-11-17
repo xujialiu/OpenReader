@@ -51,7 +51,9 @@ owner alone changes the Version. Role suffixes are not part of
 
 Keep the existing one-annotated-tag-per-set convention, named by the highest
 number on the common source commit, with all three identities in its message.
-A partial set is not tagged as complete. Pushes still require owner approval.
+A partial set is not tagged as complete. Follow the
+[release guide's authorization scope](../release-to-app-store.md#readiness-gate)
+for the necessary identity and tag pushes.
 
 ## No purchase capability in the two free copies
 

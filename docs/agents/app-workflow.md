@@ -1,5 +1,11 @@
 # App verification, installation and resource cleanup
 
+Use this pipeline for app changes and requested installation/verification.
+Release identity-only work on accepted source follows
+[the release workflow](../release-to-app-store.md), reusing functional
+acceptance rather than dispatching installer/tester roles or creating a
+simulator delivery solely for publication.
+
 The parent serially dispatches three roles. Each role has one shared workflow
 under `.agents/`; the definitions under `.codex/agents/`, `.claude/agents/` and
 `.pi/agents/` select the harness's model and effort and point to that workflow.

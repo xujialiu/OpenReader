@@ -15,6 +15,9 @@
 | 1.0.4 | 25 | Formal | Trial and Unlock | Off | Internal `owner` (automatic); the App Store candidate for 1.0.4, replacing build 22 | VALID | `35c4e82` |
 | 1.0.4 | 26 | Free test | None | Off | Internal `owner` (automatic); not in `public` | VALID | `35c4e82` |
 | 1.0.4 | 27 | Debug | None | On | Internal `owner` (automatic) | VALID | `35c4e82` |
-| 1.0.5 | 28 | Formal | Trial and Unlock | Off | Internal `owner` (automatic); the App Store candidate for 1.0.5 | VALID | `43b1927` |
+| 1.0.5 | 28 | Formal | Trial and Unlock | Off | Internal `owner` (automatic); approval cancelled, replaced by formal build 31 | VALID | `43b1927` |
 | 1.0.5 | 29 | Free test | None | Off | Internal `owner` (automatic); `public`, WAITING_FOR_BETA_REVIEW | VALID | `43b1927` |
 | 1.0.5 | 30 | Debug | None | On | Internal `owner` (automatic) | VALID | `43b1927` |
+| 1.0.5 | 31 | Formal | Trial and Unlock | Off | Internal `owner` (automatic); submitted for App Store review with manual release | VALID | `3b2f177` |
+| 1.0.5 | 32 | Free test | None | Off | Internal `owner` (automatic); not in `public` | VALID | `3b2f177` |
+| 1.0.5 | 33 | Debug | None | On | Internal `owner` (automatic) | VALID | `3b2f177` |
