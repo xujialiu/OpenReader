@@ -40,19 +40,28 @@ bash test/manual-test/place-and-following/contents-first-press-leg.sh \
   to; record which Metro/JS the app ran (the launch line's version) beside the
   results.
 
-Baseline (1.0.5 (33)-beta2 JS, Metro 8093) results on
-`Cultivation Online 2001-2044` (`sha256:46ca2bb1…`), row `Chapter 2001` —
+Baseline (1.0.5 (33)-beta2 JS, Metro 8093) and current (1.0.5 (33)-beta3 JS, Metro 8092) results on
+`Cultivation Online 2001-2044` (`sha256:46ca2bb1…`, 48 spine items), row `Chapter 2001` —
 2026-11-17, `tester/phase-B1-baseline-trial1`, `phase-B2-baseline-trial2`,
-`phase-B3-browsing-control`:
+`phase-B3-browsing-control`, `phase-C1-current-trial1`, `phase-C2-current-trial2`,
+`phase-C3-browsing-control`:
 
-| leg | place at open | mode | view 3 absent | section 3 top (×2 settled) | heading top | reading after | shelf after |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| trial 1 | null | goToSection | yes ([1,2]) | 321 / 321 | 351 | utterance 59, section 3 (took) | null |
-| trial 2 | null | goToSection | yes ([1,2]) | 320 / 320 | 350 | utterance 59, section 3 (took) | null |
-| staged browsing | "Cultivation Online" (utterance 0) | browse | yes | 54 / 54 | 84 | utterance 0, section 1 (not taken) | place kept |
+| leg | JS | place at open | mode | view 3 absent | section 3 top (×2 settled) | heading top | reading after | shelf after | Locations input/index |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| B1 | beta2 | null | goToSection | yes ([1,2]) | 321 / 321 | 351 | utterance 59, section 3 (took) | null | undefined / 185 |
+| B2 | beta2 | null | goToSection | yes ([1,2]) | 320 / 320 | 350 | utterance 59, section 3 (took) | null | undefined / 185 |
+| B3 | beta2 | staged (utt 0) | browse | yes | 54 / 54 | 84 | utterance 0, section 1 (kept) | place kept | undefined / 185 |
+| C1 | beta3 | null | goToSection | yes ([1,2]) | 320 / 320 | 350 | utterance 59, section 3 (took) | null | `[]` / 0 |
+| C2 | beta3 | null | goToSection | yes ([1,2]) | 320 / 320 | 350 | utterance 59, section 3 (took) | null | `[]` / 0 |
+| C3 | beta3 | staged (utt 0) | browse | yes | 54 / 54 | 84 | utterance 0, section 1 (kept) | place kept | `[]` / 0 |
 
-Baseline Locations input was `undefined` (the pre-#255 visible reader passes
-none), so the template scanned: an index of 185 entries existed at every
-sample. A current-leg comparison must reproduce the same table with the same
-document/row/settings/viewport and its own Metro identity before any
-conclusion about either leg's landing is drawn.
+Observed equivalence: mode, the Reading being taken or kept, the placed geometry (within the
+baseline legs' own 1 px trial-to-trial variation, scrollTop 2344 vs 2345), and the staged
+Browsing landing are identical between the two JS versions. The only measured difference is
+the initialized Locations input/index — undefined plus a generated 185-entry index on the
+pre-#255 baseline, the stable empty array plus length 0 on current — the #255 change itself,
+with no effect on the press contract. A correction to an earlier interim interpretation: the
+first-press 321-class landing was tentatively recorded as the #307 first-render landing race;
+these legs supersede that reading — the landing is the deterministic taking-mode Line Position
+placement (identical on both JS versions and stable across samples), not a layout race, and
+the unconditional-54 oracle is invalid for the no-position first-press precondition.
