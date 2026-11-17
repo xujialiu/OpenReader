@@ -4,7 +4,7 @@ import { runInNewContext } from 'node:vm';
 import { createElement } from 'react';
 import { act, create } from 'react-test-renderer';
 import { expect, it, vi } from 'vitest';
-import { EMPTY_LOCATIONS_SOURCE } from '../../src/offline/reader-locations';
+import { EMPTY_LOCATIONS_SOURCE } from '../../src/renderer/reader-locations';
 
 const require = createRequire(import.meta.url);
 const root = dirname(require.resolve('@epubjs-react-native/core'));

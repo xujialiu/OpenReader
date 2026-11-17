@@ -38,6 +38,7 @@ import { blockIds, EMPTY_BLOCKS, withSection, type BlockIndex } from './blocks';
 import { countPage, PLAIN_BODY_TEXT_SIZE } from './body-text';
 import { BAKED_LINE_POSITION, BAKED_SCROLLING } from './glide';
 import { correctMessage, speakMessage, utteranceAt } from './cursor';
+import { EMPTY_LOCATIONS } from './reader-locations';
 import {
   appearanceCss,
   DEFAULT_APPEARANCE,
@@ -466,6 +467,8 @@ export interface ReaderBridge {
     onWebViewMessage(event: unknown): void;
     manager: 'continuous';
     flow: 'scrolled-continuous';
+    /** No unused whole-document index on open or page-process recovery (#255). */
+    initialLocations: typeof EMPTY_LOCATIONS;
     /**
      * The library's own theme with a transparent page (`READER_THEME`, #27): the
      * library colours the WebView with it, so wherever no section is drawn the
@@ -1094,6 +1097,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       // into the WebView's template at mount, so they are fixed for a document.
       manager: 'continuous',
       flow: 'scrolled-continuous',
+      initialLocations: EMPTY_LOCATIONS,
       defaultTheme: READER_THEME,
     }),
     [injectedJavascript, onWebViewMessage],

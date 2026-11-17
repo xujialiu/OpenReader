@@ -189,6 +189,12 @@ needs most, and switching dialects would break it.
 construct one for a range computed in code. Its annotation API only works from a
 user selection, which is not how a speech cursor moves.
 
+## The visible page does not generate an unused Locations index (#255)
+
+The visible Reader now uses the same stable empty Locations source as the Download indexer (ADR 0027), through `readerProps`. The compatibility boundary lives in `renderer/reader-locations.ts` and is shared by both readers. The installed template otherwise calls `locations.generate(1600)` on every open and page-process recovery, loading and unloading every linear spine section with a default 100 ms interval. The app consumes no Locations index or percentage; CFI location changes, the reading's own cursor and Contents remain independent of it.
+
+The regression mounts the real bridge, passes its Reader props through the installed HTML injector and executes the installed initialization branch before and after `restart()`. Without the adapter it calls `generate(1600)` once; with it it calls `load([])` and never `generate`. This establishes removed work, not measured device battery, frame-time or time-to-first-page improvements. Generating or caching an unused index is rejected rather than optimized.
+
 ## Consequences
 
 The project depends on a 2022 artifact for its rendering. This is accepted with
