@@ -1,5 +1,12 @@
 # Finishing an app change
 
+This workflow applies to changes to app behavior, dependencies or tracked
+native configuration. Preparing a release identity for already accepted app
+source follows [the release workflow](../docs/release-to-app-store.md).
+Version/Build Number changes, dropping the Beta and selecting an existing
+release role do not by themselves trigger another Beta, installer/tester
+handoff or simulator delivery.
+
 In order: set the beta version, hand the frozen tree to the installer and tester, then leave the latest app running.
 
 ## Every app change carries a beta version

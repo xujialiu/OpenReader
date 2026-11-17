@@ -150,7 +150,7 @@ screenshots back through the API; the screenshot count alone is not completion.
   - The owner keeps one review-only Fish Audio API key with a small prepaid balance, pasted only into App Store Connect.
   - It stays from one version to the next: every submission is reviewed, and a reviewer without a working key cannot test reading aloud (Guideline 2.1). Before each submission the owner checks that the key still works and that its balance covers a review.
   - It is never committed, logged or shown in a screenshot.
-  - Before submitting, check every step of the template below on a fresh install. A fresh install's Provider is OpenAI, so the reviewer must choose a Fish Audio voice.
+  - Reuse accepted review-flow evidence when the relevant app, dependency and native inputs are unchanged apart from release identity. Run a fresh-install walkthrough only when explicitly requested or included in the agreed verification of an affected app change. A release request alone does not add simulator, StoreKit, credential-entry or live-Provider testing. A fresh install's Provider is OpenAI, so the reviewer must choose a Fish Audio voice.
 - **App Transport Security**: the build sets `NSAllowsArbitraryLoads` (ADR 0080), and Apple asks for a justification at review. The notes carry this sentence, or the answer to App Review's question does: `OpenReader connects to a speech server or WebDAV folder whose address the user enters, often a computer at home reached over plain HTTP by a local or VPN host name, so it allows HTTP connections (NSAllowsArbitraryLoads). The hosted speech services it supports are reached over HTTPS.`
 
 ### Review notes (template)
@@ -161,8 +161,8 @@ using the user's own API key for that service. It has no account and no server
 of its own. Reading aloud is free for 30 days, then a one-time In-App Purchase.
 
 To test:
-1. In Safari, download a public-domain EPUB, for example
-   https://www.gutenberg.org/ebooks/1342.epub3.images (Pride and Prejudice).
+1. In Safari, download the Compatible epub from, for example,
+   https://standardebooks.org/ebooks/jane-austen/pride-and-prejudice.
    In the Files app, share it to OpenReader (or long-press > Share > OpenReader).
 2. In OpenReader: Settings > Providers > Fish Audio. Keep "Enabled" off and paste
    this test key into "API key": <KEY>. Then turn "Enabled" on and confirm

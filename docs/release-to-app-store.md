@@ -2,10 +2,27 @@
 
 ## Readiness gate
 
-Proceed only for an explicit owner upload request, after current source,
-Apple identities, signing and group routing pass the checks below. The
+Proceed only for an explicit owner upload or submission request, after current
+source, Apple identities, signing and group routing pass the checks below. The
 three-role pipeline has local native/UI acceptance; that is not permission
 to upload or proof of App Store processing. ADR 0083's pair recipe is historical.
+
+For already accepted app source, release identity preparation reuses the
+existing functional acceptance. Version/Build Number edits, Beta removal and
+selection of the existing roles use the source, configuration, signing,
+artifact and Apple-state checks below. They do not start the app-change
+installer/tester pipeline, new simulator delivery, StoreKit testing, Provider
+setup or a live reading. Retain accepted metadata and screenshots, changing
+only what the requested publication needs. If missing acceptance or a new
+problem requires more verification, explain the gap and agree its scope
+before starting it.
+
+The requested upload/submission also authorizes its necessary identity
+commit, `main`/tag pushes and release records. Complete those actions without
+asking again whether to continue. Ask when a new owner decision changes the
+scope; uploading alone still authorizes no submission, public testing or
+App Store release. Keep the three-copy Upload Set and exact formal-build
+selection rules below.
 
 ## Prepare and upload
 
@@ -15,11 +32,14 @@ to upload or proof of App Store processing. ADR 0083's pair recipe is historical
    and the Version's state. Only the owner changes the Version; if it is
    already released (ITMS-90186), stop and ask for the next one, recommending
    the next patch.
-2. **Verify the source.** Drop the Beta and commit the upload identity on `main`;
+2. **Verify the source.** Confirm the accepted app source and reuse its passing
+   unit, type, lint and functional evidence when app/dependency/native inputs
+   are unchanged apart from the release identity. Drop the Beta, commit and
+   push the upload identity on `main`;
    change package/lockfile Version only when the owner names it. Require a clean
    checkout equal to `origin/main`, then record `RELEASE_COMMIT=$(git rev-parse HEAD)`.
-   All three archives come from that SHA. Run dependencies, unit, type, lint
-   and configuration checks before building.
+   All three archives come from that SHA. Use locked dependencies and check
+   all three roles' release configuration before building.
 3. **Know where the copies go.** Internal `owner` receives every copy as soon
    as Apple processes it; that setting cannot be turned off, and the owner
    installs the Debug copy from TestFlight by hand. External `public` receives
@@ -39,7 +59,8 @@ to upload or proof of App Store processing. ADR 0083's pair recipe is historical
    Beta. Annotate `X.Y.Z(N+2)` with all three identities, explicitly targeting
    `"$RELEASE_COMMIT"`, never defaulting to a later HEAD. Verify its resolved
    commit equals that SHA; recover the actual upload SHA rather than guessing.
-   Earlier/pushed tags stay unchanged. Ask before pushing `main` or tags.
+   Earlier/pushed tags stay unchanged. Push the completed set's tag under the
+   release request's authorization.
 
 ## Record and report — required after every attempt
 
@@ -68,8 +89,8 @@ to upload or proof of App Store processing. ADR 0083's pair recipe is historical
 - **Public testing:** use the free copy; TestFlight Beta App Review is separate
   from App Store version review. Keep Debug internal-only.
 - **App Store submission:** read [metadata and review](app-store-connect.md#metadata-and-review)
-  before preparing fields, screenshots, the review key and fresh-install review
-  steps. Select the exact formal build from the confirmed ledger and recheck
+  for fields, screenshots, the review key and reuse of review-flow evidence.
+  Select the exact formal build from the confirmed ledger and recheck
   the Draft Submission. A newer free/Debug build is not a substitute.
 - **Release:** preserve manual release; the owner decides when to publish.
 - **Public link or README badges:** read [badge diagnostics](testflight-badge.md)

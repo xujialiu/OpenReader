@@ -9,6 +9,12 @@ issue lookup, creation, comments and issue references in commits. If the work
 grows into a feature, bug fix or substantial change, follow the issue workflow
 before continuing with that expanded scope.
 
+Rebuilding, uploading or resubmitting already accepted app source is a release
+operation, including its identity and release-record edits. Follow
+[the release workflow](../docs/release-to-app-store.md) directly; use issue
+tracking only when explicitly requested. App changes discovered during that
+work follow the issue workflow before implementation.
+
 The owner's standing instruction authorizes creating issues and posting work
 comments as part of the task; no separate permission is needed each time.
 When an issue is required:
