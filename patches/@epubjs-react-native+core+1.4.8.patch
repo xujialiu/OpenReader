@@ -38,7 +38,7 @@ index 86d814d..40c38c3 100644
    const goPrevious = (0, _react.useCallback)(options => {
      webViewInjectFunctions.injectJavaScript(book, `
 diff --git a/node_modules/@epubjs-react-native/core/lib/commonjs/epubjs.js b/node_modules/@epubjs-react-native/core/lib/commonjs/epubjs.js
-index 89aee23..a0b511e 100644
+index 89aee23..1a52839 100644
 --- a/node_modules/@epubjs-react-native/core/lib/commonjs/epubjs.js
 +++ b/node_modules/@epubjs-react-native/core/lib/commonjs/epubjs.js
 @@ -1077,7 +1077,16 @@ var _default = exports.default = `
@@ -59,6 +59,15 @@ index 89aee23..a0b511e 100644
                  : "text" === t.type
                    ? e.push("text()[" + i + "]")
                    : e.push("*[" + i + "]");
+@@ -10962,6 +10971,8 @@ var _default = exports.default = `
+             t &&
+               this.open(t, this.settings.openAs).catch((e) => {
+                 var i = new Error("Cannot load book at " + t);
++                // OpenReader (#217): keep the actual archive failure, not only its base64 input.
++                i.cause = e;
+                 this.emit(m.c.BOOK.OPEN_FAILED, i);
+               });
+         }
 diff --git a/node_modules/@epubjs-react-native/core/lib/commonjs/hooks/useInjectWebviewVariables.js b/node_modules/@epubjs-react-native/core/lib/commonjs/hooks/useInjectWebviewVariables.js
 index df6d66e..bb73bb6 100644
 --- a/node_modules/@epubjs-react-native/core/lib/commonjs/hooks/useInjectWebviewVariables.js
@@ -79,7 +88,7 @@ index df6d66e..bb73bb6 100644
    return {
      injectWebViewVariables
 diff --git a/node_modules/@epubjs-react-native/core/lib/commonjs/template.js b/node_modules/@epubjs-react-native/core/lib/commonjs/template.js
-index e5431d2..ce6ec83 100644
+index e5431d2..f64078e 100644
 --- a/node_modules/@epubjs-react-native/core/lib/commonjs/template.js
 +++ b/node_modules/@epubjs-react-native/core/lib/commonjs/template.js
 @@ -12,7 +12,9 @@ var _default = exports.default = `
@@ -102,6 +111,73 @@ index e5431d2..ce6ec83 100644
        let book;
        let rendition;
  
+@@ -88,6 +90,23 @@ var _default = exports.default = `
+      const reactNativeWebview = window.ReactNativeWebView !== undefined && window.ReactNativeWebView!== null ? window.ReactNativeWebView: window;
+       reactNativeWebview.postMessage(JSON.stringify({ type: "onStarted" }));
+ 
++      // OpenReader (#217): startup has one terminal result, including event-only failures.
++      var opening = true;
++      function reportDisplayError(error) {
++        if (!opening) return;
++        opening = false;
++        var cause = error && error.cause || error;
++        var reason = String(cause && cause.message || cause || "The EPUB could not be displayed.");
++        // epub.js otherwise includes the entire base64 Document in openFailed.
++        if (file) reason = reason.split(String(file)).join("[document]");
++        reactNativeWebview.postMessage(JSON.stringify({
++          type: "onDisplayError",
++          reason: reason.slice(0, 500)
++        }));
++      }
++      book.on("openFailed", reportDisplayError);
++      rendition.on("displayerror", reportDisplayError);
++
+       function flatten(chapters) {
+         return [].concat.apply([], chapters.map((chapter) => [].concat.apply([chapter], flatten(chapter.subitems))));
+       }
+@@ -183,18 +202,22 @@ var _default = exports.default = `
+           });
+         })
+         .then(function () {
+-          var displayed = rendition.display();
++          var displayed = opening ? rendition.display() : Promise.resolve();
+ 
+-          displayed.then(function () {
++          var ready = displayed.then(function () {
++            if (!opening) return;
+             var currentLocation = rendition.currentLocation();
+-
++            var progress = book.locations.percentageFromCfi(currentLocation.start.cfi);
++            opening = false;
+             reactNativeWebview.postMessage(JSON.stringify({
+               type: "onReady",
+               totalLocations: book.locations.total,
+               currentLocation: currentLocation,
+-              progress: book.locations.percentageFromCfi(currentLocation.start.cfi),
++              progress: progress,
+             }));
+           });
++          // An event can arrive synchronously inside display(); still observe its promise.
++          if (!opening) return ready;
+ 
+           book
+           .coverUrl()
+@@ -242,13 +265,9 @@ var _default = exports.default = `
+               landmarks: item.landmarks
+             }));
+           });
++          return ready;
+         })
+-        .catch(function (err) {
+-          reactNativeWebview.postMessage(JSON.stringify({
+-          type: "onDisplayError",
+-          reason: reason
+-        }));
+-      });
++        .catch(reportDisplayError);
+ 
+       rendition.on('started', () => {
+         rendition.themes.register({ theme: theme });
 diff --git a/node_modules/@epubjs-react-native/core/lib/commonjs/utils/GestureHandler.js b/node_modules/@epubjs-react-native/core/lib/commonjs/utils/GestureHandler.js
 index 6399d97..7ceb72b 100644
 --- a/node_modules/@epubjs-react-native/core/lib/commonjs/utils/GestureHandler.js
@@ -172,7 +248,7 @@ index 1d2825a..735a0b2 100644
    const goPrevious = useCallback(options => {
      webViewInjectFunctions.injectJavaScript(book, `
 diff --git a/node_modules/@epubjs-react-native/core/lib/module/epubjs.js b/node_modules/@epubjs-react-native/core/lib/module/epubjs.js
-index f6b746d..5bc7968 100644
+index f6b746d..71bf31d 100644
 --- a/node_modules/@epubjs-react-native/core/lib/module/epubjs.js
 +++ b/node_modules/@epubjs-react-native/core/lib/module/epubjs.js
 @@ -1071,7 +1071,16 @@ export default `
@@ -193,6 +269,15 @@ index f6b746d..5bc7968 100644
                  : "text" === t.type
                    ? e.push("text()[" + i + "]")
                    : e.push("*[" + i + "]");
+@@ -10956,6 +10965,8 @@ export default `
+             t &&
+               this.open(t, this.settings.openAs).catch((e) => {
+                 var i = new Error("Cannot load book at " + t);
++                // OpenReader (#217): keep the actual archive failure, not only its base64 input.
++                i.cause = e;
+                 this.emit(m.c.BOOK.OPEN_FAILED, i);
+               });
+         }
 diff --git a/node_modules/@epubjs-react-native/core/lib/module/hooks/useInjectWebviewVariables.js b/node_modules/@epubjs-react-native/core/lib/module/hooks/useInjectWebviewVariables.js
 index 743ff8c..1b23043 100644
 --- a/node_modules/@epubjs-react-native/core/lib/module/hooks/useInjectWebviewVariables.js
@@ -213,7 +298,7 @@ index 743ff8c..1b23043 100644
    return {
      injectWebViewVariables
 diff --git a/node_modules/@epubjs-react-native/core/lib/module/template.js b/node_modules/@epubjs-react-native/core/lib/module/template.js
-index fbb87aa..2c7a6b6 100644
+index fbb87aa..41ba542 100644
 --- a/node_modules/@epubjs-react-native/core/lib/module/template.js
 +++ b/node_modules/@epubjs-react-native/core/lib/module/template.js
 @@ -4,7 +4,9 @@ export default `
@@ -236,6 +321,73 @@ index fbb87aa..2c7a6b6 100644
        let book;
        let rendition;
  
+@@ -80,6 +82,23 @@ export default `
+      const reactNativeWebview = window.ReactNativeWebView !== undefined && window.ReactNativeWebView!== null ? window.ReactNativeWebView: window;
+       reactNativeWebview.postMessage(JSON.stringify({ type: "onStarted" }));
+ 
++      // OpenReader (#217): startup has one terminal result, including event-only failures.
++      var opening = true;
++      function reportDisplayError(error) {
++        if (!opening) return;
++        opening = false;
++        var cause = error && error.cause || error;
++        var reason = String(cause && cause.message || cause || "The EPUB could not be displayed.");
++        // epub.js otherwise includes the entire base64 Document in openFailed.
++        if (file) reason = reason.split(String(file)).join("[document]");
++        reactNativeWebview.postMessage(JSON.stringify({
++          type: "onDisplayError",
++          reason: reason.slice(0, 500)
++        }));
++      }
++      book.on("openFailed", reportDisplayError);
++      rendition.on("displayerror", reportDisplayError);
++
+       function flatten(chapters) {
+         return [].concat.apply([], chapters.map((chapter) => [].concat.apply([chapter], flatten(chapter.subitems))));
+       }
+@@ -175,18 +194,22 @@ export default `
+           });
+         })
+         .then(function () {
+-          var displayed = rendition.display();
++          var displayed = opening ? rendition.display() : Promise.resolve();
+ 
+-          displayed.then(function () {
++          var ready = displayed.then(function () {
++            if (!opening) return;
+             var currentLocation = rendition.currentLocation();
+-
++            var progress = book.locations.percentageFromCfi(currentLocation.start.cfi);
++            opening = false;
+             reactNativeWebview.postMessage(JSON.stringify({
+               type: "onReady",
+               totalLocations: book.locations.total,
+               currentLocation: currentLocation,
+-              progress: book.locations.percentageFromCfi(currentLocation.start.cfi),
++              progress: progress,
+             }));
+           });
++          // An event can arrive synchronously inside display(); still observe its promise.
++          if (!opening) return ready;
+ 
+           book
+           .coverUrl()
+@@ -234,13 +257,9 @@ export default `
+               landmarks: item.landmarks
+             }));
+           });
++          return ready;
+         })
+-        .catch(function (err) {
+-          reactNativeWebview.postMessage(JSON.stringify({
+-          type: "onDisplayError",
+-          reason: reason
+-        }));
+-      });
++        .catch(reportDisplayError);
+ 
+       rendition.on('started', () => {
+         rendition.themes.register({ theme: theme });
 diff --git a/node_modules/@epubjs-react-native/core/lib/module/utils/GestureHandler.js b/node_modules/@epubjs-react-native/core/lib/module/utils/GestureHandler.js
 index 4aea733..9272f9c 100644
 --- a/node_modules/@epubjs-react-native/core/lib/module/utils/GestureHandler.js

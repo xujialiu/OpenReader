@@ -195,6 +195,12 @@ The visible Reader now uses the same stable empty Locations source as the Downlo
 
 The regression mounts the real bridge, passes its Reader props through the installed HTML injector and executes the installed initialization branch before and after `restart()`. Without the adapter it calls `generate(1600)` once; with it it calls `load([])` and never `generate`. This establishes removed work, not measured device battery, frame-time or time-to-first-page improvements. Generating or caching an unused index is rejected rather than optimized.
 
+## Startup has one ready or failure result (#217)
+
+The library's template now listens for `openFailed` and `displayerror` while opening and returns the initial display promise into its catch chain. epub.js leaves `book.ready` pending after an archive-open failure and leaves `display()` pending after some section-load failures, so a promise catch alone cannot report them. The original template also referenced an undefined `reason` in its one catch. Event and rejection paths share one terminal guard; an error followed by a late display success cannot send `onReady`, and errors after a successful startup remain outside this startup handler. A display error emitted synchronously must not prevent observing the display promise's rejection.
+
+The bundled epub.js wrapper retains the original archive error as `cause`: its own `openFailed` message otherwise contains the whole base64 input and loses the useful missing-file reason. The template prefers that cause, replaces any occurrence of the input with `[document]`, and bounds the posted reason to 500 characters. Both CommonJS and module builds are patched. Host regressions run each installed template with the bundled ZIP/EPUB parser and real archive reads for missing container/package, empty spine and missing chapter, plus controlled event/rejection ordering. Their rendition is a stand-in, not a WebKit layout measurement.
+
 ## Consequences
 
 The project depends on a 2022 artifact for its rendering. This is accepted with
