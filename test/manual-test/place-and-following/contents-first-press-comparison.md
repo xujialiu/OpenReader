@@ -40,28 +40,27 @@ bash test/manual-test/place-and-following/contents-first-press-leg.sh \
   to; record which Metro/JS the app ran (the launch line's version) beside the
   results.
 
-Baseline (1.0.5 (33)-beta2 JS, Metro 8093) and current (1.0.5 (33)-beta3 JS, Metro 8092) results on
-`Cultivation Online 2001-2044` (`sha256:46ca2bb1…`, 48 spine items), row `Chapter 2001` —
-2026-11-17, `tester/phase-B1-baseline-trial1`, `phase-B2-baseline-trial2`,
-`phase-B3-browsing-control`, `phase-C1-current-trial1`, `phase-C2-current-trial2`,
-`phase-C3-browsing-control`:
+## Judge the captured state, not an unconditional top offset
 
-| leg | JS | place at open | mode | view 3 absent | section 3 top (×2 settled) | heading top | reading after | shelf after | Locations input/index |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| B1 | beta2 | null | goToSection | yes ([1,2]) | 321 / 321 | 351 | utterance 59, section 3 (took) | null | undefined / 185 |
-| B2 | beta2 | null | goToSection | yes ([1,2]) | 320 / 320 | 350 | utterance 59, section 3 (took) | null | undefined / 185 |
-| B3 | beta2 | staged (utt 0) | browse | yes | 54 / 54 | 84 | utterance 0, section 1 (kept) | place kept | undefined / 185 |
-| C1 | beta3 | null | goToSection | yes ([1,2]) | 320 / 320 | 350 | utterance 59, section 3 (took) | null | `[]` / 0 |
-| C2 | beta3 | null | goToSection | yes ([1,2]) | 320 / 320 | 350 | utterance 59, section 3 (took) | null | `[]` / 0 |
-| C3 | beta3 | staged (utt 0) | browse | yes | 54 / 54 | 84 | utterance 0, section 1 (kept) | place kept | `[]` / 0 |
+Before comparing versions, require the same native shell, target, viewport,
+Document bytes, row, settings, fresh Reading and absent target view. Record
+the stored position and the actual press mode. The staged control acquires
+its position **before the row press**, not necessarily before the document
+opens.
 
-Observed equivalence: mode, the Reading being taken or kept, the placed geometry (within the
-baseline legs' own 1 px trial-to-trial variation, scrollTop 2344 vs 2345), and the staged
-Browsing landing are identical between the two JS versions. The only measured difference is
-the initialized Locations input/index — undefined plus a generated 185-entry index on the
-pre-#255 baseline, the stable empty array plus length 0 on current — the #255 change itself,
-with no effect on the press contract. A correction to an earlier interim interpretation: the
-first-press 321-class landing was tentatively recorded as the #307 first-render landing race;
-these legs supersede that reading — the landing is the deterministic taking-mode Line Position
-placement (identical on both JS versions and stable across samples), not a layout race, and
-the unconditional-54 oracle is invalid for the no-position first-press precondition.
+For a no-position `goToSection` press, check that the Reading takes the
+chapter and follows at the chosen Line Position; do not impose the Browsing
+offset. For `browse`, check the chapter against the actual reserved band and
+require the Reading and stored place to remain where they were. A constant
+such as 54 pt describes the measured phone, not every window or platform.
+
+Validate the saved JSONs, mode, geometry, shelf and Reading state explicitly.
+The leg script collects measurements: exit 0 alone does not establish either
+a correct landing or a regression. Keep failed attempts and their original
+preconditions intact; a repeated press on an already-rendered view is a
+different trial, not a repair of the first trial.
+
+The Locations input/index may deliberately differ across startup versions.
+Treat that difference separately from the Reading's navigation contract.
+Detailed measurements, source identities and corrections belong in the
+engineering log, not in this reusable recipe.
