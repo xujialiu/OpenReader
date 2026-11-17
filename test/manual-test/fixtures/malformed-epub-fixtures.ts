@@ -18,8 +18,16 @@
  *   `OEBPS/content.opf`, which is **absent from the ZIP** (missing package).
  * - `Malformed Missing Chapter.epub` — a valid container, package, nav and
  *   second chapter, but the **first spine item's file `one.xhtml` is absent**
- *   (missing chapter). epub.js leaves the initial `display()` pending for some
- *   section-load failures, which the display-promise catch now reports.
+ *   (missing chapter). The initial display never settles: epub.js reports the
+ *   section-load failure through its `displayerror` event, and the template's
+ *   terminal guard observes that event — a promise rejection alone does not
+ *   carry it (`#217` observes `openFailed`, `displayerror` and the initial
+ *   display rejections once, sharing one terminal guard).
+ *   Note the corrected path in the same terms as ADR 0011: the missing
+ *   chapter's pending display is reported by `displayerror`, not by a promise
+ *   rejection alone.
+ *   Earlier wording of this header credited the display-promise catch for
+ *   this case; that was wrong and is corrected here.
  *
  * The ZIP is `test/core/document/zip-fixture.ts`'s, stored. Add each to a
  * device's Library the way any fixture is loaded (README, "Real books"): copy
