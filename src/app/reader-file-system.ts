@@ -25,7 +25,7 @@
  */
 
 import { Directory, File, Paths } from 'expo-file-system';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import { APP_NAME } from '../../app-name';
 
@@ -59,17 +59,18 @@ export interface ReaderFileSystem {
 const RENDERER_DIRECTORY = 'epubjs';
 
 export function useReaderFileSystem(name = RENDERER_DIRECTORY): ReaderFileSystem {
-  /** No filesystem work during render (#254). The first write creates the
-   * directory inside the Reader's observed startup promise, so a full disk is
-   * reported like a failed HTML write rather than escaping from useMemo.
-   * Keep the URI slash-free: the library appends `/jszip.min.js` itself. */
-  const directory = `${Paths.cache.uri.replace(/\/+$/, '')}/${name}`;
-  const prepared = useRef<string | null>(null);
-  const prepareDirectory = useCallback(() => {
-    if (prepared.current === directory) return;
-    new Directory(directory).create({ intermediates: true, idempotent: true });
-    prepared.current = directory;
-  }, [directory]);
+  /**
+   * The directory, made if it is not there, **without its trailing slash**.
+   *
+   * `Paths.cache.uri` ends in one and the library concatenates `/jszip.min.js`
+   * onto whatever this returns, which would otherwise produce a `//` in the
+   * middle of the very path it then hands to WKWebView as read access.
+   */
+  const directory = useMemo(() => {
+    const made = new Directory(Paths.cache, name);
+    made.create({ intermediates: true, idempotent: true });
+    return made.uri.replace(/\/+$/, '');
+  }, [name]);
 
   const readAsStringAsync = useCallback(async (uri: string, options?: { encoding?: 'utf8' | 'base64' }) => {
     const file = new File(uri);
@@ -77,9 +78,8 @@ export function useReaderFileSystem(name = RENDERER_DIRECTORY): ReaderFileSystem
   }, []);
 
   const writeAsStringAsync = useCallback(async (uri: string, contents: string, options?: { encoding?: 'utf8' | 'base64' }) => {
-    prepareDirectory();
     new File(uri).writeSync(contents, { encoding: options?.encoding ?? 'utf8' });
-  }, [prepareDirectory]);
+  }, []);
 
   const deleteAsync = useCallback(async (uri: string) => {
     new File(uri).delete();

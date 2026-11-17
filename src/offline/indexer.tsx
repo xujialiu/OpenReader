@@ -1,5 +1,5 @@
 import { Reader, ReaderProvider, useReader } from '@epubjs-react-native/core';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentProps } from 'react';
 import { View, useWindowDimensions } from 'react-native';
 import { documentFile } from '../app/library';
 import { useReaderFileSystem } from '../app/reader-file-system';
@@ -7,12 +7,15 @@ import { asDocumentId } from '../core/document';
 import type { Block } from '../core/segmenter';
 import { DEBUG_MODE } from '../debug/mode';
 import { highlighterSource } from '../renderer/highlighter';
-import { EMPTY_LOCATIONS } from '../renderer/reader-locations';
-import { type NavPoint, sectionChapters } from './model';
-import { failPreparation, finishPreparation, indexDocument, type PreparationRequest, planOf, preparationRequest, useDownloads } from './runtime';
+import { sectionChapters, type NavPoint } from './model';
+import { EMPTY_LOCATIONS_SOURCE } from './reader-locations';
+import { failPreparation, finishPreparation, indexDocument, planOf, preparationRequest, useDownloads, type PreparationRequest } from './runtime';
 
 function useIndexFileSystem() { return useReaderFileSystem('epubjs-offline'); }
 const source = highlighterSource();
+// Compatibility boundary for the installed renderer's incorrectly typed JSON
+// source prop. Keep identity stable: Reader regenerates its HTML when it changes.
+const emptyLocations = EMPTY_LOCATIONS_SOURCE as unknown as ComponentProps<typeof Reader>['initialLocations'];
 
 /** Remains mounted while the selected document is synthesized, but renders
  * another section only when the scheduler asks for selected text. */
@@ -59,7 +62,7 @@ function Indexer({ document, request }: { document: string; request: Preparation
   }, []);
   if (!bytes) return null;
   return <Reader src={bytes} fileSystem={useIndexFileSystem} width={size.width} height={size.height}
-    manager="default" flow="scrolled-doc" initialLocations={EMPTY_LOCATIONS} initialLocation={initialLocation} injectedJavascript={source} onWebViewMessage={receive}
+    manager="default" flow="scrolled-doc" initialLocations={emptyLocations} initialLocation={initialLocation} injectedJavascript={source} onWebViewMessage={receive}
     onDisplayError={(error) => { if (latest.current) failPreparation(latest.current.token, error); }}
     renderLoadingFileComponent={() => null} renderOpeningBookComponent={() => null}
     // Safari's Web Inspector reaches this WebView in Debug Mode (ADR 0054).
