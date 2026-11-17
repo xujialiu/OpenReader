@@ -5,7 +5,7 @@ import { createElement } from 'react';
 import { act, create } from 'react-test-renderer';
 import { expect, it, vi } from 'vitest';
 
-import { useReaderBridge, type ReaderBridge } from '../../src/renderer/reader-bridge';
+import { type ReaderBridge, useReaderBridge } from '../../src/renderer/reader-bridge';
 
 vi.mock('@epubjs-react-native/core', () => ({
   useReader: () => ({ injectJavascript() {}, goToLocation() {}, theme: null, changeTheme() {} }),
@@ -36,7 +36,7 @@ it('the visible Reader props skip the unused whole-spine Locations scan, includi
       const until = html.indexOf('.then(function () {\n          var displayed', from);
       expect(from).toBeGreaterThan(0);
       expect(until).toBeGreaterThan(from);
-      const generate = vi.fn(() => ({ then() {} }));
+      const generate = vi.fn(() => new Promise<void>(() => {}));
       const load = vi.fn();
       await runInNewContext(`${declaration}\n${html.slice(from, until)};`, { book: { ready: Promise.resolve(), locations: { generate, load } } });
       expect(generate).not.toHaveBeenCalled();

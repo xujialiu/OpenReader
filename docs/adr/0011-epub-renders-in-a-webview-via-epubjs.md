@@ -201,6 +201,12 @@ The library's template now listens for `openFailed` and `displayerror` while ope
 
 The bundled epub.js wrapper retains the original archive error as `cause`: its own `openFailed` message otherwise contains the whole base64 input and loses the useful missing-file reason. The template prefers that cause, replaces any occurrence of the input with `[document]`, and bounds the posted reason to 500 characters. Both CommonJS and module builds are patched. Host regressions run each installed template with the bundled ZIP/EPUB parser and real archive reads for missing container/package, empty spine and missing chapter, plus controlled event/rejection ordering. Their rendition is a stand-in, not a WebKit layout measurement.
 
+## Page-file preparation can fail before any WebView exists (#254)
+
+The patched `Reader` prepares its scripts and HTML in one observed asynchronous operation, rather than an unobserved script-writing effect followed by another detached HTML-writing effect. A failure preserves its readable reason, notifies the current `onDisplayError` once and renders no loading surface or stale View. Success publishes the template URI and its read-access URIs together only after the HTML write succeeds. Cleanup prevents an abandoned preparation from continuing after an awaited operation or publishing state/errors after unmount or source changes; it does not cancel a file operation already in progress. The current error callback is held separately so an inline callback changing identity neither retries failed writes nor receives an obsolete result.
+
+`useReaderFileSystem` now computes its stable cache URI without touching the filesystem during render. Its first write creates the directory, once per path, inside that same observed operation. Constructor/create errors therefore reach the app like script or HTML write errors. The visible and Download readers retain separate `epubjs` and `epubjs-offline` paths. Tests run both installed Reader build formats with the real adapter and an injected disk, covering each script, HTML and directory failure, callback replacement, abandoned work, source changes, reopening after failure, stable hook identity and directory isolation. They inject failures rather than fill a real disk.
+
 ## Consequences
 
 The project depends on a 2022 artifact for its rendering. This is accepted with

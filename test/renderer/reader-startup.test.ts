@@ -1,9 +1,9 @@
-import { DOMParser } from '@xmldom/xmldom';
-import { zipSync, strToU8 } from 'fflate';
-import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import vm from 'node:vm';
+import { DOMParser } from '@xmldom/xmldom';
+import { strToU8, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);

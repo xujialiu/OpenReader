@@ -7,9 +7,9 @@ import { asDocumentId } from '../core/document';
 import type { Block } from '../core/segmenter';
 import { DEBUG_MODE } from '../debug/mode';
 import { highlighterSource } from '../renderer/highlighter';
-import { sectionChapters, type NavPoint } from './model';
 import { EMPTY_LOCATIONS } from '../renderer/reader-locations';
-import { failPreparation, finishPreparation, indexDocument, planOf, preparationRequest, useDownloads, type PreparationRequest } from './runtime';
+import { type NavPoint, sectionChapters } from './model';
+import { failPreparation, finishPreparation, indexDocument, type PreparationRequest, planOf, preparationRequest, useDownloads } from './runtime';
 
 function useIndexFileSystem() { return useReaderFileSystem('epubjs-offline'); }
 const source = highlighterSource();

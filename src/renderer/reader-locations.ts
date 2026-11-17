@@ -1,6 +1,3 @@
-import type { Reader } from '@epubjs-react-native/core';
-import type { ComponentProps } from 'react';
-
 /** @epubjs-react-native/core interpolates this value as JavaScript source,
  * despite declaring initialLocations as a CFI array. [] itself stringifies to
  * an empty string and emits invalid `const initialLocations = ;`. The JSON
@@ -10,5 +7,6 @@ import type { ComponentProps } from 'react';
  * template regressions in test/renderer and test/offline. */
 export const EMPTY_LOCATIONS_SOURCE = '[]';
 
-// One stable compatibility boundary for both readers, not a new array at render.
-export const EMPTY_LOCATIONS = EMPTY_LOCATIONS_SOURCE as unknown as NonNullable<ComponentProps<typeof Reader>['initialLocations']>;
+// The published CFI type is string[]. Keep this pure adapter independent of
+// React/the native library, and keep one stable value rather than a render-time array.
+export const EMPTY_LOCATIONS = EMPTY_LOCATIONS_SOURCE as unknown as string[];
