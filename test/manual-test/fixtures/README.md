@@ -37,6 +37,12 @@ npx tsx test/manual-test/fixtures/NAME.ts OUTPUT_DIRECTORY
   capitalized and Unicode controls (`en`), and the same German paragraph
   declared `deu`, `ger` and `de`. Books 2 and 4 are the ones the preparation-
   migration record downloads under pre-batch rules.
+- `malformed-epub-fixtures.ts`: three malformed EPUBs for the reader-startup
+  failure checks (#217) — an intact ZIP with **no `META-INF/container.xml`**, a
+  container naming an **absent package file**, and a spine whose **first
+  chapter file is absent**. Each must produce one terminal, readable app note
+  ("The document would not display: File not found in the epub: …") with no
+  perpetual layout and no base64 in the reason.
 - `issue86-fixture.ts`: five short chapters and a text-less volume page, for
   the #86 skip/Contents measurements (`../player-and-reading-held/skips-while-playing.md`). Its contents
   are an **NCX on purpose**: epub.js spells an xhtml nav's hrefs with the nav
