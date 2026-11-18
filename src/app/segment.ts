@@ -2,18 +2,16 @@
  * Blocks into Utterances, and the two questions that come with doing it more
  * than once.
  *
- * This is where the sentence splitter is bound. `core/segmenter/index.ts` takes
- * `splitSentences` as an argument and deliberately names no package — ADR 0006
- * calls upstream `sentencex` "the first segmenter here, not the final one", so
- * replacing it should be rewiring one call site rather than editing that
- * directory. This is that call site, and there is exactly one.
+ * The Reading uses the same splitter and length guard as Download preparation.
+ * The binding lives in `core/segmenter/sentencex.ts`, apart from the core that
+ * takes a splitter as an argument (ADR 0006).
  *
  * Platform-free, like `settings.ts` beside it, and for the same reason: what it
  * decides is testable and what the renderer does with the result is not.
  */
 
-import { segmentBlocks, type Block, type Utterance } from '../core/segmenter';
-import { splitWithSentencex } from '../core/segmenter/sentencex';
+import type { Block, Utterance } from '../core/segmenter';
+import { segmentNarration } from '../core/segmenter/sentencex';
 
 /**
  * The Utterances of every Block the renderer has reported, in reading order.
@@ -23,7 +21,7 @@ import { splitWithSentencex } from '../core/segmenter/sentencex';
  * that a document with two languages in it is read in the app's one Voice).
  */
 export function segmentDocument(blocks: readonly Block[], language: string): Utterance[] {
-  return segmentBlocks(blocks, language, { splitSentences: splitWithSentencex });
+  return segmentNarration(blocks, language);
 }
 
 /**

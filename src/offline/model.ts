@@ -1,7 +1,6 @@
 import type { ProviderId } from '../core/providers/types';
 import type { Block } from '../core/segmenter';
-import { segmentBlocks } from '../core/segmenter';
-import { splitWithSentencex } from '../core/segmenter/sentencex';
+import { segmentNarration } from '../core/segmenter/sentencex';
 import type { DocumentNavigation } from '../core/document/navigation';
 
 export interface Chapter {
@@ -67,7 +66,7 @@ export function sectionChapters(section: number, blocks: Block[], points: NavPoi
     depth: 0, parent: null, block: 0,
   });
   const chapters: Chapter[] = ordered.map(({ block: _, ...point }) => ({ ...point, texts: [] }));
-  for (const utterance of segmentBlocks(blocks, language, { splitSentences: splitWithSentencex })) {
+  for (const utterance of segmentNarration(blocks, language)) {
     if (!utterance.speakable) continue;
     const block = utterance.spans[0].block;
     let at = 0;

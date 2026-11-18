@@ -178,6 +178,26 @@ it('keeps checks through an update, then Rechecks unchanged sentences without an
   expect(mock.asked).toEqual([]);
   expect(disk.size).toBe(2);
 });
+it('Rechecks a previously saved oversized Utterance without deleting its Clip or synthesizing replacements (#290)', async () => {
+  const long = '字'.repeat(4097);
+  await repository.saveSection('book', 0, [chapter('section-0', [long, unchanged])]);
+  await repository.saveClip('book', voice, long, clip, () => true);
+  await recordRevision(2); // Last preparation could use one Clip for the whole passage.
+  await launch(); await ready();
+  expect(await shown()).toEqual({ complete: true, count: 2, prepared: [true, true] });
+  await vi.waitFor(() => expect(runtime.preparationRequest()).not.toBeNull(), { interval: 1 });
+  const request = runtime.preparationRequest();
+  if (!request) throw new Error('Expected a Recheck for text prepared by revision 2.');
+  runtime.finishPreparation(request.token, sectionChapters(0, [{ text: long }, { text: unchanged }], [], 'zh'));
+  await vi.waitFor(async () => expect(await shown()).toMatchObject({ complete: false, count: 1 }), { interval: 1 });
+  expect((await repository.readClip('book', voice, long)).clip).toEqual(clip);
+  expect(runtime.downloadTasks('book')[0].recheckHeld).toEqual(['section-0']);
+  runtime.toggleTask(runtime.downloadTasks('book')[0]); // Resume all does not authorize repair.
+  mock.connectivity(true);
+  await flush(); await flush();
+  expect(mock.asked).toEqual([]);
+});
+
 it('a changed sentence loses only its check, not its partial count, and only Download selected may fill the hole', async () => {
   await launch(); await ready();
   await recheck();

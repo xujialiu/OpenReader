@@ -210,6 +210,14 @@ This preserves the owner's choice: checks stay through an update and only actual
 
 The host regression exercises the real runtime, scheduler, repository and SQLite: retained checks, changed and unchanged text, partial counts, durable no-auto-download holds, explicit re-selection, unfinished Downloads, foreground interruption, Download priority, late replies, save failure and reopen. `recheck-catalog.test.ts` separately verifies atomic rollback and migration, while `rechecks.test.ts` checks ordering, yielding and bounded retries. These do not measure WebView layout or native audio continuity; that remains device verification. Exploratory recutting of stored individual sentences is not an estimate of how many whole chapters will lose checks: it lacks the original Block context and cannot measure merges or native rendering.
 
+## Amendment (#290): bound the largest Utterance after rejoining
+
+OpenAI speech refuses inputs above 4,096 characters. Reading and Download preparation now share `segmentNarration`, whose last-resort ceiling is 4,096 UTF-16 code units after Block rejoining and ordinary sentence splitting. A span over it is divided at whitespace or, when there is none, a grapheme boundary. It is an application safety bound, not a limit inferred for every Provider; more restrictive Provider limits still apply. An indivisible grapheme is left intact, including a pathological grapheme larger than the ceiling.
+
+A chapter has one prepared text shared by Voices, so the guard is not a per-Voice segmentation setting. Ordinary Utterances, offsets, and the Reading Position format do not change. Even for a Provider that accepted an older oversized Utterance, the old saved Clip may no longer cover all the new pieces. Segmentation revision 3 uses the Recheck in the preceding amendment: the old audio survives, unchanged Clips still count, and a completed chapter with newly missing audio cannot trigger synthesis without a fresh Download selection.
+
+At the host boundary, a 4,096-character control reaches the OpenAI adapter unchanged. A 4,097-character Block, a comma-only Chinese passage, and unpunctuated verse all reach a capped endpoint in full; the real playback engine advances to the following Block and the real scheduler finishes the chapter. The SQLite/runtime regression starts with an old completed oversized Clip and verifies retained audio and no synthesis after Recheck and Resume all.
+
 ## Amendment (#190, #167, #212): one rule for where a Contents entry starts, shared with the Reader
 
 `openreaderOfflineSection` placed an entry at the first Block that was its anchor, was inside it or followed it, and threw `A chapter anchor could not be found` for an anchor the file lacked. Both rules were wrong for a case seen in real files, and the Reader now takes the same rule to tell apart the rows of a shared file (ADR 0020, #212), so they are replaced by one function, `anchorBlock`, used for both.

@@ -1,6 +1,7 @@
 import segment from 'sentencex';
 
 import { LANGUAGE_ALIASES } from '../locale-name-table';
+import { type Block, segmentBlocks, type Utterance } from './index';
 import type { SplitSentences } from './sentences';
 
 /**
@@ -78,6 +79,17 @@ import type { SplitSentences } from './sentences';
  * mapping a tag onto one package's keys is this file's business.
  */
 export const splitWithSentencex: SplitSentences = (language, text) => segment(sentencexLanguage(language), text);
+
+/**
+ * The app's shared cut for Reading and Offline Narration. A section has one
+ * preparation, independent of the Voice that will speak it. The safety ceiling
+ * is sized for OpenAI speech's 4,096-character input limit (#290); Providers
+ * with stricter limits still handle them at their own boundary. Ordinary
+ * sentence cuts stay as they are, and the fallback keeps source coordinates.
+ */
+export function segmentNarration(blocks: readonly Block[], language: string): Utterance[] {
+  return segmentBlocks(blocks, language, { splitSentences: splitWithSentencex, maxLength: 4096 });
+}
 
 /**
  * The 30 languages 0.4.2 has rules of its own for: the keys of the package's

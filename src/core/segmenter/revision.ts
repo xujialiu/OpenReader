@@ -6,5 +6,6 @@
  *
  * 2: brackets pair by type, an inch mark or clipped word is no quotation mark,
  * and a citation bracket alone continues no sentence (#183, #244, #243, #247).
+ * 3: Reading and Download preparation cut oversized Utterances (#290).
  */
-export const SEGMENTATION = 2;
+export const SEGMENTATION = 3;

@@ -45,11 +45,10 @@ export interface SpanOptions {
    *
    * It exists for the block that holds no sentence terminator at all — a poem,
    * a chapter a converter emitted as one `<p>`, a Chinese paragraph punctuated
-   * only with `，`. Without it such a block is one utterance of tens of
-   * thousands of characters: no provider accepts it (Speechify's cap is 2000),
-   * reading ahead and resuming lose all resolution, and the highlight covers
-   * the screen. With it the block is cut on whitespace, or on a grapheme
-   * boundary where the script has none.
+   * only with `，`. Without it such a Block is one Utterance of tens of
+   * thousands of characters: it may exceed the Provider's input limit (#290),
+   * and the highlight covers the screen. With it the span is cut on whitespace
+   * or, where the script has none, on a grapheme boundary.
    */
   maxLength?: number;
 }
