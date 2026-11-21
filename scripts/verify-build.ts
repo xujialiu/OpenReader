@@ -1,6 +1,6 @@
 /** Usage: node --require tsx/cjs scripts/verify-build.ts --app PATH.app --variant formal|free|debug */
-import { APP_VERSION } from '../app-version';
-import { resolveBuildVariant } from '../build-variant';
+import { APP_VERSION } from '../src/build/app-version';
+import { resolveBuildVariant } from '../src/build/build-variant';
 import { verifyArtifact } from './build/artifact';
 
 export function main(argv: string[]): void {

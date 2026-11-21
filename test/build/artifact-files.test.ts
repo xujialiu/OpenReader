@@ -5,8 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
 
-import { APP_VERSION } from '../../app-version';
-import { buildIdentity } from '../../build-variant';
+import { APP_VERSION } from '../../src/build/app-version';
+import { buildIdentity } from '../../src/build/build-variant';
 import { inspectBundle, nativeEvidence } from '../../scripts/build/artifact';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));

@@ -29,7 +29,7 @@ if (!out || !documentId || !provider || !voice) {
 // Loaded by the module's own name, as download-chapter.cjs does. One expression,
 // evaluated per sample; `forEach` because --eval code is compiled without Babel.
 const runtime = `(() => { let found; __r.getModules().forEach((m, id) => { if (m.verboseName === 'src/offline/runtime.ts') found = __r(id); }); if (!found) throw Error('runtime'); return found; })()`;
-const version = `(() => { let v; __r.getModules().forEach((m, id) => { if (m.verboseName === 'app-version.ts') v = __r(id).APP_VERSION; }); return v ?? '?'; })()`;
+const version = `(() => { let v; __r.getModules().forEach((m, id) => { if (m.verboseName === 'src/build/app-version.ts') v = __r(id).APP_VERSION; }); return v ?? '?'; })()`;
 const expression = `(() => { const a = ${JSON.stringify({ documentId, provider, voice })}; const r = ${runtime}; const t = r.downloadTasks(a.documentId).find(t => t.voice.provider === a.provider && t.voice.voice === a.voice); return JSON.stringify({ v: ${version}, state: t ? t.state : null, writing: t ? (t.writing ?? null) : null, current: t ? (t.current ?? null) : null, occupied: r.occupied(a.documentId) }); })()`
 ;
 

@@ -6,7 +6,7 @@ const path = require('path');
 const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
-const { resolveBuildVariant } = require('./build-variant.ts');
+const { resolveBuildVariant } = require('./src/build/build-variant.ts');
 const { resolveVariantFile } = require('./scripts/build/metro-resolution.ts');
 const variant = resolveBuildVariant({
   variant: process.env.EXPO_PUBLIC_OPENREADER_VARIANT,

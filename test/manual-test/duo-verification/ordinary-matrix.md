@@ -55,7 +55,7 @@ python3 test/manual-test/kit/ios_ready.py "$UDID" "$OUT/readiness-$ROLE" \
   --timeout 20 --metro http://127.0.0.1:$METRO_PORT
 # Version-line provenance (Debug role; the probe at
 # test/manual-test/settings/SettingsVersionProbe.swift reads the current tree's
-# app-version.ts — run it from the parent's final merged tree):
+# src/build/app-version.ts — run it from the parent's final merged tree):
 bash test/manual-test/kit/run-probe.sh SettingsVersionProbe "$UDID" \
   "$OUT/version-$ROLE" --mode debug -collect-test-diagnostics never
 ```

@@ -1,4 +1,4 @@
-import { APP_VERSION } from '../../app-version';
+import { APP_VERSION } from '../build/app-version';
 import { shownVersion } from '../debug/mode';
 import { ActionRow, DetailRow, Footnote, LinkRow, NavigationRow, SettingsGroup, SettingsPage } from './controls';
 import { AUTHOR, EMAIL, emailAuthor, openPrivacyPolicy, openRepository, REPOSITORY_NAME } from './own-site';

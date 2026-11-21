@@ -61,7 +61,7 @@
 import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 
-import { APP_NAME } from '../../app-name';
+import { APP_NAME } from '../build/app-name';
 import { offlineNative } from '../../modules/open-reader-offline';
 
 import {

@@ -1,4 +1,4 @@
-import { buildIdentity, type BuildVariant } from '../../build-variant';
+import { buildIdentity, type BuildVariant } from '../build/build-variant';
 import { BUILD_VARIANT } from '../build/variant';
 
 /** A fixed role, not __DEV__, controls Debug Mode even with Metro (#324). */

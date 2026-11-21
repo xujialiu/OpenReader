@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { BuildEnvironment } from '../../build-variant';
+import type { BuildEnvironment } from '../../src/build/build-variant';
 
 async function modeWith(environment: BuildEnvironment = {}, dev = false) {
   vi.resetModules();

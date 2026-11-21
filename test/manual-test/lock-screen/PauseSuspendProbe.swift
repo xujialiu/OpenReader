@@ -35,7 +35,7 @@ final class PauseSuspendProbe: XCTestCase {
     let root = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent().deletingLastPathComponent()
       .deletingLastPathComponent().deletingLastPathComponent()
-    guard let text = try? String(contentsOf: root.appendingPathComponent("app-version.ts"), encoding: .utf8),
+    guard let text = try? String(contentsOf: root.appendingPathComponent("src/build/app-version.ts"), encoding: .utf8),
           let line = text.split(separator: "\n").first(where: { $0.hasPrefix("export const APP_VERSION = ") })
     else { return nil }
     return line.split(separator: "'").dropFirst().first.map(String.init)
@@ -71,7 +71,7 @@ final class PauseSuspendProbe: XCTestCase {
     if app.buttons["Back"].exists { app.buttons["Back"].tap() }
     XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 15), "Library header did not appear")
     app.buttons["Settings"].tap()
-    guard let tree = workingTreeVersion() else { XCTFail("Could not read APP_VERSION from app-version.ts"); return }
+    guard let tree = workingTreeVersion() else { XCTFail("Could not read APP_VERSION from src/build/app-version.ts"); return }
     // A Metro build has Debug Mode: its own Build Number and `-debug` (#82, #310).
     let expected = "\(debugBuild(tree))-debug"
     let version = app.staticTexts["Version \(expected)"]

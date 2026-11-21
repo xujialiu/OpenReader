@@ -27,7 +27,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { useCallback, useMemo, useRef } from 'react';
 
-import { APP_NAME } from '../../app-name';
+import { APP_NAME } from '../build/app-name';
 
 /**
  * What `ReaderProps.fileSystem` must return.

@@ -70,7 +70,7 @@ end, so check these first:
    missing one otherwise surfaces only when the JavaScript is bundled. The
    repair is in Troubleshooting.
 2. `ios/` belongs to the Debug role: Info.plist's `OpenReaderBuildVariant`
-   is `debug`, and `CFBundleVersion` is the formal base in `app-version.ts`
+   is `debug`, and `CFBundleVersion` is the formal base in `src/build/app-version.ts`
    plus two. For a missing/stale native tree or changed modules/configuration,
    run `EXPO_PUBLIC_OPENREADER_VARIANT=debug npx expo prebuild --platform ios`,
    which runs pod install. SDK 57 recreates native folders by default;

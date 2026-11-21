@@ -17,7 +17,7 @@ import { createNavigationContainerRef } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { createContext, useContext } from 'react';
 
-import { APP_NAME } from '../../app-name';
+import { APP_NAME } from '../build/app-name';
 import type { DocumentId } from '../core/document';
 import type { FolderId } from '../core/folders';
 import type { ProviderId } from '../core/providers/types';

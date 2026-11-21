@@ -6,10 +6,10 @@ With the current Debug app connected to Metro:
 bash test/manual-test/kit/run-probe.sh SettingsVersionProbe SIMULATOR_UDID /tmp/openreader-settings-version-01
 ```
 
-This relaunches the app (so a JavaScript-only change, such as `app-version.ts`,
+This relaunches the app (so a JavaScript-only change, such as `src/build/app-version.ts`,
 is proven current rather than assumed), opens Settings, and requires an
 element labelled exactly `Version <APP_VERSION with base + 2>-debug`,
-reading the current tree's `app-version.ts` at run time (#324, ADR 0086).
+reading the current tree's `src/build/app-version.ts` at run time (#324, ADR 0086).
 Use `--mode formal` for the unchanged formal base without a role suffix,
 `--mode free` for base + 1 with `-free`, or `--mode debug` for base + 2 with
 `-debug`. The old `--mode release` aliases formal; omitted mode defaults to

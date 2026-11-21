@@ -10,7 +10,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { AppState } from 'react-native';
 
-import { APP_VERSION } from '../../app-version';
+import { APP_VERSION } from '../build/app-version';
 import { debugLogNative } from '../../modules/open-reader-debug-log';
 import { offlineNative } from '../../modules/open-reader-offline';
 import {

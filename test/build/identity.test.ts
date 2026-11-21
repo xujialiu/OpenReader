@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildIdentity, resolveBuildVariant, type BuildVariant } from '../../build-variant';
+import { buildIdentity, resolveBuildVariant, type BuildVariant } from '../../src/build/build-variant';
 
 describe('one identity for each release copy (#324)', () => {
   it('defaults to the formal copy and accepts only named roles', () => {

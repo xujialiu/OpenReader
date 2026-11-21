@@ -2,7 +2,7 @@ import { createElement, type ReactNode } from 'react';
 import { act, create } from 'react-test-renderer';
 import { afterEach, expect, it, vi } from 'vitest';
 
-import { APP_VERSION } from '../../app-version';
+import { APP_VERSION } from '../../src/build/app-version';
 import { DEFAULT_SETTINGS } from '../../src/app/settings';
 
 /** Debug is two above the formal base (#324, ADR 0086). */

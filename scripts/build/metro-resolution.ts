@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type { Resolution } from 'metro-resolver';
 
-import type { BuildVariant } from '../../build-variant';
+import type { BuildVariant } from '../../src/build/build-variant';
 
 const replacement: Record<string, string> = {
   'src/app/purchase.ts': 'src/app/purchase-free.ts',

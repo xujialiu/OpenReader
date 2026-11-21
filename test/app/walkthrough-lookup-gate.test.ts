@@ -4,7 +4,7 @@ import { createElement } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-import type { BuildVariant } from '../../build-variant';
+import type { BuildVariant } from '../../src/build/build-variant';
 import type { LookupGateStatus } from '../../src/app/walkthrough-lookup-gate';
 import type { LookupHandle } from '../../src/app/use-lookup';
 import type { ReaderBridge } from '../../src/renderer/reader-bridge';

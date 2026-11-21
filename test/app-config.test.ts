@@ -7,7 +7,7 @@ import { IOSConfig, type ExportedConfig, type ExportedConfigWithProps, type Info
 import { describe, expect, it } from 'vitest';
 
 import { prebuiltConfig } from './build/config';
-import { APP_VERSION } from '../app-version';
+import { APP_VERSION } from '../src/build/app-version';
 import { shownVersion } from '../src/debug/mode';
 import manifest from '../package.json';
 import withContinuedProcessing from '../plugins/with-continued-processing';

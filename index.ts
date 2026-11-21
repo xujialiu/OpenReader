@@ -4,9 +4,6 @@ import { registerRootComponent } from 'expo';
 import './src/debug/launch';
 // Before Reanimated loads, which warns in development when Reduce Motion is on (#341).
 import './src/app/reduced-motion-warning';
-import App from './App';
+import { App } from './src/app';
 
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
 registerRootComponent(App);

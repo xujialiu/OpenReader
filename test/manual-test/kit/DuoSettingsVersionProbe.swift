@@ -7,7 +7,7 @@ import XCTest
 // landscape navigation bar exposes no buttons to XCUITest (measured 17:16:
 // "No matches found for Descendants matching type Button"). This probe checks
 // only what the acceptance needs: the exact version line (derived from
-// app-version.ts at run time, Debug role = base + 2 and -debug suffix), from a
+// src/build/app-version.ts at run time, Debug role = base + 2 and -debug suffix), from a
 // real navigation into Settings. Attaches to the RUNNING app; never launches,
 // never terminates, never taps Play, changes no setting.
 //
@@ -32,7 +32,7 @@ final class DuoSettingsVersionProbe: XCTestCase {
     let root = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent().deletingLastPathComponent()
       .deletingLastPathComponent().deletingLastPathComponent()
-    guard let text = try? String(contentsOf: root.appendingPathComponent("app-version.ts"), encoding: .utf8),
+    guard let text = try? String(contentsOf: root.appendingPathComponent("src/build/app-version.ts"), encoding: .utf8),
           let line = text.split(separator: "\n").first(where: { $0.hasPrefix("export const APP_VERSION = ") })
     else { return nil }
     return line.split(separator: "'").dropFirst().first.map(String.init)
@@ -50,7 +50,7 @@ final class DuoSettingsVersionProbe: XCTestCase {
     settings.tap()
 
     guard let beta = workingTreeVersion() else {
-      return XCTFail("Could not read APP_VERSION from app-version.ts")
+      return XCTFail("Could not read APP_VERSION from src/build/app-version.ts")
     }
     // Debug role: formal base + 2 with the -debug suffix (ADR 0086, #324).
     guard let open = beta.firstIndex(of: "("), let close = beta[open...].firstIndex(of: ")"),

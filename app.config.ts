@@ -5,7 +5,7 @@
  * this line local TypeScript config plugins cannot be loaded.
  *
  * It must stay above every other import: the loader has to be registered before
- * anything tries to resolve a TypeScript file through it — and `./app-name`
+ * anything tries to resolve a TypeScript file through it — and `./src/build/app-name`
  * below is one. Expo transpiles this file and only this file; everything the
  * transpiled result requires is resolved by plain Node, so the hoisting is
  * load-bearing for the app's own name as much as for the plugin. It is a
@@ -15,9 +15,9 @@ import 'tsx/cjs';
 
 import type { ExpoConfig } from 'expo/config';
 
-import { APP_NAME } from './app-name';
-import { APP_VERSION } from './app-version';
-import { buildIdentity, resolveBuildVariant } from './build-variant';
+import { APP_NAME } from './src/build/app-name';
+import { APP_VERSION } from './src/build/app-version';
+import { buildIdentity, resolveBuildVariant } from './src/build/build-variant';
 
 /**
  * #127, ADR 0070. `APP_VERSION` is `x.y.z (n)` or `x.y.z (n)-betaN`: the

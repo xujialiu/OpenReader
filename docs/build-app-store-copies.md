@@ -30,7 +30,7 @@ git diff --quiet && git diff --cached --quiet
 : "${OUT:?set a new absolute output directory}"
 test ! -e "$OUT"
 mkdir -p "$OUT"
-node --require tsx/cjs -e "if (require('./app-version.ts').APP_VERSION.includes('-beta')) throw Error('Uploads require a Beta-less source commit')"
+node --require tsx/cjs -e "if (require('./src/build/app-version.ts').APP_VERSION.includes('-beta')) throw Error('Uploads require a Beta-less source commit')"
 TEAM=$(env -u EXPO_PUBLIC_OPENREADER_DEBUG_MODE -u EXPO_PUBLIC_OPENREADER_UNLOCKED \
   EXPO_PUBLIC_OPENREADER_VARIANT=formal EXPO_NO_DOTENV=1 \
   node --require tsx/cjs -p "require('./app.config.ts').default.ios.appleTeamId")

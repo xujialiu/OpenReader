@@ -37,7 +37,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { documentNameProblem, freeDocumentName, type FolderId, type FolderSnapshot, type FolderStore, type FolderTree } from '../core/folders';
 import { openFolderStore } from './folder-storage';
 
-import { APP_NAME } from '../../app-name';
+import { APP_NAME } from '../build/app-name';
 import { nextStamp, stampPlace, type DocumentId, type LibraryEntry, type ReadingPlace } from '../core/document';
 import type { PositionsItem } from '../core/sync/positions-file';
 

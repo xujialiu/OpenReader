@@ -1,8 +1,8 @@
 /** Usage: node --require tsx/cjs scripts/verify-bundle.ts --bundle FILE --variant formal|free|debug */
 import { readFileSync } from 'node:fs';
 
-import { APP_VERSION } from '../app-version';
-import { resolveBuildVariant } from '../build-variant';
+import { APP_VERSION } from '../src/build/app-version';
+import { resolveBuildVariant } from '../src/build/build-variant';
 import { inspectBundle } from './build/artifact';
 import { bundleSources } from './build/source-map.mjs';
 

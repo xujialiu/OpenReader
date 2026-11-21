@@ -33,14 +33,14 @@ final class SettingsVersionProbe: XCTestCase {
     settings.tap()
   }
 
-  /// `APP_VERSION` as the working tree has it, read from app-version.ts at run
+  /// `APP_VERSION` as the working tree has it, read from src/build/app-version.ts at run
   /// time so the probe follows every bump. The runner can read host files, as
   /// SyncProbe's parameter file already relies on.
   func workingTreeVersion() -> String? {
     let root = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent().deletingLastPathComponent()
       .deletingLastPathComponent().deletingLastPathComponent()
-    guard let text = try? String(contentsOf: root.appendingPathComponent("app-version.ts"), encoding: .utf8),
+    guard let text = try? String(contentsOf: root.appendingPathComponent("src/build/app-version.ts"), encoding: .utf8),
           let line = text.split(separator: "\n").first(where: { $0.hasPrefix("export const APP_VERSION = ") })
     else { return nil }
     return line.split(separator: "'").dropFirst().first.map(String.init)
@@ -74,7 +74,7 @@ final class SettingsVersionProbe: XCTestCase {
     // The version line's accessibility label, exactly. `accessibilityLabel`
     // replaces what iOS exposes, so the raw version text is not a separately
     // queryable label; the screenshot is what proves that.
-    guard let beta = workingTreeVersion() else { return XCTFail("Could not read APP_VERSION from app-version.ts") }
+    guard let beta = workingTreeVersion() else { return XCTFail("Could not read APP_VERSION from src/build/app-version.ts") }
     let mode = Bundle(for: Self.self).object(forInfoDictionaryKey: "ManualMode") as? String ?? "debug"
     let role = mode == "release" ? "formal" : (["formal", "free", "debug"].contains(mode) ? mode : "debug")
     let offset = role == "formal" ? 0 : (role == "free" ? 1 : 2)

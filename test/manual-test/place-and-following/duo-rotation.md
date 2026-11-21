@@ -113,7 +113,7 @@ and inspect each raw XCTest method and its actual `Executed … failures` lines.
 Do not infer success from the diagnostic print following an assertion.
 
 `DuoSettingsVersionProbe/testVersionLineVisible` enters Settings with native
-button taps and derives the exact Debug version from `app-version.ts`.
+button taps and derives the exact Debug version from `src/build/app-version.ts`.
 `DuoBannerDismissProbe` distinguishes an already absent banner from a delivered
 dismissal; its absent-banner success is not evidence that the tapping branch
 ran. Capture every screen when the app uses the inner display, since

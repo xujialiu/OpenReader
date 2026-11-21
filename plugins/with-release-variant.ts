@@ -1,6 +1,6 @@
 import { withPodfile, withPodfileProperties, type ConfigPlugin } from 'expo/config-plugins';
 
-import type { BuildVariant } from '../build-variant';
+import type { BuildVariant } from '../src/build/build-variant';
 
 /** SDK 57 use_expo_modules! forwards exclude to resolution AND the native module provider. */
 export function podfileForVariant(podfile: string, variant: BuildVariant): string {

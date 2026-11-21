@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildIdentity, type BuildVariant } from '../../build-variant';
+import { buildIdentity, type BuildVariant } from '../../src/build/build-variant';
 import { inspectArtifact } from '../../scripts/build/artifact';
 
 const source = '1.0.2 (13)-beta13';

@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { closeSync, openSync, readdirSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 
-import { buildIdentity, type BuildVariant } from '../../build-variant';
+import { buildIdentity, type BuildVariant } from '../../src/build/build-variant';
 import { isPurchaseSource } from './metro-resolution';
 
 interface ArtifactEvidence {

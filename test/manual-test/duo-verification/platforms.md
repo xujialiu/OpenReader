@@ -31,7 +31,7 @@ the Mac runtime gate. The behavior boundary is [design
   network recipients and cleanup before testing. Do not browse owner Documents
   or keys. Screenshots/logs containing private text stay outside git. Do not
   start playback or mute the Mac.
-- Derive the expected Debug identity from the admitted commit's `app-version.ts`
+- Derive the expected Debug identity from the admitted commit's `src/build/app-version.ts`
   (formal base + 2, `-debug`; ADR 0086), not an older issue's reference build.
   Record native identity, embedded bundle provenance and visible Settings
   Version separately. Matching native numbers alone do not identify a Beta or

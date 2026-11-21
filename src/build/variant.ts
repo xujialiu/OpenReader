@@ -1,4 +1,4 @@
-import { resolveBuildVariant } from '../../build-variant';
+import { resolveBuildVariant } from './build-variant';
 
 /** Node/test fallback. Metro replaces this module with one static role before traversing dependencies. */
 export const BUILD_VARIANT = resolveBuildVariant({

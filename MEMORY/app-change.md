@@ -11,7 +11,7 @@ In order: set the beta version, hand the frozen tree to the installer and tester
 
 ## Every app change carries a beta version
 
-Settings shows the version derived from `APP_VERSION` in `app-version.ts`, so
+Settings shows the version derived from `APP_VERSION` in `src/build/app-version.ts`, so
 the owner can identify the running copy. The accepted rule is
 [ADR 0086](../docs/adr/0086-three-copies-for-three-recipients.md), replacing
 ADR 0083's pairs. The three-copy implementation has local native/UI
@@ -51,7 +51,7 @@ before #127 stay as written. Configuration and tests must derive the native
 numbers and Settings lines from the same formal base and selected role.
 
 Worktrees that start from the same base can pick the same Beta. Before naming
-one, read `app-version.ts` on `main` and in each worktree (`git worktree list`)
+one, read `src/build/app-version.ts` on `main` and in each worktree (`git worktree list`)
 and take the next after the highest with the same Build Number. A Beta spent
 on a branch that was never merged stays spent: Build 7's beta2 to beta9 went to
 the Downloads manager turned down in #137, and beta9 is on the owner's phone, so

@@ -118,7 +118,7 @@ def build(args):
         raise ValueError("Commit the intended source first; this script builds a clean checkout.")
     if not (ROOT / "node_modules/expo").is_dir():
         raise ValueError("Run npm ci in this checkout first.")
-    version, short, number = expected_version((ROOT / "app-version.ts").read_text())
+    version, short, number = expected_version((ROOT / "src/build/app-version.ts").read_text())
     native = ROOT / "ios/OpenReader/Info.plist"
     if (ROOT / "ios").exists():
         info = plistlib.loads(native.read_bytes())

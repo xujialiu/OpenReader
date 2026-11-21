@@ -55,7 +55,7 @@ selection rules below.
    remains separately approved. On partial failure, stop, record/report below
    and ask the owner whether to retry or rebuild; preserve identities/roles.
 5. **Tag the complete set.** After all three are verified and processed, check
-   `git show "${RELEASE_COMMIT}:app-version.ts"` has the uploaded identity and no
+   `git show "${RELEASE_COMMIT}:src/build/app-version.ts"` has the uploaded identity and no
    Beta. Annotate `X.Y.Z(N+2)` with all three identities, explicitly targeting
    `"$RELEASE_COMMIT"`, never defaulting to a later HEAD. Verify its resolved
    commit equals that SHA; recover the actual upload SHA rather than guessing.
