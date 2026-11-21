@@ -9,7 +9,7 @@ simulator delivery solely for publication.
 The parent serially dispatches three roles. Each role has one shared workflow
 under `.agents/`; the definitions under `.codex/agents/`, `.claude/agents/` and
 `.pi/agents/` select the harness's model and effort and point to that workflow.
-Use those declared settings; an unavailable model is a blocker to report.
+Start with those settings. For a GLM quota error, follow the [subagent model fallback](../../.agents/subagent-models.md). Report other model availability failures.
 
 | Role | Responsibility | Completion evidence |
 | --- | --- | --- |

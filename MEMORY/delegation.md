@@ -1,5 +1,7 @@
 # Delegation
 
+When a GLM subagent exhausts its quota, follow the [model fallback](../.agents/subagent-models.md).
+
 ## Waiting for delegated agents
 
 Until a delegated agent returns, the main agent must wait patiently for its completion notification or use a long blocking wait. Outside the check-ins below, do not repeatedly check agent status, turn short wait timeouts into a polling loop, or send repeated waiting-only updates. An ordinary timeout is not a reason to inspect status or interrupt the agent; continue waiting for its result. Resume dependent work only after the result arrives or the owner changes the task.
