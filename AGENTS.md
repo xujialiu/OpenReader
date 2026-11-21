@@ -24,7 +24,7 @@ Each file under `MEMORY/` holds the rules for one kind of work. Read it in full 
 
 - **Issues** — [MEMORY/github-workflow.md](MEMORY/github-workflow.md): a feature, bug fix or substantial change starts with an issue; small, clear chores go straight ahead. Read before starting such work, before starting or resuming any issue work (research and verification included), before creating, labelling, commenting on or closing an issue, and before merging a pull request someone else opened or copying code in from Zotero-OpenReader.
 - **Interface** — [MEMORY/interface.md](MEMORY/interface.md): before adding or changing any text, screen, control or drawer the owner sees.
-- **Documentation** — [MEMORY/documentation.md](MEMORY/documentation.md): before writing to `docs/design/`, `docs/adr/`, a guide in `docs/`, `notes/`, `CONTEXT.md` or `README.md`, or when a term or decision changes.
+- **Documentation** — [MEMORY/documentation.md](MEMORY/documentation.md): before saving evidence, writing to `docs/design/`, `docs/adr/`, a guide in `docs/`, `notes/`, `CONTEXT.md` or `README.md`, or when a term or decision changes.
 - **Delegation** — [MEMORY/delegation.md](MEMORY/delegation.md): before handing work to another agent, waiting on one, or running work in parallel.
 - **App workflow** — [docs/agents/app-workflow.md](docs/agents/app-workflow.md): before dispatching `app-installer`, `app-tester` or `resource-cleaner`: source identity, serial handoffs and evidence retention.
 - **App change** — [MEMORY/app-change.md](MEMORY/app-change.md): after changing app behavior, dependencies or tracked native configuration: beta version, `app-installer`, `app-tester`, latest app left in the simulator. Release identity-only changes follow the release guide.

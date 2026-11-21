@@ -91,8 +91,9 @@ tool. An explicit cleanup request or `finish worktree` already authorizes
 release. Follow [cleanup.md](../../MEMORY/cleanup.md) and the
 [finish-worktree ordering](../../MEMORY/finish-worktree.md).
 
-Before dispatching `resource-cleaner`, persist useful verification evidence in
-test records or issue comments and pass the authorization, ledger, retained
+Before dispatching `resource-cleaner`, record verification results in test
+records or issue comments, keep [raw evidence](../../MEMORY/documentation.md#evidence)
+for review, and pass the authorization, ledger, retained
 artifact paths and accepted/merged sub-worktrees. Raw screenshots, logs and
 reports still needed for review stay available; unmerged work stays intact.
 Stop resource consumers before removing their directories. The cleaner reports

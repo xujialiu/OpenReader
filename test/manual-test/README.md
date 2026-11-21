@@ -10,8 +10,9 @@ prerequisites, expected result and what it cannot prove into the recipe it
 belongs to. One-off probes may stay temporary; a working tool needed for the
 next run belongs here.
 
-Keep generated Xcode projects, builds, logs and screenshots outside the
-repository. Accept device IDs and artifact destinations as arguments. Load only
+Keep generated Xcode projects and builds outside the repository. For logs and
+screenshots, follow the [evidence storage rule](../../MEMORY/documentation.md#evidence).
+Accept device IDs and artifact destinations as arguments. Load only
 needed credentials from `~/.secrets/openreader/`; never print or commit their values.
 Follow the simulator installation guide, MEMORY/device-testing.md's silence and playback-duration
 requirements, and MEMORY/app-change.md's final-running-app requirement. Choose playback duration for the fact being
