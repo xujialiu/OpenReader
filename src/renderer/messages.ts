@@ -686,6 +686,8 @@ export const SELECTION_MESSAGE = 'openreader:selection';
 /** A native selection, never a Reading Position. Selecting invalidates an in-flight result. */
 export interface SelectionMessage {
   type: typeof SELECTION_MESSAGE;
+  /** Stable while a handle moves, including expansion to a saved passage. */
+  session?: number;
   location?: SelectionLocation;
   text: string;
   /** Current word boundaries, not whether this or a previous selection changed. */
@@ -694,6 +696,7 @@ export interface SelectionMessage {
 }
 export interface LookupControlMessage {
   kind: 'lookup';
+  expand?: { from: string; to: string };
   enabled?: boolean;
   close?: boolean;
   resumeFollow?: boolean;
@@ -737,6 +740,7 @@ export function readWebViewMessage(event: unknown): WebViewMessage | null {
     case TAP_MESSAGE:
       return typeof event.block === 'string' && isIndex(event.offset) ? (event as unknown as TapMessage) : null;
     case SELECTION_MESSAGE: {
+      if (event.session !== undefined && !isIndex(event.session)) return null;
       const p = event.location;
       if (p !== undefined && (!p || typeof p !== 'object' || !('cfi' in p) || typeof p.cfi !== 'string' ||
         !('text' in p) || typeof p.text !== 'string' || !('section' in p) || !isIndex(p.section) ||

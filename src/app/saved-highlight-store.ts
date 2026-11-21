@@ -22,13 +22,22 @@ export function readHighlights(document: string): SavedHighlight[] {
   return db().getAllSync<SavedHighlight>('SELECT * FROM highlight WHERE document = ? ORDER BY section, block, offset, id', document);
 }
 
-export function saveHighlight(document: string, passage: Passage, chapter: string, chapterKey: string): number {
+export function saveHighlight(document: string, passage: Passage, chapter: string, chapterKey: string, colour?: HighlightColour): number {
   const { section, cfi, text, block, offset, endBlock } = passage;
-  return db().getFirstSync<{ id: number }>(`INSERT INTO highlight
+  const connection = db();
+  const save = () => connection.getFirstSync<{ id: number }>(`INSERT INTO highlight
     (document, section, cfi, text, block, offset, endBlock, chapter, chapterKey, colour)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT colour FROM pen), 'yellow'))
     ON CONFLICT(document, cfi) DO UPDATE SET cfi = excluded.cfi RETURNING id`,
   document, section, cfi, text, block, offset, endBlock, chapter, chapterKey)!.id;
+  if (!colour) return save();
+  let id = 0;
+  connection.withTransactionSync(() => {
+    id = save();
+    connection.runSync('UPDATE highlight SET colour = ? WHERE id = ?', colour, id);
+    connection.runSync('INSERT OR REPLACE INTO pen VALUES (1, ?)', colour);
+  });
+  return id;
 }
 
 export function colourHighlight(document: string, id: number, colour: HighlightColour): void {
@@ -38,6 +47,14 @@ export function colourHighlight(document: string, id: number, colour: HighlightC
       connection.runSync('INSERT OR REPLACE INTO pen VALUES (1, ?)', colour);
     }
   });
+}
+
+/** Keep the edited mark's identity, colour and overlap order on a handle drag. */
+export function moveHighlight(document: string, id: number, passage: Passage, chapter: string, chapterKey: string): void {
+  const { section, cfi, text, block, offset, endBlock } = passage;
+  db().runSync(`UPDATE OR REPLACE highlight SET section = ?, cfi = ?, text = ?, block = ?, offset = ?,
+    endBlock = ?, chapter = ?, chapterKey = ? WHERE document = ? AND id = ?`,
+  section, cfi, text, block, offset, endBlock, chapter, chapterKey, document, id);
 }
 
 export function removeHighlights(document: string, ids: readonly number[]): void {

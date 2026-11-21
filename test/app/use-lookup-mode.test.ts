@@ -138,3 +138,24 @@ it('lets a selection pause and become a highlight without contacting a lookup se
   expect(mock.lookup).toHaveBeenCalledOnce();
   pause.mockRestore();
 });
+
+it('keeps the empty Highlight tab through adjustments and opens lookup on a fresh word', async () => {
+  await mount();
+  const event = (text: string, session: number) => select({
+    type: SELECTION_MESSAGE, session, text, multipleWords: text.includes(' '), selecting: false,
+    location: { text, cfi: text, section: 0, block: 0, endBlock: 0, offset: 0, inside: null, top: 0, bottom: 20 },
+  });
+  await act(async () => event('cloud', 1));
+  await act(async () => handle.editHighlight(12));
+  await act(async () => event('cloud soil', 1));
+  expect(handle.selection?.highlight?.id).toBe(12);
+  await act(async () => handle.editHighlight(null));
+  await act(async () => event('soil', 1));
+  expect(handle.selection?.highlight).toEqual({ id: null });
+  expect(mock.lookup).toHaveBeenCalledTimes(1);
+  await act(async () => event('new', 2));
+  expect(handle.selection?.highlight).toBeUndefined();
+  expect(handle.selection?.mode).toBe('dictionary');
+  expect(mock.lookup).toHaveBeenCalledTimes(2);
+  expect(writes).toEqual([]);
+});

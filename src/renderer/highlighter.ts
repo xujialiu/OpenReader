@@ -777,6 +777,13 @@ ${constants}
   // The lookup's range belongs to its task, not an iframe resize destroys.
   // Ephemeral only: this is not a Reading Position and never crosses the bridge.
   var lookupSelection = null;
+  var selectionSession = 0;
+  var selectionEnds = null;
+  var pressedAwayFromHandles = null;
+  function rememberEnds(range) {
+    selectionEnds = { start: range.startContainer, startOffset: range.startOffset,
+      end: range.endContainer, endOffset: range.endOffset };
+  }
   var lookupResize = null;
   // Only genuine selection can grant ownership. BODY after iframe destruction
   // is an OS/resize blur, never permission to acquire a new focus owner.
@@ -840,7 +847,7 @@ ${constants}
     doc.addEventListener('keydown', cancelLookupRestore, true);
     doc.addEventListener('beforeinput', cancelLookupRestore, true);
   }
-  function rememberLookupSelection(doc, text, multipleWords) {
+  function rememberLookupSelection(doc, text, multipleWords, expanding) {
     lookupSelection = null;
     cancelLookupRestore();
     var selection = doc.getSelection();
@@ -849,8 +856,18 @@ ${constants}
     if (!contents) return;
     try {
       var range = selection.getRangeAt(0);
+      var cfi = contents.cfiFromRange(range);
+      var newPress = pressedAwayFromHandles !== null && pressedAwayFromHandles !== cfi;
+      if (newPress || expanding) pressedAwayFromHandles = null;
+      // A handle keeps one endpoint anchored. Pressing the text can share that
+      // endpoint too, e.g. selecting all of a word with a saved prefix.
+      var anchored = selectionEnds &&
+        ((range.startContainer === selectionEnds.start && range.startOffset === selectionEnds.startOffset) ||
+         (range.endContainer === selectionEnds.end && range.endOffset === selectionEnds.endOffset));
+      if (!expanding && (newPress || !anchored)) selectionSession++;
+      rememberEnds(range);
       lookupSelection = {
-        section: contents.sectionIndex, cfi: contents.cfiFromRange(range),
+        section: contents.sectionIndex, cfi: cfi,
         text: text.slice(0, 5001), multipleWords: multipleWords,
         backward: selection.anchorNode === range.endContainer && selection.anchorOffset === range.endOffset
       };
@@ -881,7 +898,8 @@ ${constants}
   }
   function postSelection(text, multipleWords, selecting) {
     suppressTapUntil = Date.now() + 700;
-    post({ type: SELECTION, text: text.slice(0, 5001), multipleWords: multipleWords, selecting: selecting, location: lookupSelection ? lookupSelection.location : undefined });
+    post({ type: SELECTION, text: text.slice(0, 5001), multipleWords: multipleWords, selecting: selecting,
+      session: selectionSession, location: lookupSelection ? lookupSelection.location : undefined });
   }
   function emitSelection(doc, selecting) {
     if (!lookupEnabled) return;
@@ -897,6 +915,7 @@ ${constants}
   // that same selection, not a new request caused by restoring its geometry.
   function finishSelection() {
     selectionTimer = null;
+    pressedAwayFromHandles = null;
     if (!lookupEnabled || !lookupHeld) return;
     if (lookupSelection) postSelection(lookupSelection.text, lookupSelection.multipleWords, false);
     else if (selectionDoc) emitSelection(selectionDoc, false);
@@ -980,24 +999,74 @@ ${constants}
         saved.backward ? range.endContainer : range.startContainer, saved.backward ? range.endOffset : range.startOffset,
         saved.backward ? range.startContainer : range.endContainer, saved.backward ? range.startOffset : range.endOffset
       );
+      rememberEnds(range);
       restoreLookupFocus(resize, selectionDoc, range);
     } catch (error) {
       report('could not restore the lookup selection: ' + error);
+    }
+  }
+  function expandLookupSelection(from, to) {
+    if (!lookupHeld || !lookupSelection || lookupSelection.cfi !== from) return;
+    var contents = rendition.getContents().find(function (item) { return item.document === selectionDoc; });
+    try {
+      if (!contents) throw new Error('the selected chapter is no longer visible');
+      var range = contents.range(to);
+      var selection = selectionDoc.getSelection();
+      if (!range || range.collapsed || !selection || !selection.rangeCount ||
+          contents.cfiFromRange(selection.getRangeAt(0)) !== from || contents.cfiFromRange(range) !== to) {
+        throw new Error('the selected passage has changed');
+      }
+      clearTimeout(selectionTimer);
+      restoredSelection = { document: selectionDoc, cfi: to };
+      selection.setBaseAndExtent(range.startContainer, range.startOffset, range.endContainer, range.endOffset);
+      var text = selected(selectionDoc);
+      var multiple = multipleLookupWords(text);
+      rememberLookupSelection(selectionDoc, text, multiple, true);
+      postSelection(text, multiple, false);
+    } catch (error) {
+      report('could not select the saved passage: ' + error);
+      // An expired range must not leave a swatch acting on some other mark.
+      selectionSession++;
+      finishSelection();
     }
   }
   function selectionChanged(event) {
     if (!lookupEnabled) return;
     var doc = event.currentTarget;
     var text = selected(doc);
+    if (!text && selectionTouching) selectionEnds = null;
     if (!text || isRestoredSelection(doc)) return;
     restoredSelection = null;
     clearTimeout(selectionTimer);
     emitSelection(doc, true);
     if (!selectionTouching) selectionTimer = setTimeout(finishSelection, 180);
   }
-  function selectionStarted() {
+  function noteLookupPress(doc, point) {
+    pressedAwayFromHandles = null;
+    if (!point || !lookupSelection || doc !== selectionDoc) return;
+    var selection = doc.getSelection();
+    if (!selection || !selection.rangeCount) return;
+    var range = selection.getRangeAt(0);
+    // Collapsed carets locate the logical ends even for wrapped or bidi text.
+    var start = range.cloneRange();
+    var end = range.cloneRange();
+    start.setEnd(range.startContainer, range.startOffset);
+    end.setStart(range.endContainer, range.endOffset);
+    var a = start.getBoundingClientRect(), b = end.getBoundingClientRect();
+    if (!a.height || !b.height) return;
+    // Allow a fingertip around either outward-facing dot and along its caret.
+    // Text beside a caret, halfway down the line, still starts a word lookup.
+    var x = point.clientX, y = point.clientY;
+    var atStart = Math.abs(x - a.left) <= 22 && y >= a.top - 22 && y <= a.bottom &&
+      (y <= a.top + 4 || Math.abs(x - a.left) <= 3);
+    var atEnd = Math.abs(x - b.right) <= 22 && y >= b.top && y <= b.bottom + 22 &&
+      (y >= b.bottom - 4 || Math.abs(x - b.right) <= 3);
+    if (!atStart && !atEnd) pressedAwayFromHandles = lookupSelection.cfi;
+  }
+  function selectionStarted(event) {
     selectionTouching = true;
     clearTimeout(selectionTimer);
+    noteLookupPress(event.currentTarget, event.touches && event.touches[0]);
   }
   function selectionEnded(event) {
     selectionTouching = false;
@@ -1009,6 +1078,8 @@ ${constants}
   function closeLookup(resumeFollow) {
     clearTimeout(selectionTimer);
     lookupSelection = null;
+    selectionEnds = null;
+    pressedAwayFromHandles = null;
     cancelLookupRestore();
     restoredSelection = null;
     if (!lookupHeld) return;
@@ -3592,6 +3663,7 @@ ${EPUB_GUARDS_SOURCE}
       return;
     }
     if (message.kind === 'lookup') {
+      if (message.expand && lookupEnabled) expandLookupSelection(message.expand.from, message.expand.to);
       /* UIKit's selection handles can consume the DOM touchend. The enclosing
          native reader observes the release even when the iframe does not. */
       if (message.selectionReleased && lookupEnabled) {

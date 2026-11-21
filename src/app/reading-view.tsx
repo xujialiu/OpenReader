@@ -944,8 +944,9 @@ export function ReadingView({
 
       <SavedHighlights document={document.identity.id} bridge={reading.bridge} lookup={lookup} contents={contents}
         anchors={status.anchors} listOpen={!!highlightList} closeList={closeHighlights}
-        renderLookup={(actions, overlay) => <LookupDrawer overlay={overlay} lookup={lookup} service={settings.lookup.service}
-          onService={(service) => setSettings((was) => ({ ...was, lookup: { ...was.lookup, service } }))}>{actions}</LookupDrawer>} />
+        renderLookup={(onHighlight, highlightContent) => <LookupDrawer onHighlight={onHighlight} highlightContent={highlightContent}
+          lookup={lookup} service={settings.lookup.service}
+          onService={(service) => setSettings((was) => ({ ...was, lookup: { ...was.lookup, service } }))} />} />
 
       <ContentsSheet
         visible={contentsOpen}

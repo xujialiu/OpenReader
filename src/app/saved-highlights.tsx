@@ -7,7 +7,7 @@ import type { ReaderBridge } from '../renderer/reader-bridge';
 import { INK, useBorders } from './controls';
 import { Drawer, DrawerFooter, DrawerList, DrawerRow } from './drawer';
 import { Icon } from './icon';
-import { colourHighlight, readHighlights, removeHighlights, restoreHighlight, saveHighlight } from './saved-highlight-store';
+import { colourHighlight, moveHighlight, readHighlights, removeHighlights, restoreHighlight, saveHighlight } from './saved-highlight-store';
 import { TEXT } from './text-styles';
 import type { LookupHandle } from './use-lookup';
 import { useRowSweep } from './use-sweep';
@@ -16,6 +16,23 @@ function Action({ label, onPress, destructive }: { label: string; onPress(): voi
   return <Pressable accessibilityRole="button" onPress={onPress} style={styles.action}>
     <Text style={[styles.label, destructive && { color: INK.attention }]}>{label}</Text>
   </Pressable>;
+}
+
+function HighlightColours({ selected, choose, inline = false }: {
+  selected?: HighlightColour; choose(colour: HighlightColour): void; inline?: boolean;
+}) {
+  return <View style={styles.palette}>
+    {(Object.keys(HIGHLIGHT_PALETTE) as HighlightColour[]).map((colour) => {
+      const current = colour === selected;
+      return <Pressable key={colour} accessibilityRole="button"
+        accessibilityLabel={inline && current ? `Remove ${colour} highlight` : colour}
+        accessibilityState={{ selected: current }} style={styles.colourTarget} onPress={() => choose(colour)}>
+        <View style={[styles.swatch, inline && styles.inlineSwatch, { backgroundColor: HIGHLIGHT_PALETTE[colour] }]}>
+          {current ? <Icon name={inline ? 'close' : 'check'} color="#191919" size={20} /> : null}
+        </View>
+      </Pressable>;
+    })}
+  </View>;
 }
 
 function HighlightsList({ marks, close, browse, recolour, remove, undo, overlay }: {
@@ -85,7 +102,7 @@ function HighlightsList({ marks, close, browse, recolour, remove, undo, overlay 
 export function SavedHighlights({ document, lookup, bridge, contents, anchors, listOpen, closeList, renderLookup }: {
   document: string; lookup: LookupHandle; bridge: ReaderBridge; contents: Contents;
   anchors: ReadonlyMap<number, ReadonlyMap<string, number>>; listOpen: boolean; closeList?(): void;
-  renderLookup(actions: ReactNode, overlay: ReactNode): ReactNode;
+  renderLookup(onHighlight: () => void, highlightContent: ReactNode): ReactNode;
 }) {
   const [marks, setMarks] = useState<SavedHighlight[]>([]);
   const [pen, setPen] = useState<{ id: number; owner: string } | null>(null);
@@ -115,6 +132,20 @@ export function SavedHighlights({ document, lookup, bridge, contents, anchors, l
   const rowAt = (section: number, block: number) => currentRow(contents, { sectionIndex: section, block, anchors: anchors.get(section) })?.row;
   const first = location && rowAt(location.section, location.block);
   const crossesChapter = !!location && first !== rowAt(location.section, location.endBlock);
+  const chapter = first === undefined ? `Section ${(location?.section ?? 0) + 1}` : contents.rows[first].label;
+  const chapterKey = first === undefined ? `section-${location?.section}` : `chapter-${first}`;
+  const edit = lookup.selection?.highlight;
+  const edited = edit && marks.find((mark) => mark.id === edit.id);
+  const selecting = lookup.selection?.selecting;
+  useEffect(() => {
+    if (!edited || edit?.expandingTo || selecting || !location || crossesChapter || edited.cfi === location.cfi) return;
+    try {
+      moveHighlight(document, edited.id, location, chapter, chapterKey);
+      // Publish the committed range and any merged entry to the list and page.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      refresh();
+    } catch (error) { Alert.alert('Could not change highlights', String(error)); }
+  }, [edited, edit?.expandingTo, selecting, location, crossesChapter, document, chapter, chapterKey, refresh]);
   const change = (write: () => void) => {
     try { write(); refresh(); return true; }
     catch (error) { Alert.alert('Could not change highlights', String(error)); return false; }
@@ -126,9 +157,26 @@ export function SavedHighlights({ document, lookup, bridge, contents, anchors, l
   const highlight = () => {
     if (!location || crossesChapter) return;
 
-    const chapter = first === undefined ? `Section ${location.section + 1}` : contents.rows[first].label;
-    const key = first === undefined ? `section-${location.section}` : `chapter-${first}`;
-    change(() => setPalette(saveHighlight(document, location, chapter, key)));
+    change(() => setPalette(saveHighlight(document, location, chapter, chapterKey)));
+  };
+  const openHighlight = () => {
+    if (active && !(lookup.selection?.adjusted && !exact)) {
+      lookup.editHighlight(active.id, active.cfi);
+    } else if (location && !crossesChapter) {
+      change(() => lookup.editHighlight(saveHighlight(document, location, chapter, chapterKey)));
+    } else {
+      lookup.editHighlight(null);
+    }
+  };
+  const chooseInlineColour = (colour: HighlightColour) => {
+    if (!location || crossesChapter || selecting || edit?.expandingTo) return;
+    if (!edited) {
+      change(() => lookup.editHighlight(saveHighlight(document, location, chapter, chapterKey, colour)));
+    } else if (edited.colour === colour) {
+      change(() => { removeHighlights(document, [edited.id]); lookup.editHighlight(null); });
+    } else {
+      change(() => colourHighlight(document, edited.id, colour));
+    }
   };
   const remove = (ids: readonly number[], single: boolean) => {
     const one = single ? marks.find((mark) => mark.id === ids[0]) : null;
@@ -158,18 +206,19 @@ export function SavedHighlights({ document, lookup, bridge, contents, anchors, l
   const selectedColour = marks.find((mark) => mark.id === palette)?.colour;
   const colourPicker = palette !== null ? <View style={styles.overlay}>
     <Pressable accessibilityRole="button" accessibilityLabel="Close colours" style={StyleSheet.absoluteFill} onPress={finishPalette} />
-    <View style={[styles.palette, !listOpen && !lookup.requested ?
-      { position: 'absolute', top: Math.max(4, Math.min(height - 100, menuTop)) } : undefined]}>
-          {(Object.keys(HIGHLIGHT_PALETTE) as HighlightColour[]).map((colour) => <Pressable key={colour} accessibilityRole="button"
-            accessibilityLabel={colour} accessibilityState={{ selected: colour === selectedColour }}
-            style={[styles.swatch, { backgroundColor: HIGHLIGHT_PALETTE[colour] }]}
-            onPress={() => { if (change(() => colourHighlight(document, palette, colour))) finishPalette(); }}>
-            {colour === selectedColour ? <Icon name="check" color="#191919" size={20} /> : null}
-          </Pressable>)}
+    <View style={!listOpen && !lookup.requested ?
+      { position: 'absolute', top: Math.max(4, Math.min(height - 100, menuTop)) } : undefined}>
+      <HighlightColours selected={selectedColour} choose={(colour) => {
+        if (change(() => colourHighlight(document, palette, colour))) finishPalette();
+      }} />
     </View>
   </View> : null;
   return <>
-    {renderLookup(<>{lookup.selection ? actions : null}{undo}</>, lookup.requested ? colourPicker : null)}
+    {renderLookup(openHighlight, <ScrollView contentContainerStyle={styles.highlightTab}>
+      {location && !crossesChapter ? <HighlightColours inline selected={edited?.colour} choose={chooseInlineColour} /> :
+        <DrawerFooter>Select a passage within one chapter.</DrawerFooter>}
+      <Text style={styles.passage}>{edit?.expandingTo ? edited?.text : location?.text ?? lookup.selection?.text}</Text>
+    </ScrollView>)}
     {lookup.selection && !lookup.requested && !lookup.selection.selecting ?
       <View style={[styles.floating, { top: Math.max(4, Math.min(height - 150, menuTop)) }]}>
         {actions}
@@ -178,7 +227,7 @@ export function SavedHighlights({ document, lookup, bridge, contents, anchors, l
     {listOpen ? <HighlightsList marks={marks} close={() => closeList?.()} overlay={colourPicker} undo={undo} recolour={setPalette} remove={remove}
       browse={(mark) => { closeList?.(); bridge.browse(mark.section, '', mark.cfi); }} /> : null}
     {palette !== null && !listOpen && !lookup.requested ? colourPicker : null}
-    {palette !== null && (listOpen || lookup.requested) ? <Pressable accessibilityLabel="Close colours"
+    {palette !== null && listOpen ? <Pressable accessibilityLabel="Close colours"
       accessibilityRole="button" style={StyleSheet.absoluteFill} onPress={finishPalette} /> : null}
   </>;
 }
@@ -199,5 +248,9 @@ const styles = StyleSheet.create({
   undo: { position: 'absolute', alignSelf: 'center', bottom: '30%', backgroundColor: INK.page, borderRadius: 12 },
   overlay: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   palette: { borderRadius: 32, backgroundColor: INK.panel, padding: 8, gap: 5, flexDirection: 'row' },
+  highlightTab: { alignItems: 'center', padding: 12, gap: 16 },
+  passage: { ...TEXT.body, color: INK.text, alignSelf: 'stretch', paddingHorizontal: 4 },
+  colourTarget: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   swatch: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  inlineSwatch: { width: 34, height: 34, borderRadius: 17 },
 });

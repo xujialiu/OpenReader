@@ -12,7 +12,11 @@ import { consent, lookupRecipient } from './consent';
 
 import type { SelectionLocation } from '../core/document/saved-highlight';
 
-export interface LookupSelection { adjusted?: boolean; location?: SelectionLocation; text: string; mode: LookupMode; selecting: boolean; attempt: number }
+export interface LookupSelection {
+  adjusted?: boolean; session?: number; location?: SelectionLocation; text: string; mode: LookupMode; selecting: boolean; attempt: number;
+  /** Null id keeps the empty palette open after removal. */
+  highlight?: { id: number | null; expandingTo?: string };
+}
 /**
  * @param pause the pause a lookup makes when "Pause reading during lookup" is on:
  * the screen's own (`reading-view.tsx`), so it does everything a pause does and
@@ -32,6 +36,7 @@ export function useLookup(settings: LookupSettings, reading: {
   const [loading, setLoading] = useState(false);
   const opened = useRef(false);
   const lastRange = useRef<string | null>(null);
+  const editingSession = useRef<number | undefined>(undefined);
   const latest = useRef({ settings, reading, pause, rememberMode });
   const preferred = useRef(settings.preferredMode);
   useEffect(() => { latest.current = { settings, reading, pause, rememberMode }; }, [settings, reading, pause, rememberMode]);
@@ -56,6 +61,7 @@ export function useLookup(settings: LookupSettings, reading: {
     pronunciation.stop(resumeAudio);
     opened.current = false;
     lastRange.current = null;
+    editingSession.current = undefined;
     setRequested(false);
     setSelection(null); setResult(null); setError(null); setAudioError(null);
     latest.current.reading.bridge.closeLookup(resumeAudio && latest.current.reading.status.playing);
@@ -70,7 +76,9 @@ export function useLookup(settings: LookupSettings, reading: {
     const unsubscribe = bridge.onSelection((message) => {
       if (!focused) return;
       const range = message.location?.cfi ?? message.text;
-      if (!latest.current.settings.enabled && lastRange.current !== range) setRequested(false);
+      const editing = message.session !== undefined && message.session === editingSession.current;
+      if (!editing) editingSession.current = undefined;
+      if (!latest.current.settings.enabled && !editing && lastRange.current !== range) setRequested(false);
       lastRange.current = range;
       if (!opened.current) {
         opened.current = true;
@@ -80,15 +88,17 @@ export function useLookup(settings: LookupSettings, reading: {
       if (message.selecting) pronunciation.stop();
       const initialMode = message.multipleWords ? 'translation' : preferred.current;
       setSelection((previous) => {
-        if (previous?.text === message.text && previous.location?.cfi === message.location?.cfi) {
+        if (previous?.text === message.text && previous.location?.cfi === message.location?.cfi && previous.session === message.session) {
           return previous.selecting === message.selecting ? previous : { ...previous, selecting: message.selecting };
         }
         const before = previous?.location;
         const after = message.location;
         const adjusted = !!(before && after && before.section === after.section &&
-          (previous?.adjusted || (before.block === after.block && before.offset === after.offset) ||
-           (before.cfi !== after.cfi && before.inside !== null && before.inside === after.inside)));
-        return { adjusted, text: message.text, location: message.location, mode: initialMode, selecting: message.selecting, attempt: 0 };
+          previous?.session === message.session);
+        const highlight = editing ? previous?.highlight : undefined;
+        return { adjusted, session: message.session, text: message.text, location: message.location, mode: initialMode,
+          highlight: highlight?.expandingTo === range ? { id: highlight.id } : highlight,
+          selecting: message.selecting, attempt: 0 };
       });
     });
     return unsubscribe;
@@ -104,7 +114,7 @@ export function useLookup(settings: LookupSettings, reading: {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setResult(null); setError(null); setAudioError(null);
     pronunciation.stop();
-    if (!requested || !selection || selection.selecting) { setLoading(false); return; }
+    if (!requested || !selection || selection.selecting || selection.highlight) { setLoading(false); return; }
     const abort = new AbortController();
     let live = true;
     setLoading(true);
@@ -147,10 +157,19 @@ export function useLookup(settings: LookupSettings, reading: {
     // Also update the event-time preference before React publishes settings.
     preferred.current = next;
     latest.current.rememberMode(next);
-    setSelection((was) => was ? { ...was, mode: next, selecting: false } : null);
+    editingSession.current = undefined;
+    setSelection((was) => was ? { ...was, highlight: undefined, mode: next, selecting: false } : null);
+  };
+  const editHighlight = (id: number | null, cfi?: string) => {
+    if (!selection) return;
+    const from = selection.location?.cfi;
+    const expandingTo = from && cfi !== from ? cfi : undefined;
+    editingSession.current = selection.session;
+    setSelection((was) => was ? { ...was, highlight: { id, expandingTo } } : null);
+    if (from && expandingTo) reading.bridge.expandSelection(from, expandingTo);
   };
   const retry = () => setSelection((was) => was ? { ...was, selecting: false, attempt: was.attempt + 1 } : null);
   const pronounce = (url: string) => { setAudioError(null); void pronunciation.play(url); };
-  return { selection, requested, request: () => setRequested(true), result, error, audioError, loading, pronouncing, close, mode, retry, pronounce, stopPronunciation: pronunciation.stop };
+  return { selection, requested, request: () => setRequested(true), result, error, audioError, loading, pronouncing, close, mode, editHighlight, retry, pronounce, stopPronunciation: pronunciation.stop };
 }
 export type LookupHandle = ReturnType<typeof useLookup>;

@@ -12,9 +12,11 @@ import type { LookupHandle } from './use-lookup';
 import { TEXT, TEXT_EMPHASIZED } from './text-styles';
 
 /** The kinds of result, in the order the header's segments show them. */
-const LOOKUP_MODES: readonly { mode: LookupMode; label: string }[] = [
+type LookupTab = LookupMode | 'highlight';
+const LOOKUP_MODES: readonly { mode: LookupTab; label: string }[] = [
   { mode: 'dictionary', label: 'Dictionary' },
-  { mode: 'translation', label: 'Translation' },
+  { mode: 'translation', label: 'Translate' },
+  { mode: 'highlight', label: 'Highlight' },
 ];
 
 /**
@@ -30,28 +32,27 @@ const LOOKUP_MODES: readonly { mode: LookupMode; label: string }[] = [
  * `Drawer`'s, so a selection made while another drawer is up closes that one
  * first.
  *
- * Its header is the system's segmented control, Dictionary | Translation,
+ * Its header is the system's segmented control, Dictionary | Translate | Highlight,
  * centred where a title goes (the owner's Q51), in place of the switch the
  * app drew under a title. "Lookup" is what VoiceOver calls the control.
  */
-export function LookupDrawer({ lookup, service, onService, children, overlay }: {
-  overlay?: React.ReactNode; children?: React.ReactNode; lookup: LookupHandle; service: TranslationService; onService(service: TranslationService): void;
+export function LookupDrawer({ lookup, service, onService, onHighlight, highlightContent }: {
+  onHighlight(): void; highlightContent: React.ReactNode; lookup: LookupHandle; service: TranslationService; onService(service: TranslationService): void;
 }) {
+  const tab = lookup.selection?.highlight ? 'highlight' : lookup.selection?.mode ?? 'dictionary';
   return (
     <Drawer visible={Boolean(lookup.selection && lookup.requested)} title="Lookup" onClose={() => lookup.close()}
-      heading={<LookupModes mode={lookup.selection?.mode ?? 'dictionary'} onMode={lookup.mode} />}>
-      {children}
-      {lookup.selection ? <LookupResult lookup={lookup} service={service} onService={onService} /> : null}
-      {overlay}
+      heading={<LookupModes mode={tab} onMode={(next) => next === 'highlight' ? onHighlight() : lookup.mode(next)} />}>
+      {tab === 'highlight' ? highlightContent : lookup.selection ? <LookupResult lookup={lookup} service={service} onService={onService} /> : null}
     </Drawer>
   );
 }
 
-/** Dictionary | Translation, the phone's own segmented control, as wide as the header leaves it. */
-function LookupModes({ mode, onMode }: { mode: LookupMode; onMode(mode: LookupMode): void }) {
+/** The phone's own segmented control, as wide as the header leaves it. */
+function LookupModes({ mode, onMode }: { mode: LookupTab; onMode(mode: LookupTab): void }) {
   return (
     <Host matchContents={{ vertical: true }} style={styles.modes}>
-      <Picker label="Lookup" selection={mode} onSelectionChange={(next) => onMode(next as LookupMode)}
+      <Picker label="Lookup" selection={mode} onSelectionChange={(next) => onMode(next as LookupTab)}
         modifiers={[pickerStyle('segmented')]}>
         {LOOKUP_MODES.map((one) => <SwiftText key={one.mode} modifiers={[tag(one.mode)]}>{one.label}</SwiftText>)}
       </Picker>

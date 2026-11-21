@@ -257,6 +257,7 @@ export interface ReaderBridge {
   resumeFollowing(): void;
   releaseSelection(): void;
   setSavedHighlights(marks: readonly SavedHighlight[]): void;
+  expandSelection(from: string, to: string): void;
   onSelection(callback: (selection: SelectionMessage) => void): () => void;
   closeLookup(resumeFollow: boolean): void;
   /**
@@ -648,6 +649,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     return () => { if (selectionCallback.current === callback) selectionCallback.current = null; };
   }, []);
   const releaseSelection = useCallback(() => send({ kind: 'lookup', selectionReleased: true }), [send]);
+  const expandSelection = useCallback((from: string, to: string) => send({ kind: 'lookup', expand: { from, to } }), [send]);
   const resumeFollowing = useCallback(() => {
     following.current = true;
     send({ kind: 'lookup', releaseBrowsing: true });
@@ -1113,7 +1115,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   return useMemo(
-    () => ({ setSavedHighlights, releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, setTapLock, goTo, goToSection, prepareSection, browse, snapshot, restart, readerProps }),
-    [setSavedHighlights, releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, setTapLock, goTo, goToSection, prepareSection, browse, snapshot, restart, readerProps],
+    () => ({ expandSelection, setSavedHighlights, releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, setTapLock, goTo, goToSection, prepareSection, browse, snapshot, restart, readerProps }),
+    [expandSelection, setSavedHighlights, releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, setTapLock, goTo, goToSection, prepareSection, browse, snapshot, restart, readerProps],
   );
 }

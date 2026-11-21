@@ -534,6 +534,47 @@ describe('lookup resize restores only originally owned iframe focus (#350, #355)
   });
 });
 
+it('expands the handles to a saved passage, keeps its session during drags and releases it for a new word', () => {
+  const f = fixture(true);
+  f.choose(f.first, 5, 14);
+  const whole = f.messages().at(-1)!.location.cfi;
+  f.choose(f.first, 10, 14);
+  const word = f.messages().at(-1)!;
+  f.page.send({ kind: 'lookup', expand: { from: word.location.cfi, to: whole } });
+  f.flush();
+  expect(f.first.selection.anchorOffset).toBe(5);
+  expect(f.first.selection.focusOffset).toBe(14);
+  expect(f.messages().at(-1)).toMatchObject({ session: word.session, selecting: false, location: { cfi: whole } });
+  f.choose(f.first, 5, 12);
+  expect(f.messages().at(-1)?.session).toBe(word.session);
+  f.choose(f.first, 0, 4);
+  expect(f.messages().at(-1)?.session).not.toBe(word.session);
+  f.page.send({ kind: 'lookup', expand: { from: word.location.cfi, to: whole } });
+  expect(f.first.selection.toString()).toBe('hope');
+});
+
+it.each([
+  { gesture: 'press on the suffix', x: 244, y: 193, continues: false },
+  { gesture: 'press on the adjacent letter', x: 190, y: 193, continues: false },
+  { gesture: 'grab of the end handle', x: 186, y: 213, continues: true },
+])('distinguishes a $gesture when the new word shares the old start', ({ x, y, continues }) => {
+  const f = fixture();
+  const { doc, section } = f.first;
+  doc.selectionRect = { left: 147, right: 184, top: 179, bottom: 207, width: 37, height: 28 };
+  f.choose(f.first, 0, 2);
+  const prefix = f.messages().at(-1)!.session;
+  const touch = { identifier: 1, clientX: x, clientY: y };
+  for (const listener of section.listeners.get('touchstart') ?? []) {
+    listener.fn({ currentTarget: doc, touches: [touch] });
+  }
+  f.choose(f.first, 0, 4, false, false);
+  for (const listener of section.listeners.get('touchend') ?? []) {
+    listener.fn({ currentTarget: doc, touches: [], changedTouches: [touch] });
+  }
+  f.flush();
+  expect(f.messages().at(-1)!.session === prefix).toBe(continues);
+});
+
 it('captures the range of the second occurrence and repaints it when its chapter is recreated', () => {
   const f = fixture();
   f.choose();
