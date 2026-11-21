@@ -248,6 +248,16 @@ export async function forgetGatewayHeaders(provider: string): Promise<SecretChan
   return removeSecret(gatewayHeadersEntryName(provider));
 }
 
+// A save deletes and then rewrites the item. Keep each edit together even if the
+// next keystroke, a new Sync screen or a background sync arrives between them.
+let syncPasswordEdit: Promise<void> = Promise.resolve();
+
+function editSyncPassword(edit: () => Promise<SecretChange>): Promise<SecretChange> {
+  const next = syncPasswordEdit.then(edit);
+  syncPasswordEdit = next.then(() => {}, () => {});
+  return next;
+}
+
 /**
  * The WebDAV password of the Sync Folder (issue #20). One entry, the same
  * options object as every other secret here — a second object would be a
@@ -255,17 +265,18 @@ export async function forgetGatewayHeaders(provider: string): Promise<SecretChan
  */
 export async function saveSyncPassword(password: string): Promise<SecretChange> {
   if (password === '') throw new Error('The WebDAV password cannot be the empty string; forget it instead.');
-  return writeSecret(SYNC_PASSWORD_ENTRY_NAME, password);
+  return editSyncPassword(() => writeSecret(SYNC_PASSWORD_ENTRY_NAME, password));
 }
 
 /** Read the WebDAV password. */
 export async function readSyncPassword(): Promise<SecretLookup> {
+  await syncPasswordEdit;
   return readSecret(SYNC_PASSWORD_ENTRY_NAME);
 }
 
 /** Remove the WebDAV password from the Keychain. */
 export async function forgetSyncPassword(): Promise<SecretChange> {
-  return removeSecret(SYNC_PASSWORD_ENTRY_NAME);
+  return editSyncPassword(() => removeSecret(SYNC_PASSWORD_ENTRY_NAME));
 }
 
 /** Kept separate from Azure speech: configuring one never lends its key to the other. */

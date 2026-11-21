@@ -9,7 +9,7 @@
 <body>
 <main>
 <h1>OpenReader Privacy Policy</h1>
-<p class="muted">Last updated 3 October 2026</p>
+<p class="muted">Last updated 21 November 2026</p>
 
 <p>OpenReader reads EPUB documents aloud with a speech service you choose. It has no account, no server of its own, no analytics and no advertising. The developer receives none of your data.</p>
 
@@ -17,7 +17,7 @@
 <ul>
 <li>The documents you add, your library, your reading positions and your settings are stored in the app on your iPhone.</li>
 <li>Audio you download for listening offline is stored in the app.</li>
-<li>API keys you enter are stored in the iOS Keychain on your iPhone. A key is only ever sent to the service it belongs to.</li>
+<li>The iOS Keychain stores your speech provider API keys and extra headers, your Sync password, and your Microsoft Translator key. OpenReader sends each credential only to the service it belongs to.</li>
 </ul>
 
 <h2>What leaves your iPhone, and where it goes</h2>
@@ -53,7 +53,13 @@
 </ul>
 
 <h2>Removing your data</h2>
-<p>Deleting OpenReader deletes the documents, audio, positions and settings stored in it. iOS can keep Keychain items after an app is deleted, so remove your API keys in OpenReader's Providers settings first if you want them gone. The positions file on your WebDAV server is yours to delete there.</p>
+<p>Deleting OpenReader deletes the documents, audio, positions and settings stored in it. iOS can keep Keychain items after you delete an app. To remove your credentials first, open Settings in OpenReader and follow the steps for the services you used.</p>
+<ul>
+<li>In <strong>Providers</strong>, open each provider, turn off Enabled if needed, and clear the API key and Extra headers fields wherever they appear.</li>
+<li>In <strong>Sync</strong>, turn off Keep my place across devices if needed, then clear the Password field.</li>
+<li>In <strong>Dictionary &amp; Translation</strong>, select Microsoft under Service and tap Remove key.</li>
+</ul>
+<p>You can delete the positions file separately on your WebDAV server.</p>
 
 <h2>Children</h2>
 <p>OpenReader is not directed at children. The speech and lookup services you choose may impose their own minimum ages and account requirements.</p>
