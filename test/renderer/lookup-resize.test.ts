@@ -56,6 +56,18 @@ function rangeDocument(doc: any) {
       },
       setStart(node: any, at: number) { this.startContainer = node; this.startOffset = at; },
       setEnd(node: any, at: number) { this.endContainer = node; this.endOffset = at; },
+      comparePoint(node: any, at: number) {
+        const point = offset(node, at);
+        if (point < offset(this.startContainer, this.startOffset)) return -1;
+        if (point > offset(this.endContainer, this.endOffset)) return 1;
+        return 0;
+      },
+      cloneRange() {
+        const copy = doc.createRange();
+        copy.setStart(this.startContainer, this.startOffset);
+        copy.setEnd(this.endContainer, this.endOffset);
+        return copy;
+      },
       selectNode(node: any) { this.setStart(node, 0); this.setEnd(node, node.childNodes.length); },
       getClientRects: () => [doc.selectionRect], getBoundingClientRect: () => doc.selectionRect,
       toString() { return doc.documentElement.textContent.slice(offset(this.startContainer, this.startOffset), offset(this.endContainer, this.endOffset)); },
@@ -520,4 +532,41 @@ describe('lookup resize restores only originally owned iframe focus (#350, #355)
     expect(current.selection.focusOffset).toBe(0);
     expect(f.messages()).toHaveLength(4);
   });
+});
+
+it('captures the range of the second occurrence and repaints it when its chapter is recreated', () => {
+  const f = fixture();
+  f.choose();
+  const location = f.messages().at(-1)?.location;
+  expect(location).toMatchObject({ text: 'hope', section: 6, block: 0, offset: 10, endBlock: 0 });
+  const mark = { ...location, id: 1, colour: 'green', chapter: 'Six', chapterKey: 'six' };
+  f.page.send({ kind: 'savedHighlights', marks: [mark] });
+  const painted = (doc: typeof f.first.doc) => Array.from(doc.defaultView.CSS.highlights.get('or-saved-1') ?? []) as Range[];
+  expect(painted(f.first.doc).map((range) => range.startOffset)).toEqual([10]);
+  f.resize();
+  const next = f.complete();
+  expect(painted(next.doc).map((range) => range.toString())).toEqual(['hope']);
+  f.page.send({ kind: 'savedHighlights', marks: [] });
+  expect(painted(next.doc)).toEqual([]);
+});
+
+it('keeps the saved passage and underlines just the part covered by the speech highlight', () => {
+  const f = fixture();
+  f.choose();
+  const location = f.messages().at(-1)?.location;
+  const mark = { ...location, id: 1, colour: 'purple', chapter: 'Six', chapterKey: 'six' };
+  f.page.send({ kind: 'savedHighlights', marks: [mark] });
+  f.page.send({ kind: 'lookup', close: true });
+  const [block] = f.page.blocks(f.first.section);
+  const highlights = f.first.doc.defaultView.CSS.highlights;
+  const spokenLine = () => Array.from(highlights.get('or-saved-spoken') ?? [], (range) => String(range));
+  const speak = (start: number, end: number) => f.page.send({
+    kind: 'speak', utterance: start, utteranceRanges: [{ block: block.id, start, end, text: block.text.slice(start, end) }],
+    words: null, durationMs: 1000, reveal: false,
+  });
+  speak(0, 12);
+  expect(spokenLine()).toEqual(['ho']);
+  speak(0, 4);
+  expect(spokenLine()).toEqual([]);
+  expect(Array.from(highlights.get('or-saved-1'), (range) => String(range))).toEqual(['hope']);
 });

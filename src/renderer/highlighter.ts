@@ -98,6 +98,7 @@
  * section document.
  */
 
+import { HIGHLIGHT_PALETTE } from '../core/document/saved-highlight';
 import { isPixelSize, PLAIN_BODY_TEXT_SIZE } from './body-text';
 import { EPUB_GUARDS_SOURCE } from './epub-guards';
 import { BAKED_LINE_POSITION, BAKED_SCROLLING, GLIDE_SOURCE } from './glide';
@@ -560,6 +561,8 @@ export function highlighterSource(
     /* SELECTABLE and the Highlight Colours (#118). A `var` the 'highlight'
        message reassigns, as APPEARANCE below is, and baked in so a book opens
        marked in the owner's colours. */
+    'var wordPaints = ' + (appearance.highlight.word.opacity > 0) + ';\n' +
+    'var sentencePaints = ' + (appearance.highlight.sentence.opacity > 0) + ';\n' +
     'var CSS_TEXT = ' + JSON.stringify(highlightCss(appearance.highlight)) + ';\n' +
     /* The one that changes while the document is open, which is why it is a `var`
        the Appearance message reassigns rather than another constant. The owner's
@@ -705,6 +708,67 @@ ${constants}
 
      Written only through setBrowsing(), which tells the player when it changes. */
   var browsing = false;
+  var savedMarks = [];
+  var savedRanges = new WeakMap();
+  var savedStyles = new WeakMap();
+  var palette = ${JSON.stringify(HIGHLIGHT_PALETTE)};
+  function drawSaved(contents) {
+    var doc = contents.document;
+    var win = doc && doc.defaultView;
+    if (!win || !win.CSS || !win.CSS.highlights) return;
+    var previous = savedRanges.get(doc) || [];
+    previous.forEach(function (one) { put(one.highlight, []); win.CSS.highlights.delete(one.name); });
+    var live = [];
+    var rules = [];
+    savedMarks.forEach(function (mark) {
+      if (mark.section !== contents.sectionIndex || !palette[mark.colour]) return;
+      try {
+        var range = contents.range(mark.cfi);
+        if (!range || range.collapsed || range.toString().trim() !== mark.text) return;
+        var name = 'or-saved-' + mark.id;
+        var highlight = new win.Highlight();
+        owners.set(range, range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement);
+        put(highlight, [range]);
+        highlight.priority = -3;
+        win.CSS.highlights.set(name, highlight);
+        rules.push('::highlight(' + name + '){background-color:color-mix(in srgb,' + palette[mark.colour] + ' 40%,var(--or-saved-page));}');
+        live.push({ mark: mark, range: range, name: name, highlight: highlight });
+      } catch (_) { /* This edition cannot resolve the saved excerpt. Keep its list entry. */ }
+    });
+    savedRanges.set(doc, live);
+    savedStyles.set(doc, rules.join('') + '::highlight(or-saved-paper){background-color:var(--or-saved-page);}' +
+      '::highlight(or-saved-spoken){text-decoration:underline;}');
+    ensureStyle(doc);
+    updateSavedSpeech(doc);
+  }
+  function updateSavedSpeech(doc) {
+    var marks = savedRanges.get(doc);
+    if (!marks || !marks.length) {
+      doc.defaultView.CSS.highlights.delete('or-saved-paper');
+      doc.defaultView.CSS.highlights.delete('or-saved-spoken');
+      return;
+    }
+    var registry = registries.get(doc);
+    if (!registry) return;
+    var lines = new doc.defaultView.Highlight();
+    lines.priority = 2;
+    var spoken = sentencePaints ? registry.utterance : wordPaints ? registry.word : [];
+    spoken.forEach(function (speech) {
+      marks.forEach(function (one) {
+        var a = one.range;
+        if (speech.comparePoint(a.endContainer, a.endOffset) < 0 || speech.comparePoint(a.startContainer, a.startOffset) > 0) return;
+        var overlap = speech.cloneRange();
+        if (!speech.comparePoint(a.startContainer, a.startOffset)) overlap.setStart(a.startContainer, a.startOffset);
+        if (!speech.comparePoint(a.endContainer, a.endOffset)) overlap.setEnd(a.endContainer, a.endOffset);
+        if (!overlap.collapsed) lines.add(overlap);
+      });
+    });
+    var paper = new doc.defaultView.Highlight();
+    lines.forEach(function (range) { paper.add(range); });
+    paper.priority = -2;
+    doc.defaultView.CSS.highlights.set('or-saved-paper', paper);
+    doc.defaultView.CSS.highlights.set('or-saved-spoken', lines);
+  }
   var lookupEnabled = false;
   var lookupHeld = false;
   var lookupKeepBrowsing = false;
@@ -790,6 +854,20 @@ ${constants}
         text: text.slice(0, 5001), multipleWords: multipleWords,
         backward: selection.anchorNode === range.endContainer && selection.anchorOffset === range.endOffset
       };
+      var first = blockOffsetOf(doc, range.startContainer, range.startOffset);
+      var last = blockOffsetOf(doc, range.endContainer, range.endOffset);
+      if (first && last) {
+        var inside = null;
+        (savedRanges.get(doc) || []).forEach(function (one) {
+          if (one.range.comparePoint(range.startContainer, range.startOffset) === 0 &&
+              one.range.comparePoint(range.endContainer, range.endOffset) === 0) inside = one.mark.id;
+        });
+        var bounds = range.getBoundingClientRect();
+        var frameTop = doc.defaultView.frameElement.getBoundingClientRect().top;
+        lookupSelection.location = { section: contents.sectionIndex, cfi: lookupSelection.cfi,
+          text: range.toString().trim(), block: Number(first.block.split('.')[1]), endBlock: Number(last.block.split('.')[1]),
+          offset: first.offset, inside: inside, top: frameTop + bounds.top, bottom: frameTop + bounds.bottom };
+      }
       // Capture while the selecting iframe still exists, not at manager.resize:
       // the OS can already have blurred it by the time that observer runs.
       var frame = doc.defaultView && doc.defaultView.frameElement;
@@ -803,7 +881,7 @@ ${constants}
   }
   function postSelection(text, multipleWords, selecting) {
     suppressTapUntil = Date.now() + 700;
-    post({ type: SELECTION, text: text.slice(0, 5001), multipleWords: multipleWords, selecting: selecting });
+    post({ type: SELECTION, text: text.slice(0, 5001), multipleWords: multipleWords, selecting: selecting, location: lookupSelection ? lookupSelection.location : undefined });
   }
   function emitSelection(doc, selecting) {
     if (!lookupEnabled) return;
@@ -1389,6 +1467,7 @@ ${constants}
        the size. No highlight rule is in THEME any more (#118): the owner's
        colours are the same under either theme. */
     var wanted = CSS_TEXT + THEME + APPEARANCE;
+    if (savedStyles.has(doc)) wanted += ':root{--or-saved-page:' + (THEME ? '${DARK_PAGE}' : '#fff') + ';}' + savedStyles.get(doc);
     if (style.textContent !== wanted) style.textContent = wanted;
   }
 
@@ -1763,6 +1842,7 @@ ${constants}
       });
     }
     maps.set(contents.document, map);
+    if (savedMarks.length) drawSaved(contents);
     bySection.set(index, ids);
     post({ type: BLOCKS, sectionIndex: index, section: href, blocks: reported, sizes: MEASURE ? sizesOf(contents, found) : null, anchors: anchorsOf(contents.document, found) });
   }
@@ -1818,7 +1898,7 @@ ${constants}
     /* The third is never registered and no rule names it, so it cannot paint.
        It exists to be handed a Range and have it taken back: see repaintBlocks. */
     var repaint = new win.Highlight();
-    found = { utterance: utterance, word: word, repaint: repaint };
+    found = { doc: win.document, utterance: utterance, word: word, repaint: repaint };
     registries.set(win.document, found);
     return found;
   }
@@ -1883,6 +1963,7 @@ ${constants}
     if (installed && installed !== registry) {
       put(installed.utterance, []);
       put(installed.word, []);
+      if (savedMarks.length && installed.doc.defaultView) updateSavedSpeech(installed.doc);
     }
     installed = registry;
   }
@@ -1891,6 +1972,7 @@ ${constants}
     if (!installed) return;
     put(installed.utterance, []);
     put(installed.word, []);
+    if (savedMarks.length && installed.doc.defaultView) updateSavedSpeech(installed.doc);
   }
 
   /* The Blocks the sentence and the word cover now, repainted whole without
@@ -1898,6 +1980,7 @@ ${constants}
      alone does not make WebKit repaint a custom highlight (#118). */
   function repaintHighlighted() {
     if (!installed) return;
+    if (savedMarks.length && installed.doc.defaultView) updateSavedSpeech(installed.doc);
     var touched = [];
     installed.utterance.forEach(function (range) { touched.push(owners.get(range)); });
     installed.word.forEach(function (range) { touched.push(owners.get(range)); });
@@ -2035,6 +2118,7 @@ ${constants}
     moveTo(registry);
     put(registry.utterance, built.ranges);
     put(registry.word, []);
+    if (savedMarks.length) updateSavedSpeech(built.window.document);
     return built;
   }
 
@@ -2050,6 +2134,7 @@ ${constants}
     var registry = registryFor(built.window);
     moveTo(registry);
     put(registry.word, built.ranges);
+    if (!sentencePaints && savedMarks.length) updateSavedSpeech(built.window.document);
     if (!quiet) followWord(built, ranges);
   }
 
@@ -2065,7 +2150,10 @@ ${constants}
         return;
       }
     }
-    if (index < 0 && installed) put(installed.word, []);
+    if (index < 0 && installed) {
+      put(installed.word, []);
+      if (!sentencePaints && savedMarks.length && installed.doc.defaultView) updateSavedSpeech(installed.doc);
+    }
   }
 
   /* ---- the loop ---- */
@@ -3491,6 +3579,11 @@ ${EPUB_GUARDS_SOURCE}
   /* ---- the one entry point ---- */
 
   function dispatch(message) {
+    if (message.kind === 'savedHighlights') {
+      savedMarks = message.marks.slice().sort(function (a, b) { return a.id - b.id; });
+      rendition.getContents().forEach(drawSaved);
+      return;
+    }
     if (message.kind === 'prepare') {
       // Exhaustion is an explicit request, including a retry after a timeout.
       // It must not wait behind a stuck visible manager queue (#153).
@@ -3610,6 +3703,8 @@ ${EPUB_GUARDS_SOURCE}
          over the sentence. */
       if (typeof message.css !== 'string') return;
       CSS_TEXT = message.css;
+      sentencePaints = message.sentencePaints !== false;
+      wordPaints = message.wordPaints !== false;
       restyle();
       /* A new ::highlight() rule restyles nothing WebKit repaints: the marks kept
          the old colours on the iOS 27.0 simulator until something else repainted

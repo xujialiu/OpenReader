@@ -30,6 +30,8 @@
 
 import type { Block, BlockRole } from '../core/segmenter';
 
+import type { SavedHighlight, SelectionLocation } from '../core/document/saved-highlight';
+
 /** The `type` of the Blocks message. Must not collide with `@epubjs-react-native/core`'s own `internalEvents`, or `View.js` swallows it instead of forwarding it to `onWebViewMessage`. */
 export const BLOCKS_MESSAGE = 'openreader:blocks';
 
@@ -616,6 +618,8 @@ export interface ThemeMessage {
  */
 export interface HighlightColoursMessage {
   kind: 'highlight';
+  sentencePaints: boolean;
+  wordPaints: boolean;
   /** `highlightCss` of the owner's Highlight Colours: SELECTABLE, then the two `::highlight()` rules. */
   css: string;
 }
@@ -657,6 +661,7 @@ export interface SnapshotMessage {
 }
 
 export type HighlightMessage =
+  | { kind: 'savedHighlights'; marks: readonly SavedHighlight[] }
   | { kind: 'prepare'; section: number }
   | LookupControlMessage
   | SnapshotMessage
@@ -681,6 +686,7 @@ export const SELECTION_MESSAGE = 'openreader:selection';
 /** A native selection, never a Reading Position. Selecting invalidates an in-flight result. */
 export interface SelectionMessage {
   type: typeof SELECTION_MESSAGE;
+  location?: SelectionLocation;
   text: string;
   /** Current word boundaries, not whether this or a previous selection changed. */
   multipleWords: boolean;
@@ -730,10 +736,17 @@ export function readWebViewMessage(event: unknown): WebViewMessage | null {
       return typeof event.utterance === 'number' && typeof event.detail === 'string' ? (event as unknown as ProblemMessage) : null;
     case TAP_MESSAGE:
       return typeof event.block === 'string' && isIndex(event.offset) ? (event as unknown as TapMessage) : null;
-    case SELECTION_MESSAGE:
+    case SELECTION_MESSAGE: {
+      const p = event.location;
+      if (p !== undefined && (!p || typeof p !== 'object' || !('cfi' in p) || typeof p.cfi !== 'string' ||
+        !('text' in p) || typeof p.text !== 'string' || !('section' in p) || !isIndex(p.section) ||
+        !('block' in p) || !isIndex(p.block) || !('endBlock' in p) || !isIndex(p.endBlock) ||
+        !('offset' in p) || !isIndex(p.offset) || !('inside' in p) || (p.inside !== null && !isIndex(p.inside)) ||
+        !('top' in p) || typeof p.top !== 'number' || !('bottom' in p) || typeof p.bottom !== 'number')) return null;
       return typeof event.text === 'string' && typeof event.multipleWords === 'boolean' && typeof event.selecting === 'boolean'
         ? (event as unknown as SelectionMessage)
         : null;
+    }
     case RENDERER_MESSAGE:
       return typeof event.line === 'string' ? (event as unknown as RendererMessage) : null;
     case PROBE_MESSAGE:

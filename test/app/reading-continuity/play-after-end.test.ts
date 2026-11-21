@@ -133,6 +133,7 @@ vi.mock('../../../src/app/use-provider-secrets', () => ({ useProviderKey: () => 
 // The view's own children, which draw and decide nothing here. Each is doubled because it does not load under Node.
 vi.mock('../../../src/app/body-text-sizes', () => ({ readBodyTextSize: () => null, writeBodyTextSize: () => {} }));
 vi.mock('../../../src/app/use-lookup', () => ({ useLookup: () => ({ selection: null, stopPronunciation() {} }) }));
+vi.mock('../../../src/app/saved-highlights', () => ({ SavedHighlights: ({ renderLookup }: { renderLookup(): unknown }) => renderLookup() }));
 vi.mock('../../../src/app/lookup-drawer', () => ({ LookupDrawer: () => null }));
 vi.mock('../../../src/app/contents-sheet', () => ({ ContentsSheet: () => null }));
 vi.mock('../../../src/app/voice-sheet', () => ({ VoiceSheet: () => null }));

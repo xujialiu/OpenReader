@@ -70,6 +70,8 @@ import {
 } from './messages';
 import { isPageLine, logFromPage } from './renderer-log';
 
+import type { SavedHighlight } from '../core/document/saved-highlight';
+
 /**
  * The section epub.js has just rendered, and how long the document's spine is.
  *
@@ -254,6 +256,7 @@ export interface ReaderBridge {
   setLookupEnabled(enabled: boolean): void;
   resumeFollowing(): void;
   releaseSelection(): void;
+  setSavedHighlights(marks: readonly SavedHighlight[]): void;
   onSelection(callback: (selection: SelectionMessage) => void): () => void;
   closeLookup(resumeFollow: boolean): void;
   /**
@@ -427,7 +430,7 @@ export interface ReaderBridge {
    * it arrives and takes the page back (`BrowseMessage`). A `fragment` is
    * `goToSection`'s (#307).
    */
-  browse(index: number, fragment?: string): void;
+  browse(index: number, fragment?: string, cfi?: string): void;
   /**
    * Debug Mode (#113): have the page write a `[renderer]` snapshot of epub.js —
    * views, queues, scroll, sections asked for and reported, location, the
@@ -635,6 +638,11 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     lookupEnabled.current = enabled;
     send({ kind: 'lookup', enabled });
   }, [send]);
+  const saved = useRef<readonly SavedHighlight[]>([]);
+  const setSavedHighlights = useCallback((marks: readonly SavedHighlight[]) => {
+    saved.current = marks;
+    send({ kind: 'savedHighlights', marks });
+  }, [send]);
   const onSelection = useCallback((callback: (selection: SelectionMessage) => void) => {
     selectionCallback.current = callback;
     return () => { if (selectionCallback.current === callback) selectionCallback.current = null; };
@@ -793,7 +801,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       appearance.current = next;
       const colours = highlightCss(next.highlight);
       if (colours !== highlightCss(previous.highlight)) {
-        send({ kind: 'highlight', css: colours });
+        send({ kind: 'highlight', css: colours, sentencePaints: next.highlight.sentence.opacity > 0, wordPaints: next.highlight.word.opacity > 0 });
         // The Highlight Colours alone (#118) are a repaint, as the theme is: a
         // colour moves no character, so the page is not placed again.
         if (appearanceCss(next, bodyTextSize.current) === appearanceCss(previous, bodyTextSize.current)) return;
@@ -923,14 +931,14 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   }, [send]);
 
   const browse = useCallback(
-    (index: number, fragment = '') => {
+    (index: number, fragment = '', cfi?: string) => {
       // First, so the sections the display renders arrive to a page that has
       // stopped following the reading: both are injected, and run in this order.
       following.current = false;
       restoring.current = false;
       if (cued.current) cued.current = { ...cued.current, reveal: false };
       send({ kind: 'browse' });
-      const place = placeIn(index, fragment);
+      const place = cfi ?? placeIn(index, fragment);
       debugLog('renderer', `the app asks epub.js to display section ${index}${place === String(index) ? '' : ` at ${cutText(place)}`} (browse)`);
       goToLocation(place);
     },
@@ -984,6 +992,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       if (message.type === DOCUMENT_MESSAGE) {
         pageReady.current = true;
         spine.current = message.spine;
+        if (saved.current.length) send({ kind: 'savedHighlights', marks: saved.current });
         hrefs.current = message.hrefs;
         send({ kind: 'lookup', enabled: lookupEnabled.current });
         // The program has installed, so the two things it may have missed go again.
@@ -999,7 +1008,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
           send({ kind: 'theme', css: themeCss(scheme.current) });
         }
         if (highlightCss(appearance.current.highlight) !== highlightCss(installed.current.highlight)) {
-          send({ kind: 'highlight', css: highlightCss(appearance.current.highlight) });
+          send({ kind: 'highlight', css: highlightCss(appearance.current.highlight), sentencePaints: appearance.current.highlight.sentence.opacity > 0, wordPaints: appearance.current.highlight.word.opacity > 0 });
         }
         // A program installed again after its page was lost (#120) would count
         // every section's characters again, for a size already decided.
@@ -1104,7 +1113,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   return useMemo(
-    () => ({ releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, setTapLock, goTo, goToSection, prepareSection, browse, snapshot, restart, readerProps }),
-    [releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, setTapLock, goTo, goToSection, prepareSection, browse, snapshot, restart, readerProps],
+    () => ({ setSavedHighlights, releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, setTapLock, goTo, goToSection, prepareSection, browse, snapshot, restart, readerProps }),
+    [setSavedHighlights, releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, setTapLock, goTo, goToSection, prepareSection, browse, snapshot, restart, readerProps],
   );
 }

@@ -4,6 +4,7 @@
  * existing recency order (#121).
  */
 
+import { highlightDeletionNotice } from './saved-highlight-store';
 import { useIsFocused } from '@react-navigation/native';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
@@ -117,18 +118,21 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
   };
   const remove = (entry: LibraryEntry) => {
     void requestInventory(entry.id).then(() => Alert.alert('Delete this book?',
-      `Local downloaded audio will also be deleted, freeing ${formatBytes(occupied(entry.id))}. The original file is kept.`, [
+      `Local downloaded audio will also be deleted, freeing ${formatBytes(occupied(entry.id))}. The original file is kept.${highlightDeletionNotice([entry.id])}`, [
         { text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => {
           setActions(null);
           const complete = library.beginOperation('delete');
           void removeDocument(entry.id).then(complete).catch(reportDeletion);
         } },
-      ]), reportDeletion);
+      ])).catch(reportDeletion);
   };
   const removeFolder = (id: FolderId) => {
     const snapshot = library.folders.getSnapshot().tree;
     const subtree = folderSubtree(snapshot, id);
     const documents = library.entries.filter((entry) => subtree.has(snapshot.documents[entry.id]));
+    let notice: string;
+    try { notice = highlightDeletionNotice(documents.map((entry) => entry.id)); }
+    catch (error) { reportDeletion(error); return; }
     confirmFolderDeletion(folderAt(snapshot, id).name, subtree.size - 1, documents.length, () => {
       if (library.folders.getSnapshot().tree !== snapshot) {
         library.report('The folder contents changed. Review them and confirm deletion again.', 'delete');
@@ -139,7 +143,7 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
       void library.folders.deleteTree(id, documents.map((entry) => entry.id), removeDocument)
         .then(complete)
         .catch((error: unknown) => library.report(`The folder could not be completely deleted. Remaining contents have been kept. ${error instanceof Error ? error.message : String(error)}`, 'delete'));
-    });
+    }, notice);
   };
 
   const add = useCallback(async () => {

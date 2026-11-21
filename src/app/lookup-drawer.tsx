@@ -34,13 +34,15 @@ const LOOKUP_MODES: readonly { mode: LookupMode; label: string }[] = [
  * centred where a title goes (the owner's Q51), in place of the switch the
  * app drew under a title. "Lookup" is what VoiceOver calls the control.
  */
-export function LookupDrawer({ lookup, service, onService }: {
-  lookup: LookupHandle; service: TranslationService; onService(service: TranslationService): void;
+export function LookupDrawer({ lookup, service, onService, children, overlay }: {
+  overlay?: React.ReactNode; children?: React.ReactNode; lookup: LookupHandle; service: TranslationService; onService(service: TranslationService): void;
 }) {
   return (
-    <Drawer visible={Boolean(lookup.selection)} title="Lookup" onClose={() => lookup.close()}
+    <Drawer visible={Boolean(lookup.selection && lookup.requested)} title="Lookup" onClose={() => lookup.close()}
       heading={<LookupModes mode={lookup.selection?.mode ?? 'dictionary'} onMode={lookup.mode} />}>
+      {children}
       {lookup.selection ? <LookupResult lookup={lookup} service={service} onService={onService} /> : null}
+      {overlay}
     </Drawer>
   );
 }

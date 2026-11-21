@@ -129,6 +129,7 @@ vi.mock('../../src/keys/store', () => ({ readSyncPassword: async () => ({ outcom
 vi.mock('../../src/app/use-provider-secrets', () => ({ useProviderKey: () => ({ presence: { state: 'held' } }) }));
 // The view's own children, which draw and decide nothing here.
 vi.mock('../../src/app/body-text-sizes', () => ({ readBodyTextSize: () => null, writeBodyTextSize: () => {} }));
+vi.mock('../../src/app/saved-highlights', () => ({ SavedHighlights: ({ renderLookup }: { renderLookup(): unknown }) => renderLookup() }));
 vi.mock('../../src/app/lookup-drawer', () => ({ LookupDrawer: (props: { lookup: { close(resume?: boolean): void } }) => { world.drawer = props.lookup; return null; } }));
 vi.mock('../../src/translation/pronunciation-audio', () => ({ playPronunciation: async () => {} }));
 vi.mock('../../src/app/contents-sheet', () => ({ ContentsSheet: () => null }));

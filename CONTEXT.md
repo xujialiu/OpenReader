@@ -216,6 +216,10 @@ goes: the Library entry, its reading position and its offline narration stay
 behind. It has nothing to do with Shared Settings.
 _Avoid_: export, send
 
+**Saved Highlight**:
+A passage the reader deliberately marks in a Document to find and read again.
+_Avoid_: spoken-word highlight, bookmark
+
 **Reading Position**:
 The sentence in a document the owner returns to, on this device or another.
 One per document, held as a Locator and a Text Anchor together, not a list of

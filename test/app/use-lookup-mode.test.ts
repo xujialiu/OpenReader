@@ -124,3 +124,17 @@ describe('explicit lookup preference versus the current result (#323)', () => {
     expect(handle.selection).toBeNull();
   });
 });
+
+it('lets a selection pause and become a highlight without contacting a lookup service until explicitly requested', async () => {
+  disk = JSON.stringify({ ...DEFAULT_LOOKUP, enabled: false, pauseReading: true });
+  const pause = vi.spyOn(reading, 'pause');
+  await mount();
+  await selected('cloud');
+  expect(pause).toHaveBeenCalledOnce();
+  expect(handle.selection?.text).toBe('cloud');
+  expect(handle.requested).toBe(false);
+  expect(mock.lookup).not.toHaveBeenCalled();
+  await act(async () => handle.request());
+  expect(mock.lookup).toHaveBeenCalledOnce();
+  pause.mockRestore();
+});

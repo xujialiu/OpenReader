@@ -157,10 +157,10 @@ export function FolderActions({ id, onClose, onDelete, onSelect }: { id: FolderI
   </Drawer>;
 }
 
-export function confirmFolderDeletion(name: string, folders: number, documents: number, remove: () => void): void {
+export function confirmFolderDeletion(name: string, folders: number, documents: number, remove: () => void, highlightNotice = ''): void {
   Alert.alert(`Delete “${name}”?`,
     `This will delete ${documents} document${documents === 1 ? '' : 's'} and ${folders} subfolder${folders === 1 ? '' : 's'}. ` +
-    'Reading and downloads for these documents will stop, and their downloaded audio will be deleted. The original files are kept. This cannot be undone.', [
+    'Reading and downloads for these documents will stop, and their downloaded audio will be deleted. The original files are kept. This cannot be undone.' + highlightNotice, [
       { text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: remove },
     ]);
 }

@@ -1,3 +1,4 @@
+import { highlightDeletionNotice } from './saved-highlight-store';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { asDocumentId } from '../core/document';
@@ -61,12 +62,13 @@ export function useLibrarySelection(navigation: Pick<ScreenProps<'Library' | 'Fo
     const snapshot = library.folders.getSnapshot().tree;
     const documentIds = library.entries.map((entry) => entry.id);
     let plan: ReturnType<typeof selectionPlan>;
-    try { plan = selectionPlan(snapshot, batch, documentIds, scope); }
+    let highlightNotice: string;
+    try { plan = selectionPlan(snapshot, batch, documentIds, scope); highlightNotice = highlightDeletionNotice(plan.documents); }
     catch (error) { library.report(describe(error), 'delete'); return; }
     setConfirming(true);
     Alert.alert('Delete selected entries?',
       `This will delete ${plan.documents.size} document${plan.documents.size === 1 ? '' : 's'} and ${plan.folders.size} folder${plan.folders.size === 1 ? '' : 's'}. ` +
-      'Reading and downloads for these documents will stop, and their downloaded audio will be deleted. The original files are kept. This cannot be undone.', [
+      'Reading and downloads for these documents will stop, and their downloaded audio will be deleted. The original files are kept. This cannot be undone.' + highlightNotice, [
         { text: 'Cancel', style: 'cancel', onPress: () => setConfirming(false) },
         { text: 'Delete', style: 'destructive', onPress: () => {
           if (token !== generation.current || locked.current) return;

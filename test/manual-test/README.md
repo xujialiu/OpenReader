@@ -98,6 +98,9 @@ and what is committed is what was measured, never their text.
 
 ## Pitfalls
 
+- **A fresh bundle fetched over HTTP can disagree with the running app.** On #370 a direct fetch contained beta7 while the selected simulator's Settings and Debug Log still showed beta5 after relaunch. Restarting the session-owned Metro and then relaunching that simulator's app brought both to beta7. Use the visible version or the live app's version file as the delivery check.
+- **A successful tap on Highlight proves the save only.** On #370 the excerpt was yellow on disk and on the page, yet the five swatches were missing from the screenshot. Check for the actual swatches in the open Drawer, touch a different colour and verify the resulting excerpt colour.
+
 - **Query a Download drawer row by `otherElements` and its exact chapter label, not by a button selector.** In the #234 recheck, `buttons["Download The Second Chapter"]` failed (`Selection ring missing`) because the ring has no such label, and after the download even the row's label-based query failed under `app.buttons`: `DrawerRow` exposes the label-carrying checkbox row as `XCUIApplication.otherElements` (the earlier `Button` query hit a SwiftUI `PopUpButton` type mismatch). The correct readback is `otherElements["<chapter title>, being read, downloaded"]` with `value` `checkbox, unchecked`, beside the disabled `Download selected (0)` button. A runner-only rebuild needs its own fresh `ios_guard.py` admission; a previous unguarded runner build is not inherited admission.
 
 - **Verify Sync password removal through the app after a cold launch.** The iOS 27.0 simulator has no guest `security` CLI. Save one disposable character, cold-launch OpenReader and check the secure field has length one. Edit and clear it, cold-launch again, and check the empty field after Sync opens. Use held native operations in the host regression to exercise the overlapping edits deterministically.

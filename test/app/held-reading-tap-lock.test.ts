@@ -101,6 +101,7 @@ vi.mock('../../src/translation/pronunciation-audio', () => ({ playPronunciation:
 // The view's children.
 vi.mock('../../src/app/contents-sheet', () => ({ ContentsSheet: () => null }));
 vi.mock('../../src/app/voice-sheet', () => ({ VoiceSheet: () => null }));
+vi.mock('../../src/app/saved-highlights', () => ({ SavedHighlights: ({ renderLookup }: { renderLookup(): unknown }) => renderLookup() }));
 vi.mock('../../src/app/lookup-drawer', () => ({ LookupDrawer: () => null }));
 vi.mock('../../src/app/player', () => ({ Player: (props: NonNullable<typeof world.player>) => { world.player = props; return null; } }));
 // The Debug Log: its lines, kept here.

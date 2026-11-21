@@ -189,7 +189,7 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
         appearance={settings.appearance}
         onChange={(next) => setSettings({ ...settings, appearance: next })}
       />
-      {actions ? <ReaderActions document={id} appearance debugNote={DEBUG_MODE} onClose={() => setActions(false)} /> : null}
+      {actions ? <ReaderActions document={id} appearance onHighlights={mine?.opened ? () => { setActions(false); reading.showHighlights(id); } : undefined} debugNote={DEBUG_MODE} onClose={() => setActions(false)} /> : null}
     </View>
   );
 }

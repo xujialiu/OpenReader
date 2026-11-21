@@ -65,6 +65,7 @@ export interface ReadingHandle {
   current: HeldReading | null;
   /** The Reader for `id` is on screen: keep the Reading if it is this one, or end it and open this one. */
   show(id: DocumentId): void;
+  showHighlights(id: DocumentId): void;
   /** The Reader for `id` has gone: keep the Reading if it is playing, end it if it is not. */
   left(id: DocumentId): void;
   /** End the Reading of `id`, whatever it is doing: the document is being deleted. */
@@ -132,7 +133,9 @@ export function ReadingHost({ children }: { children: ReactNode }) {
     },
     [],
   );
+  const [highlightList, showHighlights] = useState<DocumentId | null>(null);
   const left = useCallback((id: DocumentId) => {
+    showHighlights((was) => was === id ? null : was);
     setHeld((was) => {
       if (!was || was.id !== id) return was;
       return playingRef.current ? { ...was, shown: false } : null;
@@ -289,6 +292,7 @@ export function ReadingHost({ children }: { children: ReactNode }) {
     [openedId],
   );
 
+  const closeHighlights = useCallback(() => showHighlights(null), []);
   const handle = useMemo<ReadingHandle>(
     () => ({
       current: held
@@ -306,6 +310,7 @@ export function ReadingHost({ children }: { children: ReactNode }) {
       left,
       end,
       setBarHeight,
+      showHighlights,
       chooseVoice,
     }),
     [held, live, mine, show, left, end, chooseVoice],
@@ -332,6 +337,8 @@ export function ReadingHost({ children }: { children: ReactNode }) {
           <View style={styles.page} accessibilityElementsHidden={!held.shown}
             importantForAccessibility={held.shown ? 'auto' : 'no-hide-descendants'}>
           <ReadingView
+            highlightList={held.shown && highlightList === held.id}
+            closeHighlights={closeHighlights}
             shown={held.shown}
             key={opened.document.identity.id}
             document={{ ...opened.document, title: openedEntry?.title ?? opened.document.title }}

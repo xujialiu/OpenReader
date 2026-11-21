@@ -32,6 +32,7 @@
  * names it: the owner knows a book by the file they chose.
  */
 
+import { clearDocumentHighlights } from './saved-highlight-store';
 import type { File } from 'expo-file-system';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { documentNameProblem, freeDocumentName, type FolderId, type FolderSnapshot, type FolderStore, type FolderTree } from '../core/folders';
@@ -295,6 +296,7 @@ export function useLibrary(): Library {
       const entry: LibraryEntry = { ...added.identity, title, position: null, stamp: stamp() };
       // Membership is saved first: an interrupted import may leave an unused
       // mapping, but can never expose a successfully imported book in the wrong folder.
+      clearDocumentHighlights(entry.id);
       folders.place(entry.id, parent);
       commit((was) => [...was, entry], true);
       return { entry, duplicate: false };
@@ -372,7 +374,10 @@ export function useLibrary(): Library {
       change(id, (entry) => ({ ...entry, title: title.trim() }));
     }
   }, [change, folders]);
-  const remove = useCallback((id: DocumentId) => commit((was) => was.filter((entry) => entry.id !== id), true), [commit]);
+  const remove = useCallback((id: DocumentId) => {
+    commit((was) => was.filter((entry) => entry.id !== id), true);
+    clearDocumentHighlights(id);
+  }, [commit]);
   return { folders, folderSnapshot, entries, loading, note, dismissNote, beginOperation, add, heard, rename, remove, reached, report, device, current, positionsItems, adopt, adoptedAt };
 }
 

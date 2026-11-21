@@ -1,4 +1,5 @@
 import { LookupDrawer } from './lookup-drawer';
+import { SavedHighlights } from './saved-highlights';
 import { useLookup } from './use-lookup';
 
 /**
@@ -99,6 +100,8 @@ const PAGE_RESTARTS = 3;
 const PAGE_RESTART_WINDOW_MS = 60_000;
 
 export interface ReadingViewProps {
+  highlightList?: boolean;
+  closeHighlights?(): void;
   /** The held Reading can live above the navigator while its page is hidden. */
   shown: boolean;
   document: OpenDocument;
@@ -241,7 +244,7 @@ function highlightLine(status: ReadingStatus): string | null {
 }
 
 export function ReadingView({
-  shown,
+  highlightList, closeHighlights, shown,
   document,
   settings,
   keyPresence,
@@ -312,10 +315,11 @@ export function ReadingView({
    */
   useEffect(() => {
     if (shown) return;
+    closeHighlights?.();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setContentsOpen(false);
     setVoicesOpen(false);
-  }, [shown]);
+  }, [shown, closeHighlights]);
   /** Down to the Reading Button, or the whole strip and the navigation bar with it (#67). Here rather than in the player because pausing re-opens both, and the pause is this screen's. */
   const [collapsed, setCollapsed] = useState(false);
   /**
@@ -938,8 +942,10 @@ export function ReadingView({
         onSleep={sleep.choose}
       /> : null}
 
-      <LookupDrawer lookup={lookup} service={settings.lookup.service}
-        onService={(service) => setSettings((was) => ({ ...was, lookup: { ...was.lookup, service } }))} />
+      <SavedHighlights document={document.identity.id} bridge={reading.bridge} lookup={lookup} contents={contents}
+        anchors={status.anchors} listOpen={!!highlightList} closeList={closeHighlights}
+        renderLookup={(actions, overlay) => <LookupDrawer overlay={overlay} lookup={lookup} service={settings.lookup.service}
+          onService={(service) => setSettings((was) => ({ ...was, lookup: { ...was.lookup, service } }))}>{actions}</LookupDrawer>} />
 
       <ContentsSheet
         visible={contentsOpen}

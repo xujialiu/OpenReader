@@ -1139,7 +1139,7 @@ describe('the Highlight Colours reach an open book, and the page stays where it 
     const set = bridge.slice(bridge.indexOf('const setAppearance = useCallback('), bridge.indexOf('const setTheme = useCallback('));
     pin(set, 'const colours = highlightCss(next.highlight);', 'reader-bridge.ts, setAppearance');
     pin(set, 'if (colours !== highlightCss(previous.highlight)) {', 'reader-bridge.ts, setAppearance');
-    pin(set, "send({ kind: 'highlight', css: colours });", 'reader-bridge.ts, setAppearance');
+    pin(set, "send({ kind: 'highlight', css: colours, sentencePaints: next.highlight.sentence.opacity > 0, wordPaints: next.highlight.word.opacity > 0 });", 'reader-bridge.ts, setAppearance');
     // A colour alone stops before the 'appearance' message, whose settle loop
     // would re-centre the page for a repaint.
     pin(set, 'if (appearanceCss(next, bodyTextSize.current) === appearanceCss(previous, bodyTextSize.current)) return;', 'reader-bridge.ts, setAppearance');
@@ -1151,7 +1151,7 @@ describe('the Highlight Colours reach an open book, and the page stays where it 
     const document = bridge.slice(bridge.indexOf('message.type === DOCUMENT_MESSAGE'));
     const branch = document.slice(0, document.indexOf('return;'));
     pin(branch, 'if (highlightCss(appearance.current.highlight) !== highlightCss(installed.current.highlight)) {', 'reader-bridge.ts, the document message');
-    pin(branch, "send({ kind: 'highlight', css: highlightCss(appearance.current.highlight) });", 'reader-bridge.ts, the document message');
+    pin(branch, "send({ kind: 'highlight', css: highlightCss(appearance.current.highlight), sentencePaints: appearance.current.highlight.sentence.opacity > 0, wordPaints: appearance.current.highlight.word.opacity > 0 });", 'reader-bridge.ts, the document message');
   });
 
   it('keeps the word over the sentence, because nothing re-registers the two highlights', () => {

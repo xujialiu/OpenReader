@@ -69,7 +69,7 @@ const TITLES: Record<Exclude<Page, 'menu' | 'move'>, string> = { appearance: 'Ap
  * note written and the drawer open, with the failure under the rows, as a
  * failed Share is. Cancel writes nothing and leaves the menu as it was.
  */
-export function ReaderActions({ document, onClose, onDelete, onSelect, appearance = false, movable = false, debugNote = false }: { document: DocumentId; onClose(): void; onDelete?(): void; onSelect?(): void; appearance?: boolean; movable?: boolean; debugNote?: boolean }) {
+export function ReaderActions({ document, onClose, onDelete, onSelect, onHighlights, appearance = false, movable = false, debugNote = false }: { document: DocumentId; onClose(): void; onDelete?(): void; onSelect?(): void; onHighlights?(): void; appearance?: boolean; movable?: boolean; debugNote?: boolean }) {
   const { library, settings, setSettings } = useShell();
   const entry = library.entries.find((e) => e.id === document);
   const reading = useHeldReading();
@@ -120,6 +120,9 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
     {page === 'menu' ? <DrawerScroll>
       {appearance ? <DrawerRow icon="appearance" onPress={() => setPage('appearance')} accessory={<DrawerChevron />}>
         <DrawerRowText>Appearance</DrawerRowText>
+      </DrawerRow> : null}
+      {onHighlights ? <DrawerRow onPress={onHighlights} accessory={<DrawerChevron />}>
+        <DrawerRowText>Highlights</DrawerRowText>
       </DrawerRow> : null}
       <DrawerRow icon="rename" onPress={() => { setFailure(null); setRenaming(true); }}><DrawerRowText>Rename</DrawerRowText></DrawerRow>
       {movable ? <DrawerRow icon="folder" onPress={() => { move.restart(); setPage('move'); }} accessory={<DrawerChevron />}>

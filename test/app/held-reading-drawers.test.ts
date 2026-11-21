@@ -91,6 +91,7 @@ vi.mock('../../src/translation/pronunciation-audio', () => ({ playPronunciation:
 // The view's children. Contents and Voice record the `visible` they are given.
 vi.mock('../../src/app/contents-sheet', () => ({ ContentsSheet: (props: { visible: boolean }) => { sheets.contents = props.visible; return null; } }));
 vi.mock('../../src/app/voice-sheet', () => ({ VoiceSheet: (props: { visible: boolean }) => { sheets.voices = props.visible; return null; } }));
+vi.mock('../../src/app/saved-highlights', () => ({ SavedHighlights: ({ renderLookup }: { renderLookup(): unknown }) => renderLookup() }));
 vi.mock('../../src/app/lookup-drawer', () => ({ LookupDrawer: () => null }));
 vi.mock('../../src/app/player', () => ({ Player: (props: NonNullable<typeof world.player>) => { world.player = props; return null; } }));
 vi.mock('../../src/app/document-cover', () => ({ useDocumentCover: () => null }));

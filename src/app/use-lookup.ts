@@ -10,7 +10,9 @@ import { playPronunciation } from '../translation/pronunciation-audio';
 import type { LookupMode, LookupSettings } from '../translation/settings';
 import { consent, lookupRecipient } from './consent';
 
-export interface LookupSelection { text: string; mode: LookupMode; selecting: boolean; attempt: number }
+import type { SelectionLocation } from '../core/document/saved-highlight';
+
+export interface LookupSelection { adjusted?: boolean; location?: SelectionLocation; text: string; mode: LookupMode; selecting: boolean; attempt: number }
 /**
  * @param pause the pause a lookup makes when "Pause reading during lookup" is on:
  * the screen's own (`reading-view.tsx`), so it does everything a pause does and
@@ -22,12 +24,14 @@ export function useLookup(settings: LookupSettings, reading: {
   bridge: ReaderBridge; pause(): void; play(): void; carryOn(): void; status: { playing: boolean };
 }, focused: boolean, pause: () => void = reading.pause, rememberMode: (mode: LookupMode) => void) {
   const [selection, setSelection] = useState<LookupSelection | null>(null);
+  const [requested, setRequested] = useState(false);
   const [result, setResult] = useState<LookupResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [pronouncing, setPronouncing] = useState(false);
   const [loading, setLoading] = useState(false);
   const opened = useRef(false);
+  const lastRange = useRef<string | null>(null);
   const latest = useRef({ settings, reading, pause, rememberMode });
   const preferred = useRef(settings.preferredMode);
   useEffect(() => { latest.current = { settings, reading, pause, rememberMode }; }, [settings, reading, pause, rememberMode]);
@@ -51,29 +55,40 @@ export function useLookup(settings: LookupSettings, reading: {
   const close = useCallback((resumeAudio = true) => {
     pronunciation.stop(resumeAudio);
     opened.current = false;
+    lastRange.current = null;
+    setRequested(false);
     setSelection(null); setResult(null); setError(null); setAudioError(null);
     latest.current.reading.bridge.closeLookup(resumeAudio && latest.current.reading.status.playing);
   }, [pronunciation]);
 
   useEffect(() => {
     const bridge = reading.bridge;
-    bridge.setLookupEnabled(settings.enabled && focused);
+    bridge.setLookupEnabled(focused);
     // Losing focus tears down the external selection and audio session together.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!settings.enabled || !focused) close(false);
+    if (!focused) close(false);
     const unsubscribe = bridge.onSelection((message) => {
-      if (!latest.current.settings.enabled) return;
+      if (!focused) return;
+      const range = message.location?.cfi ?? message.text;
+      if (!latest.current.settings.enabled && lastRange.current !== range) setRequested(false);
+      lastRange.current = range;
       if (!opened.current) {
         opened.current = true;
+        setRequested(latest.current.settings.enabled);
         if (latest.current.settings.pauseReading) latest.current.pause();
       }
       if (message.selecting) pronunciation.stop();
       const initialMode = message.multipleWords ? 'translation' : preferred.current;
       setSelection((previous) => {
-        if (previous?.text === message.text) {
+        if (previous?.text === message.text && previous.location?.cfi === message.location?.cfi) {
           return previous.selecting === message.selecting ? previous : { ...previous, selecting: message.selecting };
         }
-        return { text: message.text, mode: initialMode, selecting: message.selecting, attempt: 0 };
+        const before = previous?.location;
+        const after = message.location;
+        const adjusted = !!(before && after && before.section === after.section &&
+          (previous?.adjusted || (before.block === after.block && before.offset === after.offset) ||
+           (before.cfi !== after.cfi && before.inside !== null && before.inside === after.inside)));
+        return { adjusted, text: message.text, location: message.location, mode: initialMode, selecting: message.selecting, attempt: 0 };
       });
     });
     return unsubscribe;
@@ -89,7 +104,7 @@ export function useLookup(settings: LookupSettings, reading: {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setResult(null); setError(null); setAudioError(null);
     pronunciation.stop();
-    if (!selection || selection.selecting) { setLoading(false); return; }
+    if (!requested || !selection || selection.selecting) { setLoading(false); return; }
     const abort = new AbortController();
     let live = true;
     setLoading(true);
@@ -125,7 +140,7 @@ export function useLookup(settings: LookupSettings, reading: {
       if (live) setError(failure instanceof Error ? failure.message : 'The request failed. Try again.');
     }).finally(() => { if (live) setLoading(false); });
     return () => { live = false; abort.abort(); };
-  }, [selection, requestSettings, pronunciation, close]);
+  }, [requested, selection, requestSettings, pronunciation, close]);
 
   const mode = (next: LookupMode) => {
     if (!selection) return;
@@ -136,6 +151,6 @@ export function useLookup(settings: LookupSettings, reading: {
   };
   const retry = () => setSelection((was) => was ? { ...was, selecting: false, attempt: was.attempt + 1 } : null);
   const pronounce = (url: string) => { setAudioError(null); void pronunciation.play(url); };
-  return { selection, result, error, audioError, loading, pronouncing, close, mode, retry, pronounce, stopPronunciation: pronunciation.stop };
+  return { selection, requested, request: () => setRequested(true), result, error, audioError, loading, pronouncing, close, mode, retry, pronounce, stopPronunciation: pronunciation.stop };
 }
 export type LookupHandle = ReturnType<typeof useLookup>;

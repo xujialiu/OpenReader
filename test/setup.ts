@@ -1,4 +1,4 @@
-import { afterEach, beforeEach } from 'vitest';
+import { afterEach, beforeEach, vi } from 'vitest';
 
 /**
  * Loaded by vitest before every test file (vitest.config.mts setupFiles), the
@@ -21,6 +21,10 @@ import { afterEach, beforeEach } from 'vitest';
  * mistake. A test that genuinely wants to exercise real network behaviour is
  * not a unit test and does not belong under test/.
  */
+// The saved-highlight store uses Expo's synchronous SQLite API. Host tests
+// execute its real SQL against an isolated in-memory SQLite database.
+vi.mock('expo-sqlite', () => import('./sqlite-sync'));
+
 const forbidden: typeof fetch = (input) => {
   const target = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
   return Promise.reject(
