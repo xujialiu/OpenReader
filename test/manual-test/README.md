@@ -118,13 +118,10 @@ and what is committed is what was measured, never their text.
   the first BLOCKED record and rerun the readiness check once after the initial
   bundle settles, rather than calling the environment healthy from the Metro
   log alone.
-- **An admitted phase's backgrounded child can outlive its intended
-  persistent-Metro rule.** During the #371 install, `expo prebuild --no-install`
-  left no workspace and the foreground Expo CLI wrote an image on the terminal,
-  while three backgrounded `expo start` launches each died when their owning
-  command exited. Keep a persistent Metro in a session terminal (`tty: true`),
-  not under `nohup` or a background shell that the phase's process-tree cleanup
-  can reap, and record its PID only after confirming its listener and cwd.
+- **Metro exited with the installation command on #371.** Three background
+  launches ended before the simulator could request a bundle. Start Metro in
+  a persistent session terminal outside the admitted phase, then verify its
+  listener and working directory.
 - **Local StoreKit can fail before the first transaction on a fresh simulator.**
   The attached formal `StoreKitSessionUI` protocol ran in `establish` mode on a
   fresh iPhone 17/iOS 26.5 and a fresh iPhone Duo/iOS 27.1. Both runs reached

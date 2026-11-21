@@ -97,6 +97,14 @@ floating the player over the page exists to prevent. Measured: the spoken
 Utterance's top stayed at **263.96 px** through expand → collapse → expand, not a
 pixel either way. The new inset applies from the next Utterance.
 
+At the end of the Document (#371), the scroll container has an `::after`
+when its last child is the view for `book.spine.last()`, the last linear spine
+item. Its height is the larger of the open and current Player measurements,
+plus 8 CSS pixels. An inset that grows this space while the page is already
+at the bottom carries it to the new limit. On the iPhone 17 Pro the end-of-book
+note increased the scroll height from 2669 to 2701 px. Leaving the page at
+its old limit of 1857 px put the note over the last sentence.
+
 Measured centring error after the change, read out of the registered `Highlight`'s
 own ranges on the owner's book, `clientHeight` 758:
 

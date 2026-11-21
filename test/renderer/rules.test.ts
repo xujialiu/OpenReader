@@ -19,6 +19,7 @@ import {
   WORD_HIGHLIGHT,
 } from '../../src/renderer/highlighter';
 import { pin, pinCount } from '../structural';
+import { standInPage } from './stand-in-page';
 
 /**
  * The three things ADR 0005 says this directory must never do, checked against the
@@ -161,7 +162,7 @@ describe('the page follows the line being spoken (ADR 0011, ADR 0050)', () => {
     }
   });
 
-  it('scrolls in one place, reached only by placement, gliding, drift and resize restoration', () => {
+  it('uses one scroll path for placement, gliding, drift, resize and keeping the book end visible', () => {
     // ADR 0005 keeps the frame path off the bridge; this keeps the scroll in one
     // function, so there is one thing to read to know how the page moves. Each
     // scroll costs the continuous manager a pass over its views, so a scroll from
@@ -171,8 +172,10 @@ describe('the page follows the line being spoken (ADR 0011, ADR 0050)', () => {
     pin(fn(program, 'nudge'), 'rendition.manager.scrollBy(0, by, false);', 'highlighter.ts, function nudge');
     // One call in bring(), for a move made at once, one a frame in glideStep(),
     // one a frame in drift() (Continuous, #71), and the bounded browsing-anchor
-    // restoration after resize (#319); plus the declaration.
-    expect(program.match(/nudge\(/g)).toHaveLength(5);
+    // restoration after resize (#319), plus end-of-book Player growth (#371)
+    // and the declaration.
+    expect(program.match(/nudge\(/g)).toHaveLength(6);
+    expect(fn(program, 'reserve').match(/nudge\(/g)).toHaveLength(1);
     expect(fn(program, 'restoreResizeAnchor').match(/nudge\(/g)).toHaveLength(1);
     expect(fn(program, 'bring').match(/nudge\(/g)).toHaveLength(1);
     expect(fn(program, 'glideStep').match(/nudge\(/g)).toHaveLength(1);
@@ -362,8 +365,8 @@ describe('never highlight by mutating the DOM, and never check whether you can (
     expect(preparation).toContain('host.remove()');
     const program = source.replace(preparation, '');
     // Two stylesheets, and the second is not in a Document at all: it is the
-    // page epub.js lays the sections out on, and it holds one rule, the room kept
-    // above the first section for the navigation bar (#67, `reserve`). Nothing of
+    // page epub.js lays the sections out on, and it holds the room kept for
+    // the navigation bar and the Player (#67, #371, `reserve`). Nothing of
     // the book's text is in that page, so no text node, offset or CFI can move.
     expect(program.match(/createElement\(/g)).toHaveLength(2);
     expect(program.match(/createElement\('style'\)/g)).toHaveLength(2);
@@ -395,9 +398,9 @@ describe('never highlight by mutating the DOM, and never check whether you can (
         // tidiness: the count above is still one `createElement`.
         expect(program).toContain('var wanted = CSS_TEXT + THEME + APPEARANCE;');
         expect(program).toContain('if (style.textContent !== wanted) style.textContent = wanted;');
-        // And the bar's room, built from a number and nothing else.
+        // The other assignment writes only the outer scroll container's rules.
         expect(program.match(/textContent = /g)).toHaveLength(2);
-        expect(fn(program, 'reserve')).toContain("style.textContent = barReserved > 0");
+        expect(fn(program, 'reserve')).toContain('style.textContent = rules;');
         continue;
       }
       expect(program).not.toContain(mutation);
@@ -782,13 +785,41 @@ describe('the player floats over the page, and the centring is told (ADR 0020)',
     expect(seen).toEqual([{ kind: 'inset', bottomPx: 190, openPx: 0 }]);
   });
 
-  it('does not scroll when the inset changes, because that would move the text under the reader', () => {
-    // The one thing the floating player exists to prevent. The new inset applies to
-    // the next Utterance; the sentence being spoken stays where it is.
+  it('does not re-aim the current sentence when the inset changes', () => {
     const program = code('highlighter.ts');
     const inset = program.slice(program.indexOf("message.kind === 'inset'"));
     const branch = inset.slice(0, inset.indexOf('return;'));
     expect(branch).not.toMatch(/centre|scrollBy|follow\(/);
+  });
+
+  it('keeps scroll room after the last linear view as the Player changes height (#371)', () => {
+    const page = standInPage();
+    const style = { textContent: '' };
+    page.document.getElementById = () => style;
+    page.send({ kind: 'bar', coveredPx: 54, reservedPx: 54 });
+    for (const [covered, endRoom] of [[135, 143], [200, 208], [52, 143]]) {
+      page.send({ kind: 'inset', bottomPx: covered, openPx: 135 });
+      // Section 9 is outside the linear reading order. A middle section can
+      // also be the last mounted view while epub.js loads its neighbour.
+      expect(style.textContent).toContain('.epub-container:has(> .epub-view[ref="8"]:last-child)::after');
+      expect(style.textContent).toContain('height: ' + endRoom + 'px');
+      expect(style.textContent).toContain('height: 54px');
+    }
+  });
+
+  it.each([[1857, 1889], [1757, 1757]])('when the end note appears at scrollTop %i, the page rests at %i', (before, after) => {
+    const page = standInPage();
+    const style = { textContent: '' };
+    page.document.getElementById = () => style;
+    // Measured on iPhone 17 Pro: the note added 32 px to the scroll extent.
+    page.stage.clientHeight = 812;
+    Object.defineProperty(page.stage, 'scrollHeight', {
+      get: () => style.textContent.includes('height: 163px') ? 2701 : 2669,
+    });
+    page.send({ kind: 'inset', bottomPx: 123, openPx: 123 });
+    page.stage.scrollTop = before;
+    page.send({ kind: 'inset', bottomPx: 155, openPx: 123 });
+    expect(page.stage.scrollTop).toBe(after);
   });
 });
 

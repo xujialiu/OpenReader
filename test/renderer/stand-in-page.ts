@@ -151,7 +151,7 @@ export function standInPage(options: { toc?: readonly unknown[]; debugMode?: boo
     getContents: () => contents.filter((one) => one.document.defaultView),
   };
   const book = {
-    spine: { length: 10, get: (index: number) => ({ href: 'ch' + index + '.xhtml', index, next: () => null }) }, package: { metadata: { language: 'en' } },
+    spine: { length: 10, last: () => ({ index: 8 }), get: (index: number) => ({ href: 'ch' + index + '.xhtml', index, next: () => null }) }, package: { metadata: { language: 'en' } },
     navigation: options.toc ? { toc: options.toc } : undefined,
   };
   const setTimeout = (fn: () => void) => timers.push(fn);

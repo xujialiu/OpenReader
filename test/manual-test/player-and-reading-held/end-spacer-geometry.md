@@ -1,18 +1,19 @@
-# Reading the end-spacer geometry over the harness (#371)
+# Reading the final line above the Player (#371)
 
-`end-spacer-geometry.js` sends one read-only probe into the running reader and
-answers the Debug Log's `[probe] …` line: the stage scroll box, the `#ending`
-range in viewport CSS pixels (one of these is one screen point on this
-device), the installed reserve rule, and the scroll remaining. It measures
-nothing painted; the card's frame comes from the paired screenshot or the AX
-tree, never from the container's client bottom.
+Open a fixture whose final paragraph has the ID `ending`. Expand the Player,
+drag to the bottom and run the probe. Read its latest `[probe]` result in the
+Debug Log and capture the screen.
 
 ```sh
-node test/manual-test/player-and-reading-held/end-spacer-geometry.js SIMULATOR_UDID
+node test/manual-test/kit/hx.cjs SIMULATOR_UDID '{}' --code-file test/manual-test/player-and-reading-held/end-spacer-geometry-probe.js
 ```
 
-Used 2026-11-21 on the beta8 verification: at the drag limit with the Player
-open (`remaining 0`, ending viewport 652–680) and again after the completion
-note arrived (`remaining 0`, ending viewport 620–648, note card at real
-screen y ≈ 740–853 pt from the screenshot). What it cannot prove: the painted
-Player's frame, and anything outside the one line it probes.
+Check that `remaining` is within one CSS pixel of zero and that the screenshot
+shows the whole last line, including punctuation, above the card. Then play
+from a few sentences before the end. Repeat the probe and screenshot with the
+completion note visible. The range coordinates are relative to the WebView
+viewport. Use the card's visible upper edge when checking clearance.
+
+On the iPhone 17 Pro with build 1.0.5 (36)-beta8-debug, the completion note
+increased the scroll extent by 32 CSS pixels. The page moved from 1857 to
+1889, leaving the final line visible above the note.

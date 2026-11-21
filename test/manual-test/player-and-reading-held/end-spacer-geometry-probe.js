@@ -1,30 +1,28 @@
-// Paired with end-spacer-geometry.js: the stage scroll box, the #ending range
-// in viewport CSS pixels, and the scroll remaining. Nothing here measures the
-// painted Player; use the screenshot/AX card frame beside it.
+// hx.cjs evaluates this function inside the reader WebView.
 /* global rendition */
+// eslint-disable-next-line no-unused-vars -- hx.cjs appends the call.
 function probe() {
   const out = {};
   try {
     const c = rendition.manager.container;
-    const view = rendition.manager.views._views[0];
-    const viewDoc = view.contents.document;
+    const contents = rendition.getContents().find((item) => item.document.getElementById('ending'));
+    if (!contents) return JSON.stringify({ error: 'no mounted #ending' });
+    const viewDoc = contents.document;
     const style = document.getElementById('openreader-bar');
     out.style = style ? style.textContent : null;
     out.scroll = { top: c.scrollTop, client: c.clientHeight, height: c.scrollHeight, width: c.clientWidth };
-    const viewTop = view.element.getBoundingClientRect().top;
-    const viewLeft = view.element.getBoundingClientRect().left;
+    const frame = contents.window.frameElement.getBoundingClientRect();
     const line = viewDoc.getElementById('ending');
-    if (!line) { out.error = 'no #ending'; return JSON.stringify(out); }
     const range = viewDoc.createRange();
     range.selectNodeContents(line);
     out.endingViewport = Array.from(range.getClientRects()).map((r) => ({
-      top: viewTop + r.top,
-      bottom: viewTop + r.bottom,
-      left: viewLeft + r.left,
-      right: viewLeft + r.right,
+      top: frame.top + r.top,
+      bottom: frame.top + r.bottom,
+      left: frame.left + r.left,
+      right: frame.left + r.right,
     }));
     out.remaining = c.scrollHeight - c.scrollTop - c.clientHeight;
-    out.atLimit = out.remaining <= 1;
+    out.atLimit = Math.abs(out.remaining) <= 1;
   } catch (e) { out.error = String(e); }
   return JSON.stringify(out);
 }
