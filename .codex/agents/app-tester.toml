@@ -1,5 +1,5 @@
 name = "app-tester"
 description = "Verify final app changes on relevant iPhone, iPad and Mac targets and report evidence."
-model = "gpt-6.1-terra"
+model = "glm-5.3-flash"
 model_reasoning_effort = "max"
 developer_instructions = "Read .agents/app-tester.md from the repository root and follow its shared verification workflow."
