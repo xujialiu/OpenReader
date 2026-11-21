@@ -98,6 +98,7 @@ and what is committed is what was measured, never their text.
 
 ## Pitfalls
 
+- **A MobileBuildMCP launch can leave a detached console helper after the guard exits.** With `mobilebuildmcp@2.7.1 simulator launch-app`, the launch receipt named a runtime log and a `simctl launch --console-pty` helper. The helper had its own process group and was reparented to PID 1, so it survived the guard and held the staging directory as its cwd. Closing that exact owned helper also stopped the app. Preserve the receipt and logs, check the helper's PID, command, target and cwd, then stop it and, if the app exited, silence the owned simulator and relaunch with plain `simctl launch`. A native readiness screenshot immediately after that relaunch was still the splash screen: wait for the intended app UI and verify it again before delivery. Do not assume the guard removed a detached helper or that native readiness alone proves the JavaScript screen is ready.
 - **A Device Hub pose receipt is not a Duo screenshot proof.** On the iOS 27.1
   release capture, the Hub's pose click returned a synthetic dispatch receipt
   with no target-side verification. The click was accepted only after fresh
