@@ -51,6 +51,12 @@ would reflow and the reading would jump. Floating means the text never moves; th
 price is that the player covers the last few lines while it is open, and the
 sentence being spoken is held above it rather than in the middle of the glass.
 
+At the end of the Document there is room to scroll the final line a little
+above the open Player. This lets someone read the last few lines by hand or
+follow them as they are spoken. If the Player grows to say the reading has
+finished, the last line stays above that message. Chapters still run straight
+into one another.
+
 ## Collapsing leaves one button, and pausing brings everything back
 
 _Revised in [decision 0048](0048-collapsing-leaves-the-page-and-one-button.md):

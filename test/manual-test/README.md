@@ -10,8 +10,9 @@ prerequisites, expected result and what it cannot prove into the recipe it
 belongs to. One-off probes may stay temporary; a working tool needed for the
 next run belongs here.
 
-Keep generated Xcode projects, builds, logs and screenshots outside the
-repository. Accept device IDs and artifact destinations as arguments. Load only
+Keep generated Xcode projects and builds outside the repository. For logs and
+screenshots, follow the [evidence storage rule](../../MEMORY/documentation.md#evidence).
+Accept device IDs and artifact destinations as arguments. Load only
 needed credentials from `~/.secrets/openreader/`; never print or commit their values.
 Follow the simulator installation guide, MEMORY/device-testing.md's silence and playback-duration
 requirements, and MEMORY/app-change.md's final-running-app requirement. Choose playback duration for the fact being
@@ -121,6 +122,10 @@ and what is committed is what was measured, never their text.
   the first BLOCKED record and rerun the readiness check once after the initial
   bundle settles, rather than calling the environment healthy from the Metro
   log alone.
+- **Metro exited with the installation command on #371.** Three background
+  launches ended before the simulator could request a bundle. Start Metro in
+  a persistent session terminal outside the admitted phase, then verify its
+  listener and working directory.
 - **Local StoreKit can fail before the first transaction on a fresh simulator.**
   The attached formal `StoreKitSessionUI` protocol ran in `establish` mode on a
   fresh iPhone 17/iOS 26.5 and a fresh iPhone Duo/iOS 27.1. Both runs reached

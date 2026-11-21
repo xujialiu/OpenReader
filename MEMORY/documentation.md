@@ -85,6 +85,12 @@ A note records a **measurement**. A decision is not a note, even when the
 measurement is what forced it — the note says what was seen, the ADR says what
 was then chosen.
 
+### Evidence
+
+Keep raw evidence such as screenshots, recordings and captured logs in the
+worktree's git-ignored `./.tmp/` directory. Record the observation and its
+measurements in the note so it can be read on its own.
+
 ## `CONTEXT.md` — the glossary
 
 A term, what it means, and the words to avoid for it. **No implementation

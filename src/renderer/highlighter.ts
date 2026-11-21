@@ -3342,16 +3342,35 @@ ${constants}
      that changes size destroys every view (the blank open, below). A ::before is
      laid out before the first view and moves nothing else; epub.js prepends its
      views as children, which never go in front of it. */
-  function reserve() {
+  function reserve(previousPlayerHeight) {
     var style = document.getElementById('openreader-bar');
     if (!style) {
       style = document.createElement('style');
       style.id = 'openreader-bar';
       document.head.appendChild(style);
     }
-    style.textContent = barReserved > 0
+    var rules = barReserved > 0
       ? '.epub-container::before { content: ""; display: block; height: ' + barReserved + 'px; }'
       : '';
+    /* The final linear spine view can precede non-linear appendices. epub.js
+       puts its spine index in the wrapper's ref. Keeping the space outside
+       that wrapper leaves the iframe, text positions and stage size intact. */
+    var playerHeight = Math.max(openPlayer, covered);
+    if (playerHeight > 0) {
+      var last = book.spine.last();
+      if (last) rules += '.epub-container:has(> .epub-view[ref="' + last.index + '"]:last-child)::after'
+        + ' { content: ""; display: block; height: ' + (playerHeight + 8) + 'px; }';
+    }
+    if (style.textContent === rules) return;
+    /* Keep a reader already at the end there when the end-of-book note
+       arrives after the final cue. An earlier passage keeps its position. */
+    var view = previousPlayerHeight > 0 && playerHeight > previousPlayerHeight ? scroller() : null;
+    var atEnd = view && Math.abs(view.scrollHeight - view.clientHeight - view.scrollTop) <= 1;
+    style.textContent = rules;
+    if (atEnd) {
+      var remaining = view.scrollHeight - view.clientHeight - view.scrollTop;
+      if (remaining > 1) nudge(remaining);
+    }
   }
 
   /* ---- epub.js's queues, away from the screen and after a clear (#112) ---- */
@@ -3677,17 +3696,12 @@ ${EPUB_GUARDS_SOURCE}
       return;
     }
     if (message.kind === 'inset') {
-      /* Geometry, not a highlight. It comes through this entry point because there
-         is exactly one, and a second injected function would be a second thing to
-         keep installed and to check for.
-
-         **Nothing is moved here**, deliberately. The player collapsing changes
-         where the line position is, and scrolling to the new one would move the
-         text under the reader — which is the one thing ADR 0020's floating player
-         exists to prevent. So the new inset applies from the next line the page
-         follows, and the line being spoken stays where it is. */
+      /* Apply the measured geometry without re-aiming the Reading. reserve()
+         handles the extra scroll at the end when a taller Player needs it. */
+      var previousPlayerHeight = Math.max(openPlayer, covered);
       covered = typeof message.bottomPx === 'number' && isFinite(message.bottomPx) && message.bottomPx > 0 ? message.bottomPx : 0;
       openPlayer = typeof message.openPx === 'number' && isFinite(message.openPx) && message.openPx > 0 ? message.openPx : 0;
+      reserve(previousPlayerHeight);
       return;
     }
     if (message.kind === 'following') {
