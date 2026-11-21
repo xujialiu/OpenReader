@@ -6,11 +6,13 @@ import { DOMParser } from '@xmldom/xmldom';
 import { strToU8, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 
+import { contentsOf, type NavigationEntry } from '../../src/core/document/contents';
+
 const require = createRequire(import.meta.url);
 const LIB = dirname(require.resolve('@epubjs-react-native/core/package.json'));
 const BUILDS = ['commonjs', 'module'] as const;
 type Build = (typeof BUILDS)[number];
-type Posted = { type: string; reason?: string };
+type Posted = { type: string; reason?: string; toc?: NavigationEntry[] };
 type Listener = (error?: unknown) => void;
 
 /** Both shipped template formats, evaluated without editing their program. */
@@ -127,6 +129,35 @@ async function open(build: Build, file: string) {
 }
 
 for (const build of BUILDS) describe(`the installed ${build} Reader startup (#217)`, () => {
+  it.each(['', '<item id="gap" media-type="application/xhtml+xml"/>'])('can start Download preparation when the first spine slot has no file (#234): %j', async (manifestItem) => {
+    const pack = opf('<itemref idref="gap"/><itemref idref="c1"/>').replace('</manifest>', manifestItem + '</manifest>');
+    const result = await open(build, archive({
+      'META-INF/container.xml': CONTAINER, 'OEBPS/content.opf': pack, 'OEBPS/ch1.xhtml': CHAPTER,
+    }));
+    expect(result.failures).toEqual([]);
+    expect(result.posted.find(event => event.type === 'onDisplayError')?.reason).toBeUndefined();
+    expect(result.posted.some(event => event.type === 'onReady')).toBe(true);
+  });
+  it('keeps chapters under the correct NCX parent when IDs repeat (#200)', async () => {
+    const point = (id: string, name: string, children = '') =>
+      `<navPoint id="${id}"><navLabel><text>${name}</text></navLabel><content src="ch1.xhtml#${name}"/>${children}</navPoint>`;
+    const ncx = '<ncx><navMap>' +
+      point('same', 'Part', point('same', 'First') + point('other', 'Second')) +
+      point('same', 'NextPart', point('same', 'Third')) + '</navMap></ncx>';
+    const pack = opf('<itemref idref="c1"/>')
+      .replace('</manifest>', '<item id="toc" href="toc.ncx" media-type="application/x-dtbncx+xml"/></manifest>')
+      .replace('<spine>', '<spine toc="toc">');
+    const result = await open(build, archive({
+      'META-INF/container.xml': CONTAINER, 'OEBPS/content.opf': pack,
+      'OEBPS/toc.ncx': ncx, 'OEBPS/ch1.xhtml': CHAPTER,
+    }));
+    const toc = result.posted.find(event => event.type === 'onNavigationLoaded')?.toc;
+    expect(toc).toBeDefined();
+    expect(contentsOf(toc!, ['ch1.xhtml']).rows.map(row => [row.label, row.depth, row.target, row.fragment])).toEqual([
+      ['Part', 0, 0, 'Part'], ['First', 1, 0, 'First'], ['Second', 1, 0, 'Second'],
+      ['NextPart', 0, 0, 'NextPart'], ['Third', 1, 0, 'Third'],
+    ]);
+  });
   it('control: opens a valid archive and reaches ready', async () => {
     const result = await open(build, DOCUMENTS.valid);
     expect(result.posted.filter((event) => event.type === 'onReady')).toHaveLength(1);

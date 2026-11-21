@@ -194,7 +194,10 @@ the few members they read. A Cover (ADR 0026) is derived, device-local data;
 `navigation.ts` reads the chapters a Download is planned from (ADR 0027) without
 inflating a single chapter's body. It reads each Contents entry on its own: a
 link it cannot read names no file rather than losing every other entry with it
-(#201).
+(#201). A spine entry without a manifest href occupies a null slot. The Download
+skips it and subsequent chapters retain their original section numbers (#234).
+If the EPUB 3 navigation XML cannot be parsed, the Download offers the readable
+spine sections in order (#284). Required metadata and archive checks still apply.
 
 `DOCUMENT_FORMATS` is the list ADR 0007 is about: adding `'pdf'` to it is what
 adding PDF looks like from here.
@@ -306,6 +309,8 @@ href.
 Three things:
 
 1. **The navigation tree** — `useReader().toc`, or `onNavigationLoaded`'s `toc`.
+   In an NCX the bundled reader attaches children to their XML parent element.
+   Publishers can reuse the same ID across parts and chapters (#200).
 2. **The spine items' hrefs, in spine order** — `DocumentMessage.hrefs`, once per
    document. `RenderedSection.href` arrives one section at a time, which is too
    late for a list that opens before most sections have rendered. Without them

@@ -1,4 +1,4 @@
-import { DOMParser, type Element, type Document } from '@xmldom/xmldom';
+import { DOMParser, ParseError, type Element, type Document } from '@xmldom/xmldom';
 import { strFromU8 } from 'fflate';
 import { fragmentOf } from './contents';
 import { readArchiveMember, resolveArchivePath } from './cover';
@@ -9,7 +9,8 @@ export interface ChapterMetadata {
   section: number | null; fragment: string;
 }
 export interface DocumentNavigation {
-  sections: { href: string; path: string }[];
+  /** A null slot keeps later spine indices aligned with the Reader. */
+  sections: ({ href: string; path: string } | null)[];
   chapters: ChapterMetadata[];
 }
 const children = (node: Element, tag?: string): Element[] => Array.from(node.childNodes)
@@ -37,10 +38,12 @@ export function readDocumentNavigation(archive: ArchiveBytes): DocumentNavigatio
   const manifest = new Map(elements(pack, 'item').map((item) => [item.getAttribute('id'), item]));
   const sections = elements(pack, 'itemref').map((ref) => {
     const href = manifest.get(ref.getAttribute('idref'))?.getAttribute('href');
-    if (!href) throw new Error('A document spine entry has no content file.');
+    if (!href) return null;
     return { href, path: resolveArchivePath(packPath, href) };
   });
-  const byPath = new Map(sections.map((section, index) => [section.path, index]));
+  const byPath = new Map<string, number>();
+  sections.forEach((section, index) => { if (section) byPath.set(section.path, index); });
+  if (sections.length && !byPath.size) throw new Error('A document spine entry has no content file.');
   const chapters: ChapterMetadata[] = [];
   /**
    * Each entry on its own (#201): a link that cannot be read names no file
@@ -64,7 +67,14 @@ export function readDocumentNavigation(archive: ArchiveBytes): DocumentNavigatio
   const nav = [...manifest.values()].find((item) => item.getAttribute('properties')?.split(/\s+/).includes('nav'));
   if (nav?.getAttribute('href')) {
     const path = resolveArchivePath(packPath, nav.getAttribute('href')!);
-    const doc = read(path);
+    let doc: Document;
+    try {
+      doc = read(path);
+    } catch (error) {
+      // An unreadable EPUB 3 table of contents still has a usable spine.
+      if (error instanceof ParseError && byPath.size) return { sections, chapters };
+      throw error;
+    }
     const toc = elements(doc, 'nav').find((item) => (item.getAttributeNS('http://www.idpf.org/2007/ops', 'type') ?? item.getAttribute('epub:type') ?? '').split(/\s+/).includes('toc'));
     const walk = (list: Element | undefined, parent: string | null, depth: number, prefix: string) => {
       if (!list) return;

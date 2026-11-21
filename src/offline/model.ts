@@ -91,7 +91,8 @@ export function navigationPlan(navigation: DocumentNavigation): NarrationPlan {
   const chapters: Chapter[] = navigation.chapters.map((chapter) => ({ ...chapter, texts: [], prepared: chapter.section === null }));
   // Every unlisted file is selectable. A leading fragment may leave a preface
   // before its first chapter, so retain that possible coverage until rendered.
-  navigation.sections.forEach((_, section) => {
+  navigation.sections.forEach((file, section) => {
+    if (!file) return;
     const entries = chapters.filter((chapter) => chapter.section === section);
     if (entries.some((chapter) => !chapter.fragment)) return;
     const extra: Chapter = { id: `section-${section}`, title: `Part ${section + 1}`, parent: null, depth: 0, section, texts: [], prepared: false, fragment: '' };
@@ -111,4 +112,4 @@ export function withPreparedSection(plan: NarrationPlan, section: number, prepar
   });
   return { ...plan, chapters, preparedSections: [...new Set([...(plan.preparedSections ?? []), section])].sort((a, b) => a - b) };
 }
-export const fullyPrepared = (plan: NarrationPlan) => !!plan.sections && plan.preparedSections?.length === plan.sections.length;
+export const fullyPrepared = (plan: NarrationPlan) => !!plan.sections && plan.preparedSections?.length === plan.sections.filter(Boolean).length;

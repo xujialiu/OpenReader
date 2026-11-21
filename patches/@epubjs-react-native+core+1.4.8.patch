@@ -252,7 +252,7 @@ index 86d814d..40c38c3 100644
    const goPrevious = (0, _react.useCallback)(options => {
      webViewInjectFunctions.injectJavaScript(book, `
 diff --git a/node_modules/@epubjs-react-native/core/lib/commonjs/epubjs.js b/node_modules/@epubjs-react-native/core/lib/commonjs/epubjs.js
-index 89aee23..1a52839 100644
+index 89aee23..ddcd24a 100644
 --- a/node_modules/@epubjs-react-native/core/lib/commonjs/epubjs.js
 +++ b/node_modules/@epubjs-react-native/core/lib/commonjs/epubjs.js
 @@ -1077,7 +1077,16 @@ var _default = exports.default = `
@@ -273,7 +273,52 @@ index 89aee23..1a52839 100644
                  : "text" === t.type
                    ? e.push("text()[" + i + "]")
                    : e.push("*[" + i + "]");
-@@ -10962,6 +10971,8 @@ var _default = exports.default = `
+@@ -9258,12 +9267,14 @@ var _default = exports.default = `
+                   )),
+                   t.href &&
+                     ((t.url = e(t.href, !0)), (t.canonical = i(t.href))),
+-                  s &&
++                  s && s.href &&
+                     ((t.href = s.href),
+                     (t.url = e(t.href, !0)),
+                     (t.canonical = i(t.href)),
+                     s.properties.length &&
+                       t.properties.push.apply(t.properties, s.properties)),
++                  // OpenReader (#234): keep the index, but never open a slot with no file.
++                  t.href || (t.linear = "no"),
+                   "yes" === t.linear
+                     ? ((t.prev = function () {
+                         let e = t.index;
+@@ -10028,17 +10039,17 @@ var _default = exports.default = `
+             };
+           }
+           parseNcx(t) {
+-            var e,
+-              i,
+-              n = Object(s.qsa)(t, "navPoint"),
+-              r = n.length,
+-              o = {},
+-              a = [];
+-            if (!n || 0 === r) return a;
+-            for (e = 0; e < r; ++e)
+-              (o[(i = this.ncxItem(n[e])).id] = i),
+-                i.parent ? o[i.parent].subitems.push(i) : a.push(i);
+-            return a;
++            // OpenReader (#200): NCX IDs can repeat. XML parents still identify the hierarchy.
++            const entries = new Map();
++            const roots = [];
++            for (const point of Object(s.qsa)(t, "navPoint")) {
++              const item = this.ncxItem(point);
++              const parent = entries.get(point.parentNode);
++              if (parent) parent.subitems.push(item);
++              else roots.push(item);
++              entries.set(point, item);
++            }
++            return roots;
+           }
+           ncxItem(t) {
+             var e,
+@@ -10962,6 +10973,8 @@ var _default = exports.default = `
              t &&
                this.open(t, this.settings.openAs).catch((e) => {
                  var i = new Error("Cannot load book at " + t);
@@ -683,7 +728,7 @@ index 1d2825a..735a0b2 100644
    const goPrevious = useCallback(options => {
      webViewInjectFunctions.injectJavaScript(book, `
 diff --git a/node_modules/@epubjs-react-native/core/lib/module/epubjs.js b/node_modules/@epubjs-react-native/core/lib/module/epubjs.js
-index f6b746d..71bf31d 100644
+index f6b746d..f04b7be 100644
 --- a/node_modules/@epubjs-react-native/core/lib/module/epubjs.js
 +++ b/node_modules/@epubjs-react-native/core/lib/module/epubjs.js
 @@ -1071,7 +1071,16 @@ export default `
@@ -704,7 +749,52 @@ index f6b746d..71bf31d 100644
                  : "text" === t.type
                    ? e.push("text()[" + i + "]")
                    : e.push("*[" + i + "]");
-@@ -10956,6 +10965,8 @@ export default `
+@@ -9252,12 +9261,14 @@ export default `
+                   )),
+                   t.href &&
+                     ((t.url = e(t.href, !0)), (t.canonical = i(t.href))),
+-                  s &&
++                  s && s.href &&
+                     ((t.href = s.href),
+                     (t.url = e(t.href, !0)),
+                     (t.canonical = i(t.href)),
+                     s.properties.length &&
+                       t.properties.push.apply(t.properties, s.properties)),
++                  // OpenReader (#234): keep the index, but never open a slot with no file.
++                  t.href || (t.linear = "no"),
+                   "yes" === t.linear
+                     ? ((t.prev = function () {
+                         let e = t.index;
+@@ -10022,17 +10033,17 @@ export default `
+             };
+           }
+           parseNcx(t) {
+-            var e,
+-              i,
+-              n = Object(s.qsa)(t, "navPoint"),
+-              r = n.length,
+-              o = {},
+-              a = [];
+-            if (!n || 0 === r) return a;
+-            for (e = 0; e < r; ++e)
+-              (o[(i = this.ncxItem(n[e])).id] = i),
+-                i.parent ? o[i.parent].subitems.push(i) : a.push(i);
+-            return a;
++            // OpenReader (#200): NCX IDs can repeat. XML parents still identify the hierarchy.
++            const entries = new Map();
++            const roots = [];
++            for (const point of Object(s.qsa)(t, "navPoint")) {
++              const item = this.ncxItem(point);
++              const parent = entries.get(point.parentNode);
++              if (parent) parent.subitems.push(item);
++              else roots.push(item);
++              entries.set(point, item);
++            }
++            return roots;
+           }
+           ncxItem(t) {
+             var e,
+@@ -10956,6 +10967,8 @@ export default `
              t &&
                this.open(t, this.settings.openAs).catch((e) => {
                  var i = new Error("Cannot load book at " + t);

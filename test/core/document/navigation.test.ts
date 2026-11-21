@@ -86,3 +86,36 @@ it('gives a path with a stray % no file either (#201)', () => {
   const navigation = readDocumentNavigation(withSecondLink('text/tw%o.xhtml'));
   expect(navigation.chapters.map((c) => [c.title, c.section])).toEqual([['One', 0], ['Two', null]]);
 });
+
+it.each(['', '<item id="bad"/>'])('keeps spine indices across an itemref with no file (#234): %j', (badItem) => {
+  const pack = OPF.replace('</manifest>', badItem + '</manifest>')
+    .replace('<itemref idref="two"/>', '<itemref idref="bad"/><itemref idref="two"/>');
+  const bytes = zip([
+    { name: 'META-INF/container.xml', data: utf8(container) },
+    { name: 'OPS/package.opf', data: utf8(pack) },
+    { name: 'OPS/toc.ncx', data: utf8('<ncx><navMap><navPoint><navLabel><text>Two</text></navLabel><content src="text/two.xhtml"/></navPoint></navMap></ncx>') },
+  ]);
+  const plan = navigationPlan(readDocumentNavigation(bytesAsArchive(bytes)));
+  expect(plan.chapters.map(c => [c.id, c.section])).toEqual([['section-0', 0], ['nav.0', 2]]);
+  expect(plan.sections?.[2]?.href).toBe('text/two.xhtml');
+  const first = withPreparedSection(plan, 0, []);
+  expect(fullyPrepared(first)).toBe(false);
+  expect(fullyPrepared(withPreparedSection(first, 2, []))).toBe(true);
+});
+
+it.each(['Q&A', 'One&nbsp;Two'])('offers the readable spine when EPUB 3 Contents has an invalid XML title %j (#284)', (title) => {
+  const nav = '<html xmlns:e="http://www.idpf.org/2007/ops"><nav e:type="toc"><ol><li><a href="../text/one.xhtml">' + title + '</a></li></ol></nav></html>';
+  const plan = navigationPlan(readDocumentNavigation(bytesAsArchive(fixture(nav))));
+  expect(plan.chapters.map(c => [c.id, c.section, c.prepared])).toEqual([['section-0', 0, false], ['section-1', 1, false]]);
+  expect(plan.sections?.map(section => section?.href)).toEqual(['text/one.xhtml', 'text/two.xhtml']);
+});
+
+it('keeps an escaped ampersand in the published chapter title', () => {
+  const nav = '<html xmlns:e="http://www.idpf.org/2007/ops"><nav e:type="toc"><ol><li><a href="../text/one.xhtml">Q&amp;A</a></li></ol></nav></html>';
+  expect(readDocumentNavigation(bytesAsArchive(fixture(nav))).chapters[0]).toMatchObject({ title: 'Q&A', section: 0 });
+});
+
+it('continues to refuse entity declarations in navigation metadata', () => {
+  const nav = '<!DOCTYPE html [<!ENTITY title "test">]><html/>';
+  expect(() => readDocumentNavigation(bytesAsArchive(fixture(nav)))).toThrow('entity declaration');
+});

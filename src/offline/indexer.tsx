@@ -32,7 +32,7 @@ function Indexer({ document, request }: { document: string; request: Preparation
   const [ready, setReady] = useState(false);
   const { injectJavascript } = useReader();
   const latest = useRef(request);
-  const [initialLocation] = useState(() => request ? planOf(document)?.sections?.[request.section].href : undefined);
+  const [initialLocation] = useState(() => request ? planOf(document)?.sections?.[request.section]?.href : undefined);
   useEffect(() => { latest.current = request; }, [request]);
   useEffect(() => {
     let alive = true;
