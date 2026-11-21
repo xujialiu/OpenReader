@@ -42,7 +42,7 @@ While the moving speech highlight covers saved words, the page shows the reader'
 
 ## Finding a passage again
 
-Highlights opens from the reader's more-actions menu. It lists coloured excerpts in their order in the Document, grouped by chapter. This helps distinguish two occurrences of the same word in different chapters. Each row has a menu to recolour or remove its Saved Highlight. Tapping the excerpt itself takes the page straight to the marked passage.
+A diagonal marker with a broad, slanted tip identifies Highlights in the reader's more-actions menu. It lists coloured excerpts in their order in the Document, grouped by chapter. This helps distinguish two occurrences of the same word in different chapters. Each row has a menu to recolour or remove its Saved Highlight. Tapping the excerpt itself takes the page straight to the marked passage.
 
 Recolouring is a single-excerpt action. Sharing excerpts is deferred.
 
@@ -54,7 +54,7 @@ The first version keeps Saved Highlights on the device where they were made. Sav
 
 Undo is available for an individual removal from the selection menu or the Highlights list. In the Highlight tab the colour choices themselves let the reader mark the passage again. To remove several, the reader taps Select at the top right of Highlights, then taps anywhere on a row to toggle it. A two-finger sweep can start or extend a selection, as in the Library. The selection can include excerpts from several chapters. Select All includes every highlight in this Document, even those off screen.
 
-The removal button shows the selected count. One confirmation gives the total for the batch. Cancelling it leaves the rows checked so the reader can adjust the selection. Confirming removes the selected excerpts and returns to the ordinary list.
+In selection mode, Select all sits at the top left and becomes Deselect all when every excerpt is checked. Cancel stays at the top right. A red Delete selected button shows the count and stays at the bottom center as the reader scrolls. One confirmation gives the total for the batch. Cancelling it leaves the rows checked so the reader can adjust the selection. Confirming removes the selected excerpts and returns to the ordinary list.
 
 ## Removing a book from the Library
 

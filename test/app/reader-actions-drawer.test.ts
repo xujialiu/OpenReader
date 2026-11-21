@@ -55,7 +55,7 @@ describe('a list that ends the drawer runs on to the sheet’s bottom edge (#117
   it('lets the sheet’s content reach the edge, and pads the body and such a list by the safe area and DRAWER.bottom', () => {
     const drawer = code('drawer.tsx');
     pin(drawer, "ignoreSafeArea({ regions: 'container', edges: 'bottom' }),", 'drawer.tsx sheet content');
-    pin(drawer, 'const bottom = insets.bottom + DRAWER.bottom;', 'drawer.tsx bottom');
+    pin(drawer, 'const bottom = insets.bottom + (deletionFooter ? DRAWER.deletionBottom : DRAWER.bottom);', 'drawer.tsx bottom');
     pin(drawer, "contentContainerStyle={[contentContainerStyle, ends && { paddingBottom: bottom }]}", 'drawer.tsx DrawerList');
   });
 });

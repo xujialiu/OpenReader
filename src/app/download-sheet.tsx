@@ -12,6 +12,7 @@ import { DownloadRing } from './download-ring';
 import { chapterCount, downloadedChapters, listedInManage, marker, readingChapter, voiceChoices, voiceKey, type Marker } from './download-rows';
 import { DRAWER, DrawerList, DrawerRow, DrawerRowText, type DrawerAction } from './drawer';
 import { Icon } from './icon';
+import { SelectionButton } from './selection-button';
 import { useSweep } from './use-sweep';
 import { TEXT } from './text-styles';
 
@@ -304,11 +305,8 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
         </Pressable> : null}
       </View>
     </DrawerRow> : null}
-    <Pressable accessibilityRole="button" accessibilityLabel={manage ? `Delete selected (${chosen.length})` : `Download selected (${chosen.length})`}
-      disabled={!progressReady || !downloads.downloadsReady() || !chosen.length || !choice.voice || !!downloads.downloadError()} onPress={act}
-      style={[styles.button, (!chosen.length || !choice.voice) && styles.unready]}>
-      <Text style={styles.buttonText}>{manage ? 'Delete selected' : 'Download selected'} ({chosen.length})</Text>
-    </Pressable>
+    <SelectionButton action={manage ? 'Delete' : 'Download'} count={chosen.length} onPress={act}
+      disabled={!progressReady || !downloads.downloadsReady() || !choice.voice || !!downloads.downloadError()} />
   </View>;
 }
 
@@ -339,10 +337,4 @@ const styles = StyleSheet.create({
   deletes: { flexDirection: 'row', gap: 16, justifyContent: 'space-between' },
   trailing: { textAlign: 'right' },
   pressed: { opacity: 0.65 },
-  button: {
-    alignItems: 'center', backgroundColor: INK.text, borderRadius: 24, marginHorizontal: DRAWER.row.inset, marginTop: 12,
-    paddingVertical: 15,
-  },
-  unready: { opacity: 0.35 },
-  buttonText: { ...TEXT.headline, color: INK.page },
 });

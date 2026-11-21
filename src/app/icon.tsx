@@ -25,7 +25,9 @@ const paths = {
   // A large A beside a small a, on one baseline. Drawn rather than set in
   // type: at 24 units the letters keep their proportions to each other at
   // every size, and nothing here can wrap.
-  appearance: 'm3 16 4.5-9 4.5 9 M4 14h7 M21 14h-5 M16 16v-3.5a2.5 2.5 0 0 1 5 0V16',
+  appearance: 'M2 18.2h3.3 M9.1 18.2h3.7 M3.5 18 7.1 5.8h.6l3.7 12.2 M5.1 13.5h4.7 M14.5 11.2q1.2-1.4 3.2-1.4 2.9 0 2.9 2.9v5.4l1 .1 M20.5 13.4c-3.6-.6-6.4.6-6.4 2.7 0 1.4 1.1 2.2 2.5 2.2q2.6 0 3.9-2.4',
+  // The shoulder narrows to a broad, obliquely cut nib.
+  highlights: 'M7.4 11.9 16.5 2.8q.8-.8 1.6 0l3.2 3.2q.8.8 0 1.6l-9.1 9.1z M7.4 11.9l-.5 2.8-2.6 2.8 4.7 1.5 1.2-1.4 2-.9 M2.5 21.2h9',
   trash: 'M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13 M10 11v6 M14 11v6',
   // An arrow rising out of an open box: the phone's own share mark
   // (`square.and.arrow.up`), redrawn in this set's stroke.

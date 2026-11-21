@@ -5,8 +5,9 @@ import { currentRow, type Contents } from '../core/document/contents';
 import { HIGHLIGHT_PALETTE, type HighlightColour, type SavedHighlight } from '../core/document/saved-highlight';
 import type { ReaderBridge } from '../renderer/reader-bridge';
 import { INK, useBorders } from './controls';
-import { Drawer, DrawerFooter, DrawerList, DrawerRow } from './drawer';
+import { Drawer, DrawerFooter, DrawerList } from './drawer';
 import { Icon } from './icon';
+import { SelectionButton } from './selection-button';
 import { colourHighlight, moveHighlight, readHighlights, removeHighlights, restoreHighlight, saveHighlight } from './saved-highlight-store';
 import { TEXT } from './text-styles';
 import type { LookupHandle } from './use-lookup';
@@ -56,9 +57,9 @@ function HighlightsList({ marks, close, browse, recolour, remove, undo, overlay 
     if (!selected?.size) return;
     const batch = Array.from(selected, Number);
     setConfirming(true);
-    Alert.alert(`Remove ${batch.length} highlight${batch.length === 1 ? '' : 's'}?`, undefined, [
+    Alert.alert(`Delete ${batch.length} highlight${batch.length === 1 ? '' : 's'}?`, undefined, [
       { text: 'Cancel', style: 'cancel', onPress: () => setConfirming(false) },
-      { text: 'Remove', style: 'destructive', onPress: () => {
+      { text: 'Delete', style: 'destructive', onPress: () => {
         setConfirming(false);
         if (remove(batch, false)) select(null);
       } },
@@ -69,12 +70,13 @@ function HighlightsList({ marks, close, browse, recolour, remove, undo, overlay 
     { text: 'Remove', style: 'destructive', onPress: () => remove([mark.id], true) },
     { text: 'Cancel', style: 'cancel' },
   ]);
-  return <Drawer visible title="Highlights" onClose={close}
+  const allSelected = selected?.size === marks.length;
+  return <Drawer visible title="Highlights" onClose={close} deletionFooter={!!selected}
+    leadingAction={selected ? { label: allSelected ? 'Deselect all' : 'Select all',
+      onPress: () => select(allSelected ? new Set() : new Set(ids)) } : undefined}
     action={{ label: selected ? 'Cancel' : 'Select', disabled: !marks.length, onPress: () => select(selected ? null : new Set()) }}>
-    {selected ? <Action label={selected.size === marks.length ? 'Deselect all' : 'Select all'}
-      onPress={() => select(selected.size === marks.length ? new Set() : new Set(ids))} /> : null}
     <GestureDetector gesture={sweep.gesture}>
-      <DrawerList {...list} listRef={ref} data={marks} keyExtractor={(item) => String(item.id)}
+      <DrawerList {...list} listRef={ref} data={marks} style={selected ? styles.selectionList : undefined} keyExtractor={(item) => String(item.id)}
         ListEmptyComponent={<DrawerFooter>No highlights.</DrawerFooter>}
         renderItem={({ item, index }) => {
           const checked = selected?.has(String(item.id));
@@ -93,8 +95,8 @@ function HighlightsList({ marks, close, browse, recolour, remove, undo, overlay 
           </View>;
         }} />
     </GestureDetector>
-    {selected ? <DrawerRow disabled={!selected.size} onPress={confirm}><Text style={styles.remove}>Remove ({selected.size})</Text></DrawerRow> : null}
     {undo}
+    {selected ? <SelectionButton action="Delete" count={selected.size} onPress={confirm} /> : null}
     {overlay}
   </Drawer>;
 }
@@ -233,13 +235,14 @@ export function SavedHighlights({ document, lookup, bridge, contents, anchors, l
 }
 
 const styles = StyleSheet.create({
+  selectionList: { flexGrow: 1 },
   row: { flexDirection: 'row', paddingHorizontal: 16, alignItems: 'center' },
   check: { width: 21, height: 21, borderRadius: 11, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
   excerpt: { minHeight: 48, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
   words: { ...TEXT.body, color: INK.text, flexShrink: 1 },
   chapter: { ...TEXT.subhead, color: INK.quiet, paddingHorizontal: 16, paddingTop: 12 },
   action: { minHeight: 44, paddingHorizontal: 10, justifyContent: 'center' },
-  label: { ...TEXT.body, color: INK.text }, remove: { ...TEXT.body, color: INK.attention },
+  label: { ...TEXT.body, color: INK.text },
   more: { width: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
   previewBox: { maxHeight: 72 },
   preview: { ...TEXT.footnote, color: INK.quiet, paddingHorizontal: 12 },

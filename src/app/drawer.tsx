@@ -143,6 +143,7 @@ export const DRAWER = {
    * (`DrawerList`, `DrawerScroll`).
    */
   bottom: 16,
+  deletionBottom: 8,
   /**
    * Per theme: the sheet (`page`), the line under a row, the marked row
    * (Contents' current one), and the round buttons' fill and rim.
@@ -268,11 +269,13 @@ export interface DrawerAction {
  * (design 0057).
  */
 type DrawerHeader =
-  | { titleLeft?: false; onBack?(): void; backLabel?: string; action?: DrawerAction }
-  | { titleLeft: true; action: DrawerAction; onBack?: never; backLabel?: never };
+  | { titleLeft?: false; onBack?(): void; backLabel?: string; leadingAction?: DrawerAction; action?: DrawerAction }
+  | { titleLeft: true; action: DrawerAction; onBack?: never; backLabel?: never; leadingAction?: never };
 
-export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, backLabel, action, titleLeft, children }: {
+export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, backLabel, leadingAction, action, titleLeft, deletionFooter, children }: {
   visible: boolean;
+  /** A fixed deletion button sits closer to the bottom safe area. */
+  deletionFooter?: boolean;
   /** The centred title; with `heading`, the name the heading's control is given for VoiceOver. */
   title: string;
   /** A control drawn where the centred title goes, in its place: the lookup drawer's Dictionary | Translation. */
@@ -296,7 +299,7 @@ export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, ba
     : { height: drawerDetentHeight(settings.drawerHeight, { width: window.width, height: window.height, bottomInset: insets.bottom }) };
   const turn = useDrawerTurn(visible, onClose);
   const [expanded, setExpanded] = useState(false);
-  const bottom = insets.bottom + DRAWER.bottom;
+  const bottom = insets.bottom + (deletionFooter ? DRAWER.deletionBottom : DRAWER.bottom);
   return (
     <Host style={styles.host} colorScheme={colours.scheme}>
       <BottomSheet isPresented={turn.presented} onDismiss={() => { setExpanded(false); turn.dismissed(); onDismiss?.(); }}
@@ -333,7 +336,7 @@ export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, ba
           <RNHostView>
             <View style={[styles.body, { paddingBottom: bottom }]} onAccessibilityEscape={onClose}>
               <DrawerBottom value={bottom}>
-                <DrawerTitle title={title} heading={heading} onBack={onBack} backLabel={backLabel} action={action} titleLeft={!!titleLeft} />
+                <DrawerTitle title={title} heading={heading} onBack={onBack} backLabel={backLabel} leadingAction={leadingAction} action={action} titleLeft={!!titleLeft} />
                 {children}
               </DrawerBottom>
             </View>
@@ -344,9 +347,10 @@ export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, ba
   );
 }
 
-function DrawerTitle({ title, heading, onBack, backLabel, action, titleLeft }: { title: string; heading?: ReactNode; onBack?(): void; backLabel?: string; action?: DrawerAction; titleLeft: boolean }) {
+function DrawerTitle({ title, heading, onBack, backLabel, leadingAction, action, titleLeft }: { title: string; heading?: ReactNode; onBack?(): void; backLabel?: string; leadingAction?: DrawerAction; action?: DrawerAction; titleLeft: boolean }) {
   // How far in the centred title is kept on both sides: past the wider of the two ends, so it is centred on the drawer.
   const [actionWidth, setActionWidth] = useState(0);
+  const [leadingWidth, setLeadingWidth] = useState(0);
   if (titleLeft && action) {
     return (
       <View style={styles.header}>
@@ -358,14 +362,17 @@ function DrawerTitle({ title, heading, onBack, backLabel, action, titleLeft }: {
   const right = action ? <View style={styles.headerActions} onLayout={(event) => setActionWidth(event.nativeEvent.layout.width)}>
     <HeaderAction action={action} />
   </View> : null;
-  const clear = DRAWER.button.side + Math.max(right ? actionWidth : 0, DRAWER.button.size);
+  const left = leadingAction
+    ? <View onLayout={(event) => setLeadingWidth(event.nativeEvent.layout.width)}><HeaderAction action={leadingAction} /></View>
+    : onBack && <RoundButton icon="previous" label={backLabel ?? `Back from ${title}`} onPress={onBack} drawn={DRAWER.button.back} />;
+  const clear = DRAWER.button.side + Math.max(right ? actionWidth : 0, leadingAction ? leadingWidth : 0, DRAWER.button.size);
   return (
     <View style={styles.header}>
       {/* Absolute, so the title, or the control drawn in its place, is centred on the drawer rather than on what the buttons leave of it. */}
       <View style={[styles.titleCentred, { left: clear, right: clear }]}>
         {heading ?? <Text style={[styles.title, styles.titleCentredText]} accessibilityRole="header" numberOfLines={1}>{title}</Text>}
       </View>
-      {onBack ? <RoundButton icon="previous" label={backLabel ?? `Back from ${title}`} onPress={onBack} drawn={DRAWER.button.back} /> : <View />}
+      {left || <View />}
       {right}
     </View>
   );

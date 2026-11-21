@@ -76,7 +76,7 @@ Document, across every Provider, Model and Voice, including Models hidden by
 the current choice. Its confirmation explicitly names that scope and the space
 the deletion frees.
 
-The two whole deletions share one row of Manage downloads: Delete all audio at
+All three deletion actions use red text and sit together near the bottom of Manage downloads. Delete selected is centered below the two whole deletions, just above the phone’s gesture area. The two whole deletions share one row: Delete all audio at
 its left, Delete all current voice audio at its right end, shown only while that
 Voice has audio. Both keep the Document and its Reading Position. Neither pauses
 a Reading playing in the Voice it deletes; its next sentences are asked of the

@@ -116,12 +116,12 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, onHighlig
   const header = page === 'menu'
     ? { titleLeft: true as const, title: entry.title, action: { icon: 'share' as const, label: 'Share', onPress: share, disabled: sharing } }
     : page === 'move' ? move.header : { title: TITLES[page], onBack: back ? () => setPage(back) : undefined, action: (page === 'download' || page === 'manage') && selectAll ? selectAll : undefined };
-  return <Drawer visible onClose={onClose} {...header}>
+  return <Drawer visible onClose={onClose} deletionFooter={page === 'manage'} {...header}>
     {page === 'menu' ? <DrawerScroll>
       {appearance ? <DrawerRow icon="appearance" onPress={() => setPage('appearance')} accessory={<DrawerChevron />}>
         <DrawerRowText>Appearance</DrawerRowText>
       </DrawerRow> : null}
-      {onHighlights ? <DrawerRow onPress={onHighlights} accessory={<DrawerChevron />}>
+      {onHighlights ? <DrawerRow icon="highlights" onPress={onHighlights} accessory={<DrawerChevron />}>
         <DrawerRowText>Highlights</DrawerRowText>
       </DrawerRow> : null}
       <DrawerRow icon="rename" onPress={() => { setFailure(null); setRenaming(true); }}><DrawerRowText>Rename</DrawerRowText></DrawerRow>
