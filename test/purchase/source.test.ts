@@ -73,6 +73,62 @@ it('never authorizes a kept Unlock before the first source read finishes', async
   expect(controller.allowsSpeech()).toBe(true);
 });
 
+it('startup waits for the applicable snapshot when a foreground read supersedes it (#268)', async () => {
+  const answers: ((value: StoreSnapshot) => void)[] = [];
+  const { controller } = setup({ snapshot: () => new Promise(resolve => answers.push(resolve)) });
+  const locked: boolean[] = [];
+  controller.subscribe(() => { if (controller.settled()) locked.push(!controller.allowsSpeech()); });
+  const refresh = controller.refresh();
+  answers[0](EMPTY);
+  await new Promise(resolve => setImmediate(resolve));
+  expect(controller.settled()).toBe(false);
+  answers[1]({ ...EMPTY, owned: [{ productId: UNLOCK_PRODUCT, purchaseDate: NOW }] });
+  await refresh;
+  expect(controller.settled()).toBe(true);
+  expect(controller.allowsSpeech()).toBe(true);
+  expect(locked).not.toContain(true);
+});
+
+it('Restore follows the foreground snapshot even when the superseded lookup is still pending (#268)', async () => {
+  const answers: ((value: StoreSnapshot) => void)[] = [];
+  const { controller, asked } = setup({ snapshot: () => new Promise(resolve => answers.push(resolve)) });
+  answers[0](EMPTY);
+  await controller.ready();
+  const restore = controller.restore();
+  await new Promise(resolve => setImmediate(resolve));
+  const foreground = controller.refresh();
+  expect(answers).toHaveLength(3);
+  answers[2]({ ...EMPTY, owned: [{ productId: UNLOCK_PRODUCT, purchaseDate: NOW }] });
+  await foreground;
+  const result = vi.fn();
+  void restore.then(result);
+  await new Promise(resolve => setImmediate(resolve));
+  expect(result).toHaveBeenCalledWith(true);
+  answers[1](EMPTY);
+  expect(asked).toEqual([]);
+});
+
+it('Restore waits for a newer verification failure before prompting (#268)', async () => {
+  const answers: ((value: StoreSnapshot) => void)[] = [];
+  const errors: ((error: Error) => void)[] = [];
+  const { controller, asked } = setup({ snapshot: () => new Promise((resolve, reject) => {
+    answers.push(resolve);
+    errors.push(reject);
+  }) });
+  answers[0](EMPTY);
+  await controller.ready();
+  const restore = controller.restore();
+  await new Promise(resolve => setImmediate(resolve));
+  const foreground = controller.refresh();
+  answers[1](EMPTY);
+  await new Promise(resolve => setImmediate(resolve));
+  expect(asked).toEqual([]);
+  errors[2](new Error('offline'));
+  await foreground;
+  expect(await restore).toBe(false);
+  expect(asked).toEqual(['verification']);
+});
+
 it('a failed verification preserves the cache, does not call it Trial ended, and can recover on Restore', async () => {
   const cache = purchaseCache(SOURCE, { unlocked: true, trialStartedAt: null });
   let fails = true;

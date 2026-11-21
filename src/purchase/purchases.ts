@@ -95,14 +95,16 @@ export function createPurchases(deps: PurchaseDeps): Purchases {
   let verificationFailed = false;
   let revision = 0;
   let stopped = false;
-  let checking: Promise<boolean> | null = null;
+  // Overlapping snapshots share a completion signal. Only the current revision
+  // can release callers waiting for the purchase state.
+  let checking: Promise<void> | null = null;
+  let finishChecking: (() => void) | null = null;
   let products: StoreProduct[] | null = null;
   let failedProducts = false;
   let loading: Promise<StoreProduct[] | null> | null = null;
   let asking: Promise<boolean> | null = null;
   let started = false;
   let stopListening: (() => void) | null = null;
-  let firstRead: Promise<void> = Promise.resolve();
   let read = !deps.lockOn;
   const listeners = new Set<() => void>();
   const notify = () => { for (const listener of [...listeners]) listener(); };
@@ -132,48 +134,59 @@ export function createPurchases(deps: PurchaseDeps): Purchases {
     }
   }
 
-  function unavailable(): false {
+  function unavailable(): void {
     verificationFailed = true;
     notify();
-    return false;
   }
 
-  async function readSnapshot(turn: number): Promise<boolean> {
+  async function readSnapshot(turn: number): Promise<void> {
     try {
       const answer = await withTimeout(store.snapshot(PRODUCTS), deps.verificationTimeoutMs ?? DEFAULT_PRODUCT_TIMEOUT_MS,
         () => new Error('Purchase verification did not respond.'));
-      if (stopped) return false;
-      if (turn !== revision) return !verificationFailed;
+      if (stopped || turn !== revision) return;
       const nextSource = parseSource(answer.source);
       const owned = answer.owned.filter((item) => PRODUCTS.some((id) => id === item.productId) && Number.isFinite(item.purchaseDate));
       // A verified live entitlement can authorize this run even if no app identity
       // is available. Nothing from such an unscoped read is persisted or inherited.
       if (!nextSource && !owned.length && (cached || record.unlocked || record.trialStartedAt !== null)) return unavailable();
       keep(mergeRecord(prior(nextSource), owned, answer.revoked), nextSource);
-      return true;
     } catch (problem) {
-      if (stopped) return false;
-      if (turn !== revision) return !verificationFailed;
+      if (stopped || turn !== revision) return;
       log(`purchases could not be verified; the kept record is unchanged: ${String(problem)}`);
       return unavailable();
     }
   }
 
-  function refresh(): Promise<boolean> {
-    if (!deps.lockOn) return Promise.resolve(true);
-    const job = readSnapshot(++revision).finally(() => {
-      if (checking === job) { checking = null; if (!stopped) notify(); }
-    });
-    checking = job;
-    return job;
+  function settleVerification(turn: number): void {
+    if (turn !== revision || stopped || !checking) return;
+    read = true;
+    finishChecking?.();
+    finishChecking = null;
+    checking = null;
+    notify();
+  }
+
+  async function waitForVerification(): Promise<void> {
+    while (checking) await checking;
+  }
+
+  async function refresh(): Promise<boolean> {
+    if (stopped) return false;
+    if (!deps.lockOn) return true;
+    checking ??= new Promise<void>(resolve => { finishChecking = resolve; });
+    const turn = ++revision;
+    void readSnapshot(turn).then(() => settleVerification(turn));
+    await waitForVerification();
+    return !stopped && !verificationFailed;
   }
 
   const canStartSpeech = () => !deps.lockOn || read && checking === null && speaks(access());
 
   function bought(transaction: StoreTransaction): void {
-    ++revision; // An older read cannot undo a newer verified transaction.
+    const turn = ++revision; // An older read cannot undo a newer verified transaction.
     const nextSource = parseSource(transaction.source);
     keep(applyTransaction(prior(nextSource), transaction), nextSource);
+    settleVerification(turn);
   }
 
   /** The products, loaded once and kept; asked for again only after a failure. */
@@ -304,14 +317,10 @@ export function createPurchases(deps: PurchaseDeps): Purchases {
         if (!verificationFailed && sameSource(source, parseSource(transaction.source))) bought(transaction);
         else void refresh(); // An event from another source must not select that source by itself.
       });
-      firstRead = refresh().then(() => {
-        if (stopped) return;
-        read = true;
-        notify();
-      });
+      void refresh();
       void loadProducts();
     },
-    ready: async () => { await firstRead; if (checking) await checking; },
+    ready: waitForVerification,
     refresh: async () => { await refresh(); },
     settled: () => read,
     trialLeft() {
@@ -327,8 +336,7 @@ export function createPurchases(deps: PurchaseDeps): Purchases {
       if (!deps.lockOn) return true;
       // A remote press never waits for verification or for a foreground question.
       if (!ask.canAsk() && !canStartSpeech()) return false;
-      await firstRead;
-      while (checking && !stopped) await checking;
+      await waitForVerification();
       if (stopped) return false;
       if (speaks(access())) return true;
       // A locked remote press must not wait on an unanswered foreground alert (#163).
@@ -337,7 +345,8 @@ export function createPurchases(deps: PurchaseDeps): Purchases {
     },
     async startTrial() {
       if (!deps.lockOn) return true;
-      await firstRead;
+      await waitForVerification();
+      if (stopped) return false;
       if (access().kind !== 'not-started') return speaks(access());
       return once(question);
     },
@@ -357,6 +366,8 @@ export function createPurchases(deps: PurchaseDeps): Purchases {
     },
     stop() {
       stopped = true;
+      finishChecking?.();
+      finishChecking = null;
       checking = null;
       ++revision;
       stopListening?.();

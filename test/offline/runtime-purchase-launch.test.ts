@@ -61,7 +61,7 @@ const chapter: Chapter = { id: 'a', title: 'A', depth: 0, parent: null, section:
 const NOW = Date.UTC(2026, 9, 9, 12);
 
 /** A launch with one download left going on, and an App Store whose first read takes a moment. */
-async function launch(owned: { unlocked: boolean; trialStartedAt: number | null }) {
+async function launch(owned: { unlocked: boolean; trialStartedAt: number | null }, overlap = false) {
   vi.resetModules();
   mock.sent.length = 0;
   mock.submitContinued.mockClear();
@@ -86,16 +86,27 @@ async function launch(owned: { unlocked: boolean; trialStartedAt: number | null 
   const { createPurchases } = await import('../../src/purchase/purchases');
   const { createFakeStore, FAKE_UNLOCKED } = await import('../../src/purchase/fake-store');
   const store = createFakeStore({ ...FAKE_UNLOCKED, ...owned }, { now: () => NOW });
-  // What is owned is read a few milliseconds late, as StoreKit may be.
-  const slow = { ...store, snapshot: (ids: readonly string[]) => new Promise<Awaited<ReturnType<typeof store.snapshot>>>((resolve) => setTimeout(() => resolve(store.snapshot(ids)), 20)) };
+  const releases: (() => void)[] = [];
+  const slow = { ...store, snapshot: async (ids: readonly string[]) => {
+    await new Promise<void>(resolve => releases.push(resolve));
+    return store.snapshot(ids);
+  } };
   let record: PurchaseCache | null = null;
-  configurePurchases(createPurchases({
+  const controller = createPurchases({
     lockOn: true, store: slow, record: { load: () => record, save: (next) => { record = next; } },
     now: () => NOW, log: () => {},
     ask: { canAsk: () => true, trial: async () => 'not-now', ended: async () => 'not-now', unavailable: async () => {}, nothingToRestore: async () => {} },
-  }));
+  });
+  configurePurchases(controller);
   runtime.configureDownloads(settings);
   runtime.startDownloads();
+  await vi.waitFor(() => expect(releases).toHaveLength(1));
+  if (overlap) {
+    void controller.refresh();
+    releases.shift()!();
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  releases.shift()!();
   await vi.waitFor(() => expect(runtime.downloadsReady()).toBe(true));
   return runtime;
 }
@@ -108,6 +119,15 @@ describe('a launch with a download left going on', () => {
     expect(runtime.downloadTasks('book')[0]?.paused).toEqual(['a']);
     expect(mock.sent).toEqual([]);
     expect(mock.submitContinued).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { unlocked: true, trialStartedAt: null },
+    { unlocked: false, trialStartedAt: NOW - 86_400_000 },
+  ])('keeps an allowed Download running across overlapping launch reads: %o (#268)', async (owned) => {
+    const runtime = await launch(owned, true);
+    await vi.waitFor(() => expect(runtime.downloadTasks('book')[0]?.state).toBe('done'));
+    expect(mock.sent).toEqual(['Left going on.']);
   });
 
   it('lets it go on with the Unlock, though what is owned is read only after the launch began', async () => {
