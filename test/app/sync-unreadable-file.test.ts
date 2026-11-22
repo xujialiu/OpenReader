@@ -85,7 +85,7 @@ describe('an unreadable Positions File is not an ordinary first sync (#178)', ()
     const app = await open(remote);
     try {
       await app.sync();
-      expect(app.uploads).toHaveLength(1);
+      expect(app.uploads).toHaveLength(2);
       expect(app.line).toMatch(/could not be read/i);
       expect(app.line).toMatch(/replaced/i);
       expect(app.logs).toMatch(/could not be read/i);
@@ -97,7 +97,7 @@ describe('an unreadable Positions File is not an ordinary first sync (#178)', ()
     const app = await open(null);
     try {
       await app.sync();
-      expect(app.uploads).toHaveLength(1);
+      expect(app.uploads).toHaveLength(2);
       expect(app.line).toMatch(/^Synced at /);
       expect(app.line).not.toMatch(/could not be read|replaced/i);
     } finally { await app.close(); }
@@ -159,7 +159,7 @@ describe('an unreadable Positions File is not an ordinary first sync (#178)', ()
       expect(app.line).toMatch(/could not be read/i);
       expect(app.text).toBe(serializePositionsFile([position]));
       await app.sync();
-      expect(app.uploads).toHaveLength(1);
+      expect(app.uploads).toHaveLength(2);
       expect(app.line).toMatch(/^Synced at /);
       expect(app.line).not.toMatch(/could not be read|replaced/i);
     } finally { await app.close(); }

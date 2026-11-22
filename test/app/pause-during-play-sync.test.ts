@@ -261,7 +261,7 @@ describe('Play in Now Playing, with a Sync Folder that takes a moment to answer'
   it('nothing sounds while Play waits for its sync, the Player shows the press as starting at once (#304), and the Reading starts when the folder answers', async () => {
     await pausedWithSlowFolder();
     await press('play');
-    expect(world.folder.waiting).toHaveLength(1);
+    expect(world.folder.waiting).toHaveLength(2);
     expect(reading()).toEqual(STARTING);
     expect(world.player!.buffering).toBe(true);
     await folderAnswers();
@@ -285,7 +285,7 @@ describe('Play in Now Playing, with a Sync Folder that takes a moment to answer'
     await pausedWithSlowFolder();
     await press('play');
     await press('pause');
-    expect(world.folder.waiting).toHaveLength(1);
+    expect(world.folder.waiting).toHaveLength(2);
     expect(reading()).toEqual(PAUSED);
     await folderAnswers();
     expect(reading()).toEqual(PAUSED);
@@ -321,14 +321,14 @@ describe('Play when the Sync Folder has just shown it cannot be reached (#304)',
     await aRunFindsTheServerUnreachable();
     await press('play');
     expect(reading()).toEqual(PLAYING);
-    expect(world.folder.waiting).toHaveLength(1);
+    expect(world.folder.waiting).toHaveLength(2);
   });
 
   it('with a run already out at the server for as long as Play would wait, Play starts the Reading at once', async () => {
     await pausedWithSlowFolder();
     await act(async () => { world.sync!.poke('foreground'); });
     await settle();
-    expect(world.folder.waiting).toHaveLength(1);
+    expect(world.folder.waiting).toHaveLength(2);
     await act(async () => { vi.advanceTimersByTime(WAIT_MS); });
     await press('play');
     expect(reading()).toEqual(PLAYING);

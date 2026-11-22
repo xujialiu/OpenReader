@@ -39,7 +39,7 @@ const item = (over: Partial<PositionsItem> = {}): PositionsItem => ({
 
 describe('the shared fixture', () => {
   it('names the file and the format the spec names', () => {
-    expect(POSITIONS_FILENAME).toBe('xujialiu-positions.json');
+    expect(POSITIONS_FILENAME).toBe('openreader-positions.json');
     expect(POSITIONS_FORMAT).toBe('xujialiu-positions');
     expect(POSITIONS_VERSION).toBe(1);
   });

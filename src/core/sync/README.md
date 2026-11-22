@@ -11,8 +11,14 @@ not keep a place across devices.
 
 The folder became a contract between two products on 2026-09-21, and the
 contract is written down in the plugin repository, not here. This directory
-implements section 6 of it — the **Positions File**, `xujialiu-positions.json`
+implements section 6 of it — the **Positions File**, `openreader-positions.json`
 — and adds nothing. Where a rule below looks arbitrary, the spec says why.
+
+During the filename transition, each sync reads both this name and
+`xujialiu-positions.json`, merges both with the Library, then updates
+each differing copy. A failed download or an unsupported version stops
+any writes. A partial upload is repaired after fresh downloads.
+OpenReader #379 tracks the final merge and retirement of the old name.
 
 Three files:
 
@@ -58,7 +64,7 @@ keep.
 ## The other three files in the folder
 
 `zotero-tts-settings_<machine>.json`, `zotero-tts-shared-settings.json` and
-`zotero-tts-positions.json` are the plugin's own and are neither read nor written
+`zotero-openreader-positions.json` (formerly `zotero-tts-positions.json`) are the plugin's own and are neither read nor written
 here. The last is keyed by Zotero's `{lib, key}`, which a phone cannot produce,
 and is serialised to exactly four fields, so a document id or a text anchor could
 not be added to it without a version bump that stops every installed desktop

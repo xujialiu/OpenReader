@@ -349,7 +349,7 @@ same files.
 _Avoid_: remote, cloud, server, bucket
 
 **Positions File**:
-The one file in the sync folder, `xujialiu-positions.json`, that holds every
+The shared file in the sync folder, `openreader-positions.json`, that holds every
 device's reading positions by document id, written by the phones and by
 Zotero-OpenReader alike.
 _Avoid_: sync file, remote library, catalogue, documents file

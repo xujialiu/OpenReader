@@ -211,3 +211,21 @@ the Safari interruption source, the plain regression) and
 services. Phase 3 passed; phase 2, the interruption, is a simulator coverage
 limit (Safari's audio does not interrupt the app on the iOS 26.5 simulator),
 so #303's interruption is checked on a physical iPhone.
+
+## Remove a disposable Sync password
+
+`SyncPasswordCleanupProbe.testTurnSyncOffClearPasswordAndVerifyColdLaunch`
+turns Sync off, uses the Sync screen's Clear text control when a password is
+present, then cold-launches and verifies that Sync is off and the secure field
+is empty. It also works when the password is already empty. It types no
+credential, captures no Sync screen and plays no audio; it does not test server
+authentication or clear the Address/Username settings.
+
+Run it from the worktree that contains the probe:
+
+```sh
+TEST_RUNNER_OPENREADER_METRO_PORT=8186 \
+  bash test/manual-test/kit/run-probe.sh SyncPasswordCleanupProbe \
+  SIMULATOR_UDID /tmp/openreader-sync-password-cleanup \
+  -only-testing:testTurnSyncOffClearPasswordAndVerifyColdLaunch
+```
