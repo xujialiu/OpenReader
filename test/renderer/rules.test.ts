@@ -357,13 +357,22 @@ describe('never highlight by mutating the DOM, and never check whether you can (
     expect(everything).not.toMatch(/\bHighlight\s*(===|!==|&&|\|\|)/);
   });
 
-  it('mutates the DOM in two ways only: the stylesheet a ::highlight() rule has to live in, and the mark on a Document’s own alignment', () => {
+  it('keeps paint outside the EPUB text tree and confines saved marks to their own SVG', () => {
     const source = code('highlighter.ts');
     // The preparation host is outside the visible manager and document DOM.
     const preparation = fn(source, 'prepareSection');
     expect(preparation).toContain('host.appendChild(view.element)');
     expect(preparation).toContain('host.remove()');
-    const program = source.replace(preparation, '');
+    const layer = fn(source, 'savedLayer');
+    const saved = fn(source, 'drawSaved');
+    const paint = fn(source, 'updateSavedSpeech');
+    expect(layer).toContain('doc.documentElement.appendChild(svg)');
+    expect(saved).toContain('svg.appendChild(one.group)');
+    expect(paint).toContain('group.appendChild(rect)');
+    for (const code of [layer, saved, paint]) {
+      expect(code).not.toMatch(/doc\.body\.append|innerHTML|surroundContents|splitText|CSS\.highlights/);
+    }
+    const program = source.replace(preparation, '').replace(layer, '').replace(saved, '').replace(paint, '');
     // Two stylesheets, and the second is not in a Document at all: it is the
     // page epub.js lays the sections out on, and it holds the room kept for
     // the navigation bar and the Player (#67, #371, `reserve`). Nothing of

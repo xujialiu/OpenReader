@@ -26,7 +26,7 @@ const codec = module.exports.Contents.prototype;
 const renditionPrototype = module.exports.Rendition.prototype;
 const managerPrototype = renditionPrototype.requireManager.call({}, 'continuous').prototype;
 
-function rangeDocument(doc: any) {
+function rangeDocument(doc: any, measureText: boolean) {
   function offset(node: any, at: number) {
     let total = 0;
     let found = false;
@@ -69,7 +69,13 @@ function rangeDocument(doc: any) {
         return copy;
       },
       selectNode(node: any) { this.setStart(node, 0); this.setEnd(node, node.childNodes.length); },
-      getClientRects: () => [doc.selectionRect], getBoundingClientRect: () => doc.selectionRect,
+      getClientRects() {
+        if (!measureText) return [doc.selectionRect];
+        const x = offset(this.startContainer, this.startOffset) - offset(doc.body, 0) + doc.selectionRect.left;
+        const width = offset(this.endContainer, this.endOffset) - offset(this.startContainer, this.startOffset);
+        return [{ ...doc.selectionRect, left: x, right: x + width, width }];
+      },
+      getBoundingClientRect: () => doc.selectionRect,
       toString() { return doc.documentElement.textContent.slice(offset(this.startContainer, this.startOffset), offset(this.endContainer, this.endOffset)); },
     };
     return range;
@@ -78,7 +84,7 @@ function rangeDocument(doc: any) {
 }
 
 const body = '<p>hope then hope <b>again</b> today.</p>';
-function fixture(deferred = false) {
+function fixture(deferred = false, measureText = false) {
   const nativeEvents: (() => void)[] = [];
   const trace: string[] = [];
   const page = standInPage({ resize(width, height, target) {
@@ -113,7 +119,14 @@ function fixture(deferred = false) {
   function add(index = 6) {
     const section = page.addSection(index, body);
     const doc = section.document;
-    const offset = rangeDocument(doc);
+    const offset = rangeDocument(doc, measureText);
+    const createSvg = doc.createElementNS.bind(doc);
+    doc.createElementNS = (namespace: string, tag: string) => Object.assign(createSvg(namespace, tag), {
+      getBoundingClientRect: () => ({ left: 0, top: 0 }),
+    });
+    doc.defaultView.ResizeObserver = class { observe() {} disconnect() {} };
+    doc.removeEventListener = vi.fn();
+    doc.fonts = { addEventListener() {}, removeEventListener() {} };
     doc.activeElement = doc.body;
     doc.visibilityState = 'visible';
     doc.selectionRect = { top: 100, bottom: 118, left: 20, right: 60, width: 40, height: 18 };
@@ -576,23 +589,24 @@ it.each([
 });
 
 it('captures the range of the second occurrence and repaints it when its chapter is recreated', () => {
-  const f = fixture();
+  const f = fixture(false, true);
   f.choose();
   const location = f.messages().at(-1)?.location;
   expect(location).toMatchObject({ text: 'hope', section: 6, block: 0, offset: 10, endBlock: 0 });
   const mark = { ...location, id: 1, colour: 'green', chapter: 'Six', chapterKey: 'six' };
   f.page.send({ kind: 'savedHighlights', marks: [mark] });
-  const painted = (doc: typeof f.first.doc) => Array.from(doc.defaultView.CSS.highlights.get('or-saved-1') ?? []) as Range[];
-  expect(painted(f.first.doc).map((range) => range.startOffset)).toEqual([10]);
+  const rects = (doc: typeof f.first.doc) => Array.from(doc.getElementsByTagName('rect')) as Element[];
+  expect(rects(f.first.doc).map(rect => rect.getAttribute('width'))).toEqual(['4']);
+  const originalX = rects(f.first.doc)[0].getAttribute('x');
   f.resize();
   const next = f.complete();
-  expect(painted(next.doc).map((range) => range.toString())).toEqual(['hope']);
+  expect(rects(next.doc).map(rect => rect.getAttribute('x'))).toEqual([originalX]);
   f.page.send({ kind: 'savedHighlights', marks: [] });
-  expect(painted(next.doc)).toEqual([]);
+  expect(rects(next.doc)).toEqual([]);
 });
 
 it('keeps the saved passage and underlines just the part covered by the speech highlight', () => {
-  const f = fixture();
+  const f = fixture(false, true);
   f.choose();
   const location = f.messages().at(-1)?.location;
   const mark = { ...location, id: 1, colour: 'purple', chapter: 'Six', chapterKey: 'six' };
@@ -600,14 +614,41 @@ it('keeps the saved passage and underlines just the part covered by the speech h
   f.page.send({ kind: 'lookup', close: true });
   const [block] = f.page.blocks(f.first.section);
   const highlights = f.first.doc.defaultView.CSS.highlights;
-  const spokenLine = () => Array.from(highlights.get('or-saved-spoken') ?? [], (range) => String(range));
+  const paint = () => Array.from(f.first.doc.getElementsByTagName('rect') as ArrayLike<Element>,
+    rect => [rect.getAttribute('width'), rect.getAttribute('height')]);
   const speak = (start: number, end: number) => f.page.send({
     kind: 'speak', utterance: start, utteranceRanges: [{ block: block.id, start, end, text: block.text.slice(start, end) }],
     words: null, durationMs: 1000, reveal: false,
   });
   speak(0, 12);
-  expect(spokenLine()).toEqual(['ho']);
+  expect(paint()).toEqual([['2', '1'], ['2', '18']]);
   speak(0, 4);
-  expect(spokenLine()).toEqual([]);
-  expect(Array.from(highlights.get('or-saved-1'), (range) => String(range))).toEqual(['hope']);
+  expect(paint()).toEqual([['4', '18']]);
+  expect([...highlights.keys()].filter(key => key.startsWith('or-saved'))).toEqual([]);
+});
+
+it('restores four saved marks inside a paused sentence and remeasures them after a layout change (#377)', () => {
+  const f = fixture(false, true);
+  const marks = [[0, 4], [5, 9], [10, 12], [12, 14]].map(([from, to], i) => {
+    f.choose(f.first, from, to);
+    return { ...f.messages().at(-1)!.location, id: i + 1, colour: 'yellow' };
+  });
+  f.page.send({ kind: 'lookup', close: true });
+  f.page.send({ kind: 'savedHighlights', marks });
+  const [block] = f.page.blocks(f.first.section);
+  f.page.send({ kind: 'speak', utterance: 0, utteranceRanges: [{ block: block.id, start: 0, end: 14,
+    text: block.text.slice(0, 14) }], words: null, durationMs: 0, reveal: false });
+  f.page.send({ kind: 'hold', stop: true });
+  const rects = () => Array.from(f.first.doc.getElementsByTagName('rect') as ArrayLike<Element>);
+  expect(rects().map(r => [r.getAttribute('width'), r.getAttribute('height')])).toEqual([
+    ['4', '1'], ['4', '1'], ['2', '1'], ['2', '1'],
+  ]);
+  const xs = rects().map(r => Number(r.getAttribute('x')));
+  f.first.doc.selectionRect.left += 13;
+  f.page.send({ kind: 'appearance', css: 'body { font-size: 24px; }' });
+  expect(rects().map(r => Number(r.getAttribute('x')))).toEqual(xs.map(x => x + 13));
+  expect([...f.first.doc.defaultView.CSS.highlights.keys()].filter(k => k.startsWith('or-saved'))).toEqual([]);
+  expect(f.first.doc.body.getElementsByTagName('svg').length).toBe(0);
+  f.page.send({ kind: 'clear' });
+  expect(rects().map(r => r.getAttribute('height'))).toEqual(['18', '18', '18', '18']);
 });

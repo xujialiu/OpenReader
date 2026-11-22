@@ -710,64 +710,143 @@ ${constants}
   var browsing = false;
   var savedMarks = [];
   var savedRanges = new WeakMap();
-  var savedStyles = new WeakMap();
+  var savedLayers = new WeakMap();
   var palette = ${JSON.stringify(HIGHLIGHT_PALETTE)};
+  var svgNamespace = 'http://www.w3.org/2000/svg';
+
+  // Measure just the selected text. A Range across elements also returns boxes
+  // for whole paragraphs and inline elements, including their unselected space.
+  function savedTextParts(range) {
+    var parts = [];
+    function visit(node) {
+      if (node.nodeType === 3) {
+        var start = node === range.startContainer ? range.startOffset : 0;
+        var end = node === range.endContainer ? range.endOffset : node.length;
+        if (end > start && !range.comparePoint(node, start) && !range.comparePoint(node, end)) {
+          parts.push({ node: node, start: start, end: end });
+        }
+      } else {
+        for (var child = node.firstChild; child; child = child.nextSibling) visit(child);
+      }
+    }
+    visit(range.commonAncestorContainer);
+    return parts;
+  }
+
+  function savedLayer(doc) {
+    var layer = savedLayers.get(doc);
+    if (layer) return layer;
+    var svg = doc.createElementNS(svgNamespace, 'svg');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    // Append after the EPUB body. Existing CFI child indexes, text nodes,
+    // selection handles and the section's flow all continue to belong to it.
+    svg.setAttribute('data-or-saved', '');
+    doc.documentElement.appendChild(svg);
+    function reflow() {
+      if (!layer.frame) layer.frame = window.requestAnimationFrame(function () {
+        layer.frame = 0;
+        if (doc.defaultView && savedLayers.get(doc) === layer) updateSavedSpeech(doc, true);
+      });
+    }
+    var observer = new doc.defaultView.ResizeObserver(reflow);
+    observer.observe(doc.body);
+    doc.fonts.addEventListener('loadingdone', reflow);
+    doc.addEventListener('load', reflow, true);
+    layer = { svg: svg, frame: 0, dispose: function () {
+      observer.disconnect();
+      doc.fonts.removeEventListener('loadingdone', reflow);
+      doc.removeEventListener('load', reflow, true);
+      if (layer.frame) window.cancelAnimationFrame(layer.frame);
+      svg.parentNode.removeChild(svg);
+    } };
+    savedLayers.set(doc, layer);
+    return layer;
+  }
+
   function drawSaved(contents) {
     var doc = contents.document;
-    var win = doc && doc.defaultView;
-    if (!win || !win.CSS || !win.CSS.highlights) return;
-    var previous = savedRanges.get(doc) || [];
-    previous.forEach(function (one) { put(one.highlight, []); win.CSS.highlights.delete(one.name); });
+    if (!doc || !doc.defaultView) return;
     var live = [];
-    var rules = [];
     savedMarks.forEach(function (mark) {
       if (mark.section !== contents.sectionIndex || !palette[mark.colour]) return;
       try {
         var range = contents.range(mark.cfi);
         if (!range || range.collapsed || range.toString().trim() !== mark.text) return;
-        var name = 'or-saved-' + mark.id;
-        var highlight = new win.Highlight();
-        owners.set(range, range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement);
-        put(highlight, [range]);
-        highlight.priority = -3;
-        win.CSS.highlights.set(name, highlight);
-        rules.push('::highlight(' + name + '){background-color:color-mix(in srgb,' + palette[mark.colour] + ' 40%,var(--or-saved-page));}');
-        live.push({ mark: mark, range: range, name: name, highlight: highlight });
-      } catch (_) { /* This edition cannot resolve the saved excerpt. Keep its list entry. */ }
+        live.push({ mark: mark, range: range, parts: savedTextParts(range) });
+      } catch (_) { /* An unresolved excerpt remains in the saved list. */ }
     });
     savedRanges.set(doc, live);
-    savedStyles.set(doc, rules.join('') + '::highlight(or-saved-paper){background-color:var(--or-saved-page);}' +
-      '::highlight(or-saved-spoken){text-decoration:underline;}');
-    ensureStyle(doc);
-    updateSavedSpeech(doc);
-  }
-  function updateSavedSpeech(doc) {
-    var marks = savedRanges.get(doc);
-    if (!marks || !marks.length) {
-      doc.defaultView.CSS.highlights.delete('or-saved-paper');
-      doc.defaultView.CSS.highlights.delete('or-saved-spoken');
+    var layer = savedLayers.get(doc);
+    if (!live.length) {
+      if (layer) layer.dispose();
+      savedLayers.delete(doc);
       return;
     }
+    var svg = savedLayer(doc).svg;
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    live.forEach(function (one) {
+      one.group = doc.createElementNS(svgNamespace, 'g');
+      one.group.setAttribute('data-mark', String(one.mark.id));
+      svg.appendChild(one.group);
+    });
+    updateSavedSpeech(doc, true);
+  }
+
+  // The Reading retains its two CSS Highlights. Saved marks use ordinary
+  // rectangles, including the underline for the part covered by speech (#377).
+  function updateSavedSpeech(doc, layoutChanged) {
+    var layer = savedLayers.get(doc);
+    if (!layer) return;
     var registry = registries.get(doc);
-    if (!registry) return;
-    var lines = new doc.defaultView.Highlight();
-    lines.priority = 2;
-    var spoken = sentencePaints ? registry.utterance : wordPaints ? registry.word : [];
-    spoken.forEach(function (speech) {
-      marks.forEach(function (one) {
-        var a = one.range;
-        if (speech.comparePoint(a.endContainer, a.endOffset) < 0 || speech.comparePoint(a.startContainer, a.startOffset) > 0) return;
-        var overlap = speech.cloneRange();
-        if (!speech.comparePoint(a.startContainer, a.startOffset)) overlap.setStart(a.startContainer, a.startOffset);
-        if (!speech.comparePoint(a.endContainer, a.endOffset)) overlap.setEnd(a.endContainer, a.endOffset);
-        if (!overlap.collapsed) lines.add(overlap);
+    var spoken = registry && (sentencePaints ? registry.utterance : wordPaints ? registry.word : null);
+    var svg = layer.svg;
+    if (layoutChanged) {
+      svg.setAttribute('style', 'position:absolute!important;top:0!important;left:0!important;width:1px!important;height:1px!important;overflow:visible!important;pointer-events:none!important;z-index:2147483647!important;mix-blend-mode:' + (THEME ? 'lighten' : 'darken') + '!important;');
+    }
+    var origin;
+    savedRanges.get(doc).forEach(function (one) {
+      var pieces = [];
+      one.parts.forEach(function (part) {
+        var cursor = part.start;
+        if (spoken) spoken.forEach(function (speech) {
+          if (cursor >= part.end || speech.comparePoint(part.node, cursor) > 0 || speech.comparePoint(part.node, part.end) < 0) return;
+          var from = speech.startContainer === part.node ? Math.max(cursor, speech.startOffset) : cursor;
+          var to = speech.endContainer === part.node ? Math.min(part.end, speech.endOffset) : part.end;
+          if (to <= from) return;
+          if (from > cursor) pieces.push([part.node, cursor, from, false]);
+          pieces.push([part.node, from, to, true]);
+          cursor = to;
+        });
+        if (cursor < part.end) pieces.push([part.node, cursor, part.end, false]);
+      });
+      // A cue outside this mark needs no layout read or DOM write.
+      var previous = one.pieces;
+      if (!layoutChanged && previous && pieces.length === previous.length && pieces.every(function (p, i) {
+        return p[0] === previous[i][0] && p[1] === previous[i][1] && p[2] === previous[i][2] && p[3] === previous[i][3];
+      })) return;
+      one.pieces = pieces;
+      if (!origin) origin = svg.getBoundingClientRect();
+      var group = one.group;
+      while (group.firstChild) group.removeChild(group.firstChild);
+      var range = doc.createRange();
+      var colour = 'color-mix(in srgb,' + palette[one.mark.colour] + ' 40%,' + (THEME ? '${DARK_PAGE}' : '#fff') + ')';
+      pieces.forEach(function (piece) {
+        range.setStart(piece[0], piece[1]);
+        range.setEnd(piece[0], piece[2]);
+        Array.from(range.getClientRects()).forEach(function (box) {
+          if (!box.width || !box.height) return;
+          var rect = doc.createElementNS(svgNamespace, 'rect');
+          rect.setAttribute('x', String(box.left - origin.left));
+          rect.setAttribute('y', String((piece[3] ? box.bottom - 1 : box.top) - origin.top));
+          rect.setAttribute('width', String(box.width));
+          rect.setAttribute('height', String(piece[3] ? 1 : box.height));
+          rect.setAttribute('style', 'pointer-events:none!important;stroke:none!important;fill:' +
+            (piece[3] ? (THEME ? '#fff' : '#222') : colour) + '!important');
+          group.appendChild(rect);
+        });
       });
     });
-    var paper = new doc.defaultView.Highlight();
-    lines.forEach(function (range) { paper.add(range); });
-    paper.priority = -2;
-    doc.defaultView.CSS.highlights.set('or-saved-paper', paper);
-    doc.defaultView.CSS.highlights.set('or-saved-spoken', lines);
   }
   var lookupEnabled = false;
   var lookupHeld = false;
@@ -1538,7 +1617,6 @@ ${constants}
        the size. No highlight rule is in THEME any more (#118): the owner's
        colours are the same under either theme. */
     var wanted = CSS_TEXT + THEME + APPEARANCE;
-    if (savedStyles.has(doc)) wanted += ':root{--or-saved-page:' + (THEME ? '${DARK_PAGE}' : '#fff') + ';}' + savedStyles.get(doc);
     if (style.textContent !== wanted) style.textContent = wanted;
   }
 
@@ -1547,7 +1625,10 @@ ${constants}
   function restyle() {
     var list = rendition.getContents();
     for (var i = 0; i < list.length; i++) {
-      if (list[i] && list[i].document && list[i].document.defaultView) ensureStyle(list[i].document);
+      if (list[i] && list[i].document && list[i].document.defaultView) {
+        ensureStyle(list[i].document);
+        if (savedLayers.has(list[i].document)) updateSavedSpeech(list[i].document, true);
+      }
     }
   }
 
