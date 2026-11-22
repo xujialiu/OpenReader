@@ -69,7 +69,7 @@ describe('one WebDAV deadline, including the body (#168)', () => {
   it('releases the transport and lets a queued forced run read the next response', async () => {
     const fetchImpl = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(response(never))
-      .mockResolvedValueOnce(new Response(null, { status: 404 }));
+      .mockResolvedValue(new Response(null, { status: 404 }));
     const client = createWebDAVClient(cfg, { fetch: fetchImpl, timeoutMs: 100 });
     const onSynced = vi.fn();
     const upload = vi.spyOn(client, 'upload');
@@ -84,7 +84,7 @@ describe('one WebDAV deadline, including the body (#168)', () => {
     await vi.advanceTimersByTimeAsync(100);
     expect(await Promise.race([first, Promise.resolve('HUNG')])).toMatchObject({ result: 'error', uploaded: false });
     expect(await Promise.race([next, Promise.resolve('HUNG')])).toMatchObject({ result: 'ok', trigger: 'play' });
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
     expect(onSynced).toHaveBeenCalledTimes(2);
     expect(adopt).toHaveBeenCalledTimes(1);
     expect(upload).not.toHaveBeenCalled();

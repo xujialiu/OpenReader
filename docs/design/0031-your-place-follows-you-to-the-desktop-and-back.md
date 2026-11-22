@@ -153,7 +153,10 @@ that a person reading the file can tell which device wrote a line.
 
 ## What this costs
 
-- A file named after a person in the owner's folder.
+- During the rename, the folder holds two copies of the shared positions.
+  This lets the phone and computer update on different days and still pick
+  up where the other stopped. The extra copy costs a read on every sync
+  and a write when the reading position changes.
 - The sentence the owner stopped on is written to their own server, where before
   only a bare location was.
 - A paused book can move under the owner's eye. Deliberate, and quiet.
@@ -174,4 +177,4 @@ that a person reading the file can tell which device wrote a line.
 - Papers stay on the desktop. Places in PDFs and saved web pages do not travel to
   the phone, and the phone does not read them; the owner reads papers on the
   desktop and novels on the phone, and said so. The desktop keeps its own file
-  for them until the day the shared file can hold them too.
+  for them.

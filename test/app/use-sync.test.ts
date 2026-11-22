@@ -58,7 +58,7 @@ describe('turning the switch on runs the first sync (defect 1)', () => {
     await settle();
     // On: exactly one run, which saw `enabled` as true and went to the folder.
     expect(counts.clients).toBe(1);
-    expect(counts.downloads).toBe(1);
+    expect(counts.downloads).toBe(2);
     expect(handle!.last).toMatchObject({ trigger: 'switch-on', result: 'ok' });
 
     // Staying on is not a moment; a re-render with the same switch pokes nothing.
@@ -97,7 +97,7 @@ describe('switch-on after a failed sync (#177)', () => {
       corrected = true;
       await act(async () => { handle!.sync.poke('foreground'); });
       await settle();
-      expect(downloads).toEqual([false]);
+      expect(downloads).toEqual([false, false]);
       expect(handle!.last).toMatchObject({ result: 'error' });
 
       clock += elapsed - 25_000;
@@ -105,11 +105,11 @@ describe('switch-on after a failed sync (#177)', () => {
       expect(await handle!.sync.check('https://dav.example/or', 'ann', 'corrected')).toEqual({ ok: true, folderMissing: false });
       await act(async () => { tree.update(createElement(Probe, { settings: settingsWith(true) })); });
       await settle();
-      expect(downloads).toEqual([false, true]);
+      expect(downloads).toEqual([false, false, true, true]);
       expect(handle!.last).toMatchObject({ trigger: 'switch-on', result: 'ok' });
       await act(async () => { tree.update(createElement(Probe, { settings: settingsWith(true) })); });
       await settle();
-      expect(downloads).toEqual([false, true]);
+      expect(downloads).toEqual([false, false, true, true]);
     } finally {
       await act(async () => { tree.unmount(); });
     }
@@ -133,7 +133,7 @@ describe('a completed run never pokes the next one (defect 2)', () => {
     await settle();
     await settle();
     // One trigger, one run — however many times the outcome re-rendered the hook.
-    expect(counts.downloads).toBe(1);
+    expect(counts.downloads).toBe(2);
     expect(handles.length).toBeGreaterThan(1);
     expect(new Set(handles).size).toBe(1);
     await act(async () => { tree.unmount(); });

@@ -33,7 +33,7 @@ import { WebDAVError } from './webdav';
 import {
   mergePositions,
   parsePositionsFile,
-  POSITIONS_FILENAME,
+  POSITIONS_FILENAMES,
   serializePositionsFile,
   usableItems,
   type FileItem,
@@ -151,35 +151,38 @@ export function createPositionsTransport(deps: PositionsTransportDeps): Position
     runningSince = at;
     try {
       const client = await deps.client();
-      let remoteText: string | null = null;
-      try {
-        remoteText = await client.download(POSITIONS_FILENAME);
-      } catch (problem) {
-        // No file yet is the ordinary first run, not a failure.
-        if (!(problem instanceof WebDAVError) || problem.kind !== 'not-found') throw problem;
-      }
-      let remote: readonly FileItem[] = [];
-      if (remoteText !== null) {
-        const parsed = parsePositionsFile(remoteText);
+      const copies: { name: string; text: string | null }[] = await Promise.all(POSITIONS_FILENAMES.map(async (name) => {
+        try {
+          return { name, text: await client.download(name) };
+        } catch (error) {
+          if (error instanceof WebDAVError && error.kind === 'not-found') return { name, text: null };
+          throw error;
+        }
+      }));
+      const entries: FileItem[] = [];
+      for (const copy of copies) {
+        if (copy.text === null) continue;
+        const parsed = parsePositionsFile(copy.text);
         if (parsed.ok) {
-          remote = parsed.items;
+          for (const item of parsed.items) entries.push(item);
         } else if (parsed.reason === 'newer') {
           const error = `The positions file on the server is version ${parsed.version}, which this version of the app does not read. It was left alone; update the app to sync again.`;
           reportGated(error);
           unreachableAt = null;
-          return finish({ at, trigger, result: 'frozen', error, remote: 0, adopted: [], uploaded: false, warning });
+          return finish({ at, trigger, result: 'frozen', error, remote: 0, adopted: [], uploaded: false, warning: null });
         } else {
-          // Repair as before, but report only what the completed run confirms.
           warning = { kind: 'unreadable-file', reason: parsed.why };
-          remoteText = null;
+          copy.text = null;
         }
       }
+      const remote = mergePositions([], entries);
       const merged = mergePositions(deps.local(), remote);
       const adopted = deps.adopt(usableItems(merged));
       const text = serializePositionsFile(merged);
       let uploaded = false;
-      if (remoteText === null ? merged.length > 0 : text !== remoteText) {
-        await client.upload(POSITIONS_FILENAME, text);
+      for (const copy of copies) {
+        if (copy.text === text || (copy.text === null && merged.length === 0)) continue;
+        await client.upload(copy.name, text);
         uploaded = true;
       }
       lastFailureAt = Number.NEGATIVE_INFINITY;

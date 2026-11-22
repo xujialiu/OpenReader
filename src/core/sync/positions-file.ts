@@ -1,5 +1,5 @@
 /**
- * The **Positions File** (CONTEXT.md): `xujialiu-positions.json` in the Sync
+ * The **Positions File** (CONTEXT.md): `openreader-positions.json` in the Sync
  * Folder, every device's Reading Positions keyed by Document Id, written by the
  * phones and by the desktop plugin alike.
  *
@@ -25,7 +25,8 @@
 import type { TextAnchor } from '../document/anchor';
 import { newerThan, type Stamp } from '../document/stamp';
 
-export const POSITIONS_FILENAME = 'xujialiu-positions.json';
+export const POSITIONS_FILENAME = 'openreader-positions.json';
+export const POSITIONS_FILENAMES = [POSITIONS_FILENAME, 'xujialiu-positions.json'] as const;
 export const POSITIONS_FORMAT = 'xujialiu-positions';
 /** The only version this build writes, and the highest it reads. */
 export const POSITIONS_VERSION = 1;

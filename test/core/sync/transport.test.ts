@@ -66,7 +66,7 @@ describe('a first sync against an empty folder', () => {
     const h = harness(null, [item(A, 5)]);
     const outcome = await h.transport.flush('launch');
     expect(outcome).toMatchObject({ result: 'ok', remote: 0, adopted: [], uploaded: true });
-    expect(h.srv.state.uploads).toHaveLength(1);
+    expect(h.srv.state.uploads).toHaveLength(2);
     expect(parsePositionsFile(h.srv.state.uploads[0])).toMatchObject({ ok: true });
   });
 
@@ -251,11 +251,13 @@ describe('single flight', () => {
     transport.poke('b');
     transport.poke('c');
     expect(transport.running()).toBe(true);
-    await settle(() => downloads.length === 1);
-    downloads[0]();
-    // The trailing run starts when the first ends, and it is one run for b and c.
     await settle(() => downloads.length === 2);
+    downloads[0]();
     downloads[1]();
+    // The trailing run starts when the first ends, and it is one run for b and c.
+    await settle(() => downloads.length === 4);
+    downloads[2]();
+    downloads[3]();
     await settle(() => !transport.running());
     expect(spy).toHaveBeenCalledTimes(2);
     expect(transport.last()?.trigger).toBe('c');
@@ -296,13 +298,68 @@ describe('single flight', () => {
 
     const flushed = transport.flush('play');
     transport.poke('foreground');
-    await until(() => gates.length === 1);
-    gates.shift()!();
+    await until(() => gates.length === 2);
+    for (const release of gates.splice(0)) release();
     expect(await flushed).toMatchObject({ trigger: 'play', result: 'ok', adopted: [A] });
     // The queued run started meanwhile, found nothing newer, and answers for itself.
-    await until(() => gates.length === 1);
-    gates.shift()!();
+    await until(() => gates.length === 2);
+    for (const release of gates.splice(0)) release();
     await until(() => !transport.running());
     expect(transport.last()).toMatchObject({ trigger: 'foreground', adopted: [] });
+  });
+});
+
+describe('WebDAV filename transition', () => {
+  const current = 'openreader-positions.json';
+  const legacy = 'xujialiu-positions.json';
+
+  it('merges the two copies by document and retries a partial write using fresh reads', async () => {
+    const first = item(A, 10);
+    const latest = item(B, 30);
+    const older = item(B, 20);
+    const files = new Map([[current, serializePositionsFile([first, older])], [legacy, serializePositionsFile([latest])]]);
+    const puts: string[] = [];
+    let failLegacy = true;
+    const client = {
+      download: async (name: string) => {
+        const text = files.get(name);
+        if (text === undefined) throw new WebDAVError('not-found', 'missing', 404);
+        return text;
+      },
+      upload: async (name: string, text: string) => {
+        puts.push(name);
+        if (name === legacy && failLegacy) throw new WebDAVError('network', 'interrupted');
+        files.set(name, text);
+      },
+    };
+    const h = harness(null, [], { client });
+    const merged = serializePositionsFile([first, latest]);
+    await h.transport.flush('partial');
+    expect(files.get(current)).toBe(merged);
+    expect(files.get(legacy)).toBe(serializePositionsFile([latest]));
+    failLegacy = false;
+    await h.transport.flush('retry');
+    expect(files.get(legacy)).toBe(merged);
+    await h.transport.flush('unchanged');
+    expect(puts).toEqual([current, legacy, legacy]);
+
+    files.delete(current);
+    await h.transport.flush('legacy-only');
+    expect(files.get(current)).toBe(merged);
+    expect(puts.at(-1)).toBe(current);
+  });
+
+  it('does not write either name if one download fails', async () => {
+    const uploads: string[] = [];
+    const client = {
+      download: async (name: string) => {
+        if (name === legacy) throw new WebDAVError('network', 'timeout');
+        return serializePositionsFile([item(A, 10)]);
+      },
+      upload: async (name: string) => { uploads.push(name); },
+    };
+    const h = harness(null, [], { client });
+    expect((await h.transport.flush('network-error'))?.result).toBe('error');
+    expect(uploads).toEqual([]);
   });
 });

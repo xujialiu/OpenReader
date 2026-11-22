@@ -18,6 +18,14 @@ items are Reading Positions in this app's own shape — a Locator, a Text Anchor
 and a Stamp — and the plugin's own `zotero-tts-positions.json` is left exactly
 as it is.
 
+**Filename amendment (#378).** The shared Positions File is now named
+`openreader-positions.json`. During the transition the phone and desktop
+read and write both it and `xujialiu-positions.json`. A single cutover
+would strand progress on devices updated at different times. The desktop
+keeps its separate attachment-based format, including PDF and snapshot
+positions. The filename transition and eventual final merge are specified
+in section 1 of the plugin's sync contract.
+
 ## Why a second positions file rather than the plugin's
 
 The plugin's file cannot be the crossing point, for two reasons each of which
@@ -41,7 +49,7 @@ phones. A file keyed by Document Id needs no mapping at all: the desktop keeps
 `{lib, key} → id` in its own database, where `lib` is correct, and nothing in
 the folder ever mentions Zotero's coordinates.
 
-## The name
+## The original filename decision, superseded for filenames by #378
 
 `xujialiu-positions.json`. Three names were weighed. `positions.json` was
 chosen first and withdrawn: the plugin heals a malformed file by overwriting
@@ -348,8 +356,8 @@ the very folder it opens.
   section measured.
 - `publicationId` is written `null` by both sides; the secondary match ADR 0004
   wants is still not built.
-- PDF and snapshot positions stay in the plugin's own file; the plugin retires
-  that file in 2.0 only once their id rules and dialects are in the spec. The
+- PDF and snapshot positions stay in the plugin's own file; the plugin keeps
+  its desktop format under the filename amendment above. The
   owner reads papers on the desktop and novels on the phone, and said so.
 - `<style>`, `<link>` or `<title>` inside `<body>` was in no book measured; the
   sanitiser shift that the static reading predicted remains a prediction.
