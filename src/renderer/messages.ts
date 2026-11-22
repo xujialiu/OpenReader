@@ -771,6 +771,11 @@ function isIndex(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= 0;
 }
 
+function validLineBreaks(value: unknown, length: number): boolean {
+  return Array.isArray(value) && value.every((at, i) =>
+    isIndex(at) && at <= length && (i === 0 || value[i - 1] <= at));
+}
+
 function isReportedBlock(value: unknown): value is ReportedBlock {
   return (
     isObject(value) &&
@@ -778,6 +783,7 @@ function isReportedBlock(value: unknown): value is ReportedBlock {
     typeof value.text === 'string' &&
     (value.role === 'paragraph' || value.role === 'heading' || value.role === 'other') &&
     (value.item === undefined || isIndex(value.item)) &&
+    (value.lineBreaks === undefined || validLineBreaks(value.lineBreaks, value.text.length)) &&
     typeof value.section === 'string' &&
     isIndex(value.sectionIndex) &&
     typeof value.cfi === 'string' &&

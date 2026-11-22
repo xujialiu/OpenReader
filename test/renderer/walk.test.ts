@@ -4,6 +4,8 @@ import { segmentDocument } from '../../src/app/segment';
 import { tokenize } from '../../src/core/align';
 import { prepareSpeechText } from '../../src/core/speech-text';
 import { sectionChapters } from '../../src/offline/model';
+import { utteranceAt } from '../../src/renderer/cursor';
+import { TAP_MESSAGE } from '../../src/renderer/messages';
 
 import { standInPage, type Section, type StandInPage } from './stand-in-page';
 
@@ -153,6 +155,71 @@ describe('a line break with no white space beside it (#192)', () => {
     const drawn = registry.flatMap((highlight) => [...highlight]).map((range) =>
       [range.startContainer.data, range.startOffset, range.endContainer.data, range.endOffset]);
     expect(drawn).toEqual([['Chapter 1:', 0, 'Nightmare Begins', 16], ['Nightmare Begins', 0, 'Nightmare Begins', 9]]);
+  });
+});
+
+describe('a bilingual phrasebook entry (#380)', () => {
+  const example = 'It took me a while to adapt to the new schedule.';
+  const translation = '我花了一段时间才适应新日程。';
+  const body = `<p><strong>adapt to</strong> 适应<br/>\n<strong>${example}</strong><br/>\n${translation}</p>`;
+
+  it.each([
+    { term: 'account for', gloss: '解释，说明', sentence: 'You need to account for every expense in your report.', translated: undefined },
+    { term: 'include in', gloss: '包含', sentence: 'Please include me in the email list.', translated: '请将我加入邮件列表。' },
+  ])('reads and downloads the example for "$term" independently', async ({ term, gloss, sentence, translated }) => {
+    const lines = [`<strong>${term}</strong> ${gloss}`, `<strong>${sentence}</strong>`];
+    const expected = [`${term} ${gloss}`, sentence];
+    if (translated) {
+      lines.push(translated);
+      expected.push(translated);
+    }
+    const { page, section } = open(`<p>${lines.join('<br/>\n')}</p>`);
+    const blocks = page.blocks(section);
+    const utterances = segmentDocument(blocks, 'zh-CN');
+    expect(utterances.map((u) => u.text)).toEqual(expected);
+    page.click(section, section.document.getElementsByTagName('strong')[1]);
+    const tap = page.posted.find((message) => message.type === TAP_MESSAGE)!;
+    const at = utteranceAt(utterances, blocks.map((block) => block.id), tap.block, tap.offset);
+    expect(utterances[at!].text).toBe(sentence);
+    const start = blocks[0].text.indexOf(sentence);
+    expect(utterances[at!].spans).toEqual([{ block: 0, start, end: start + sentence.length, textOffset: 0 }]);
+
+    const prepared = await page.prepare(3);
+    const [chapter] = sectionChapters(3, prepared.blocks, prepared.points, 'zh-CN');
+    expect(chapter.texts).toEqual(expected);
+  });
+
+  it('keeps the line breaks of ordinary prose, verse and headings as whitespace', () => {
+    expect(sentencesOf('<p>He walked<br/>home.</p>')).toEqual(['He walked\nhome.']);
+    expect(sentencesOf('<p>Across the hill<br/>under the sky<br/>and home.</p>'))
+      .toEqual(['Across the hill\nunder the sky\nand home.']);
+    expect(sentencesOf('<h2>adapt to 适应<br/>An example<br/>中文</h2>'))
+      .toEqual(['adapt to 适应\nAn example\n中文']);
+    expect(sentencesOf('<p>adapt to 适应\nAn example\n中文</p>'))
+      .toEqual(['adapt to 适应\nAn example\n中文']);
+    expect(sentencesOf('<p>account for 解释，说明\nAn example.</p>'))
+      .toEqual(['account for 解释，说明\nAn example.']);
+    expect(sentencesOf('<p>include in 包含<br/>在名单中。</p>'))
+      .toEqual(['include in 包含\n在名单中。']);
+    expect(sentencesOf('<p>include in 包含<br/>An example<br/>continued here.</p>'))
+      .toEqual(['include in 包含\nAn example\ncontinued here.']);
+  });
+
+  it('keeps the entry apart from a preceding unfinished paragraph, including a repeated example', () => {
+    const { page, section } = open('<p>A section label</p>' + body + body);
+    page.click(section, section.document.getElementsByTagName('strong')[3]);
+    const tap = page.posted.find((message) => message.type === TAP_MESSAGE)!;
+    const blocks = page.blocks(section);
+    const utterances = segmentDocument(blocks, 'zh-CN');
+    const at = utteranceAt(utterances, blocks.map((block) => block.id), tap.block, tap.offset);
+    expect(utterances.map((u) => u.text)).toEqual(['A section label', 'adapt to 适应', example, translation, 'adapt to 适应', example, translation]);
+    const offset = blocks[2].text.indexOf(example);
+    expect(utterances[at!].spans).toEqual([{ block: 2, start: offset, end: offset + example.length, textOffset: 0 }]);
+  });
+
+  it('keeps numbered vocabulary entries whole and finds boundaries without bold markup', () => {
+    expect(sentencesOf('<p>2. Act up 捣乱<br/>It happened. Again!<br/>又发生了。</p>'))
+      .toEqual(['2. Act up 捣乱', 'It happened.', 'Again!', '又发生了。']);
   });
 });
 
