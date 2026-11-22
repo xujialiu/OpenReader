@@ -123,6 +123,14 @@ and what is committed is what was measured, never their text.
   the first BLOCKED record and rerun the readiness check once after the initial
   bundle settles, rather than calling the environment healthy from the Metro
   log alone.
+- **`expo start --dev-client` can warn about a missing scheme without blocking
+  the existing Debug shell.** In the #194/#337/#256/#188 batch,
+  `expo-dev-client` was absent, so Metro on port 8108 logged that it could not
+  determine the default URI scheme for deep linking into the app. The guarded
+  reload supplied `-RCT_jsLocation`; `/json/list` listed the target and
+  `ios_ready.py --metro` returned its expected CDP value. Keep the warning in
+  the logs and qualify this shell through the target and CDP checks; do not
+  install `expo-dev-client` just to silence it.
 - **Metro exited with the installation command on #371.** Three background
   launches ended before the simulator could request a bundle. Start Metro in
   a persistent session terminal outside the admitted phase, then verify its
