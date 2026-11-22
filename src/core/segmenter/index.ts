@@ -113,7 +113,11 @@ export function segmentBlocks(blocks: readonly Block[], language: string, option
   const { splitSentences, rejoin = true, maxLength } = options;
   const utterances: Utterance[] = [];
   for (const run of blockRuns(blocks, rejoin)) {
-    for (const span of sentenceSpans(run.text, language, splitSentences, { maxLength })) {
+    const lines = run.phrasebook;
+    const split = lines
+      ? () => [lines[0], ...lines.slice(1).flatMap((line) => splitSentences(language, line))]
+      : splitSentences;
+    for (const span of sentenceSpans(run.text, language, split, { maxLength })) {
       const text = run.text.slice(span.start, span.end);
       utterances.push({ text, spans: spansIn(run, blocks, span), speakable: isSpeakable(text) });
     }

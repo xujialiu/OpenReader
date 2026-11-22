@@ -108,6 +108,8 @@ export type BlockRole = 'paragraph' | 'heading' | 'other';
 export interface Block {
   text: string;
   role?: BlockRole;
+  /** UTF-16 offsets of explicit line breaks in a rendered paragraph. */
+  lineBreaks?: readonly number[];
   /**
    * Which part of the document this Block belongs to — for EPUB, the spine
    * item. Two Blocks in different sections are never joined: the last sentence
@@ -132,6 +134,8 @@ export interface BlockRun {
   text: string;
   /** Where each of `blocks`' own text starts in `text`. Parallel to `blocks`. */
   offsets: number[];
+  /** Authored lines for the term and gloss, its example, and an optional translation. */
+  phrasebook?: readonly [string, string] | readonly [string, string, string];
 }
 
 /**
@@ -185,15 +189,16 @@ export function continuesSentence(text: string): boolean {
  */
 export function blockRuns(blocks: readonly Block[], rejoin = true): BlockRun[] {
   const runs: BlockRun[] = [];
+  const entries = blocks.map(phrasebookEntry);
   const consumed = new Set<number>();
   for (let i = 0; i < blocks.length; i++) {
     if (consumed.has(i)) continue;
     const members = [i];
-    if (rejoin) {
+    if (rejoin && !entries[i]) {
       let a = i;
       for (;;) {
         const next = candidate(blocks, a);
-        if (!next || !joins(blocks[a], blocks[next.index])) break;
+        if (!next || entries[next.index] || !joins(blocks[a], blocks[next.index])) break;
         // Only now are the blank blocks in between spent: a refused join must
         // leave them where they were.
         for (const blank of next.blank) consumed.add(blank);
@@ -202,7 +207,9 @@ export function blockRuns(blocks: readonly Block[], rejoin = true): BlockRun[] {
         a = next.index;
       }
     }
-    runs.push(runOf(blocks, members));
+    const run = runOf(blocks, members);
+    if (entries[i]) run.phrasebook = entries[i];
+    runs.push(run);
   }
   return runs;
 }
@@ -231,6 +238,22 @@ function candidate(blocks: readonly Block[], from: number): { index: number; bla
     return { index: i, blank };
   }
   return null;
+}
+
+const HAN = /\p{Script=Han}/u;
+// A numbered or unnumbered English expression followed by its Chinese gloss.
+const TERM_AND_GLOSS = /^(?:\d+[.)]\s*)?[A-Za-z][A-Za-z'’/.…()-]*(?:\s+[A-Za-z'’/.…()-]+)*\s+[(（]?\p{Script=Han}/u;
+
+function phrasebookEntry(block: Block): BlockRun['phrasebook'] {
+  if (block.role !== 'paragraph' || (block.lineBreaks?.length !== 1 && block.lineBreaks?.length !== 2)) return;
+  const [first, second] = block.lineBreaks;
+  const entry = block.text.slice(0, first).trim();
+  if (!TERM_AND_GLOSS.test(entry)) return;
+  const example = block.text.slice(first, second).trim();
+  if (!/[A-Za-z]/.test(example) || HAN.test(example)) return;
+  if (second === undefined) return [entry, example];
+  const translation = block.text.slice(second).trim();
+  if (HAN.test(translation)) return [entry, example, translation];
 }
 
 const HAS_LETTER = /\p{L}/u;

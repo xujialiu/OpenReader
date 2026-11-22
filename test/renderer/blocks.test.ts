@@ -58,6 +58,17 @@ describe('withSection', () => {
     expect(texts(withSection(index, message(0, ['one', 'TWO'])))).toEqual(['one', 'TWO']);
   });
 
+  it('refreshes identical text when the explicit breaks move', () => {
+    const first = message(0, ['a b c']);
+    first.blocks[0].lineBreaks = [1, 3];
+    const index = withSection(EMPTY_BLOCKS, first);
+    const again = message(0, ['a b c']);
+    again.blocks[0].lineBreaks = [1, 3];
+    expect(withSection(index, again)).toBe(index);
+    again.blocks[0].lineBreaks = [3];
+    expect(withSection(index, again)).not.toBe(index);
+  });
+
   it('leaves the index it was given alone', () => {
     const first = withSection(EMPTY_BLOCKS, message(0, ['one']));
     withSection(first, message(1, ['two']));

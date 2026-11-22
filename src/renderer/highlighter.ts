@@ -128,9 +128,9 @@ export const HIGHLIGHTER = '__openReaderHighlighter';
  *
  * 1 is every walk before #184: unrecorded in any catalogue. 2 keeps list items
  * and cells apart (#184), a drop cap in its word (#189) and the two lines of a
- * `<br>` apart (#192).
+ * `<br>` apart (#192). 3 reports explicit paragraph break offsets (#380).
  */
-export const BLOCK_WALK = 2;
+export const BLOCK_WALK = 3;
 
 /**
  * The fonts **Appearance** offers, as the owner reads them and as CSS names
@@ -1320,7 +1320,12 @@ ${constants}
       var tag = node.tagName ? node.tagName.toUpperCase() : '';
       if (SKIP[tag]) return;
       if (tag === 'BR') {
-        if (open) open.broken = true;
+        if (!open) return;
+        open.broken = true;
+        if (roleOf(owner) === 'paragraph' && win.getComputedStyle(node).display !== 'none') {
+          if (!open.lineBreaks) open.lineBreaks = [];
+          open.lineBreaks.push(open.text.length);
+        }
         return;
       }
       var style = INLINE[tag] ? null : win.getComputedStyle(node);
@@ -1579,7 +1584,7 @@ ${constants}
       });
       post({type:'openreader:offline-section', token:token, index:index, total:book.spine.length,
         language:String(book.package.metadata.language || '').trim() || 'en', points:points,
-        blocks:found.map(function(b) { return {text:b.text, role:roleOf(b.element), section:section.href, item:itemOf(b)}; })});
+        blocks:found.map(function(b) { return {text:b.text, role:roleOf(b.element), section:section.href, item:itemOf(b), lineBreaks:b.lineBreaks}; })});
     } catch (error) { post({type:'openreader:offline-error', token:token, detail:String(error)}); }
   };
 
@@ -2009,6 +2014,7 @@ ${constants}
         role: roleOf(found[i].element),
         item: itemOf(found[i]),
         images: found[i].images,
+        lineBreaks: found[i].lineBreaks,
         section: href,
         sectionIndex: index,
         cfi: cfi

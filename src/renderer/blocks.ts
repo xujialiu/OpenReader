@@ -60,7 +60,14 @@ export function withSection(index: BlockIndex, message: BlocksMessage): BlockInd
 
 function sameBlocks(a: readonly ReportedBlock[], b: readonly ReportedBlock[]): boolean {
   if (a.length !== b.length) return false;
-  return a.every((block, at) => block.id === b[at].id && block.text === b[at].text && block.cfi === b[at].cfi && sameImages(block.images, b[at].images));
+  return a.every((block, at) => {
+    const other = b[at];
+    const breaks = block.lineBreaks ?? [];
+    return block.id === other.id && block.text === other.text && block.cfi === other.cfi &&
+      sameImages(block.images, other.images) &&
+      breaks.length === (other.lineBreaks?.length ?? 0) &&
+      breaks.every((offset, i) => offset === other.lineBreaks?.[i]);
+  });
 }
 
 function sameImages(a: ReportedBlock['images'], b: ReportedBlock['images']): boolean {
