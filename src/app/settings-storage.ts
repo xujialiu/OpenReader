@@ -30,7 +30,7 @@ function readFont(value: unknown): AppSettings['appearance']['font'] {
 /**
  * A size on the ladder, or the default. Nothing is converted: a percentage saved
  * by the build before ADR 0030 is simply not a size, and the app has not been
- * released, so the owner starts again at 16 rather than being carried across.
+ * released, so the setting falls back to the current default.
  */
 function readSize(value: unknown): FontSize {
   return FONT_SIZES.find((size) => size === value) ?? DEFAULT_SETTINGS.appearance.size;
