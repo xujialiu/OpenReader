@@ -383,6 +383,10 @@ also changes Node and can invalidate the locale-name and text-boundary checks.
 Do not relax the production readiness gate or its deadline to work around a
 synthetic-tool startup failure.
 
+- **A delayed MobileBuildMCP element reference can expire before dispatch.** A Back reference from an earlier snapshot returned `SNAPSHOT_EXPIRED` after about three minutes; the tool confirmed it sent no touch. Refresh `snapshot_ui` and use the new reference.
+- **Inline JavaScript inside shell-built harness JSON can lose its quotes.** An `hx.cjs` command assembled from `JSON.stringify(code)` reached `getElementById(formula)` without the string quotes and returned `ReferenceError: Can't find variable: formula`. Put multi-line probes in a `.js` file and pass the path as a separate `--code-file` argument.
+- **A malformed EPUB spine ID may still produce nonempty CFIs on the target runtime.** On iOS 27.0, the `text/ch1` fixture reported `epubcfi(/6/4!/4/8[restart])`; its WebContent restart was therefore a valid-CFI control, not the #256 empty-CFI case. Inspect the actual `openreader:blocks` payload first. If its CFI is nonempty, inject an empty `cfiFromNode` result through the Debug WebView bridge and confirm the app stores `locator: ""` before claiming exact coverage.
+
 ## Areas
 
 How each feature was tested, with its scripts and probes, one folder per area.
