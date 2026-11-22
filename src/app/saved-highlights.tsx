@@ -71,7 +71,7 @@ function HighlightsList({ marks, close, browse, recolour, remove, undo, overlay 
     { text: 'Cancel', style: 'cancel' },
   ]);
   const allSelected = selected?.size === marks.length;
-  return <Drawer visible title="Highlights" onClose={close} deletionFooter={!!selected}
+  return <Drawer visible title="Highlights" onClose={close} selectionFooter={!!selected}
     leadingAction={selected ? { label: allSelected ? 'Deselect all' : 'Select all',
       onPress: () => select(allSelected ? new Set() : new Set(ids)) } : undefined}
     action={{ label: selected ? 'Cancel' : 'Select', disabled: !marks.length, onPress: () => select(selected ? null : new Set()) }}>

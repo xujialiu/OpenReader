@@ -116,7 +116,7 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, onHighlig
   const header = page === 'menu'
     ? { titleLeft: true as const, title: entry.title, action: { icon: 'share' as const, label: 'Share', onPress: share, disabled: sharing } }
     : page === 'move' ? move.header : { title: TITLES[page], onBack: back ? () => setPage(back) : undefined, action: (page === 'download' || page === 'manage') && selectAll ? selectAll : undefined };
-  return <Drawer visible onClose={onClose} deletionFooter={page === 'manage'} {...header}>
+  return <Drawer visible onClose={onClose} selectionFooter={page === 'download' || page === 'manage'} {...header}>
     {page === 'menu' ? <DrawerScroll>
       {appearance ? <DrawerRow icon="appearance" onPress={() => setPage('appearance')} accessory={<DrawerChevron />}>
         <DrawerRowText>Appearance</DrawerRowText>

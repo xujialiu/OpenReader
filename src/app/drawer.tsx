@@ -143,7 +143,6 @@ export const DRAWER = {
    * (`DrawerList`, `DrawerScroll`).
    */
   bottom: 16,
-  deletionBottom: 8,
   /**
    * Per theme: the sheet (`page`), the line under a row, the marked row
    * (Contents' current one), and the round buttons' fill and rim.
@@ -272,10 +271,10 @@ type DrawerHeader =
   | { titleLeft?: false; onBack?(): void; backLabel?: string; leadingAction?: DrawerAction; action?: DrawerAction }
   | { titleLeft: true; action: DrawerAction; onBack?: never; backLabel?: never; leadingAction?: never };
 
-export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, backLabel, leadingAction, action, titleLeft, deletionFooter, children }: {
+export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, backLabel, leadingAction, action, titleLeft, selectionFooter, children }: {
   visible: boolean;
-  /** A fixed deletion button sits closer to the bottom safe area. */
-  deletionFooter?: boolean;
+  /** Highlights, Download and Manage anchor their selection buttons at the same height. */
+  selectionFooter?: boolean;
   /** The centred title; with `heading`, the name the heading's control is given for VoiceOver. */
   title: string;
   /** A control drawn where the centred title goes, in its place: the lookup drawer's Dictionary | Translation. */
@@ -299,7 +298,8 @@ export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, ba
     : { height: drawerDetentHeight(settings.drawerHeight, { width: window.width, height: window.height, bottomInset: insets.bottom }) };
   const turn = useDrawerTurn(visible, onClose);
   const [expanded, setExpanded] = useState(false);
-  const bottom = insets.bottom + (deletionFooter ? DRAWER.deletionBottom : DRAWER.bottom);
+  // Frame the header capsule and the selection button with the same space at the Drawer edges.
+  const bottom = selectionFooter ? DRAWER.header.top : insets.bottom + DRAWER.bottom;
   return (
     <Host style={styles.host} colorScheme={colours.scheme}>
       <BottomSheet isPresented={turn.presented} onDismiss={() => { setExpanded(false); turn.dismissed(); onDismiss?.(); }}

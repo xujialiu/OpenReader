@@ -54,7 +54,7 @@ The first version keeps Saved Highlights on the device where they were made. Sav
 
 Undo is available for an individual removal from the selection menu or the Highlights list. In the Highlight tab the colour choices themselves let the reader mark the passage again. To remove several, the reader taps Select at the top right of Highlights, then taps anywhere on a row to toggle it. A two-finger sweep can start or extend a selection, as in the Library. The selection can include excerpts from several chapters. Select All includes every highlight in this Document, even those off screen.
 
-In selection mode, Select all sits at the top left and becomes Deselect all when every excerpt is checked. Cancel stays at the top right. A red Delete selected button shows the count and stays at the bottom center as the reader scrolls. One confirmation gives the total for the batch. Cancelling it leaves the rows checked so the reader can adjust the selection. Confirming removes the selected excerpts and returns to the ordinary list.
+In selection mode, Select all sits at the top left and becomes Deselect all when every excerpt is checked. Cancel stays at the top right. A red Delete selected button shows the count and stays at the bottom center as the reader scrolls. The space below it matches the space above Select all. Download and Manage use the same bottom position, so the button stays under the reader’s thumb across the three Drawers. One confirmation gives the total for the batch. Cancelling it leaves the rows checked so the reader can adjust the selection. Confirming removes the selected excerpts and returns to the ordinary list.
 
 ## Removing a book from the Library
 

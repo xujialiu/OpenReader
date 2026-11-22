@@ -55,9 +55,14 @@ describe('a list that ends the drawer runs on to the sheet’s bottom edge (#117
   it('lets the sheet’s content reach the edge, and pads the body and such a list by the safe area and DRAWER.bottom', () => {
     const drawer = code('drawer.tsx');
     pin(drawer, "ignoreSafeArea({ regions: 'container', edges: 'bottom' }),", 'drawer.tsx sheet content');
-    pin(drawer, 'const bottom = insets.bottom + (deletionFooter ? DRAWER.deletionBottom : DRAWER.bottom);', 'drawer.tsx bottom');
+    pin(drawer, 'const bottom = selectionFooter ? DRAWER.header.top : insets.bottom + DRAWER.bottom;', 'drawer.tsx bottom');
     pin(drawer, "contentContainerStyle={[contentContainerStyle, ends && { paddingBottom: bottom }]}", 'drawer.tsx DrawerList');
   });
+});
+
+it('shares the selection footer between Highlights selection, Download and Manage (#374)', () => {
+  pin(code('reader-actions.tsx'), "selectionFooter={page === 'download' || page === 'manage'}", 'Download and Manage');
+  pin(code('saved-highlights.tsx'), 'selectionFooter={!!selected}', 'Highlights selection');
 });
 
 describe('Select in the Library (#136, design 0071)', () => {
