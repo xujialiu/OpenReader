@@ -17,6 +17,8 @@ Start with those settings. For a GLM quota error, follow the [subagent model fal
 | [app-tester](../../.agents/app-tester.md) | Verify the changed behavior on the relevant iPhone, iPad and Mac targets | PASS, FAIL or BLOCKED, with raw assertions and coverage limits |
 | [resource-cleaner](../../.agents/resource-cleaner.md) | Release authorized session resources after the work is complete | Resources removed or retained, ownership evidence and blockers |
 
+When the owner asks for direct installation, the parent takes over the installer role. Stop any active installer worker and continue from its attempt, ledger and receipts. The same verification and delivery requirements apply.
+
 The parent owns source changes, acceptance of results, issue/commit/publication
 actions and dispatch of the next role. Workers return requests to the parent
 rather than dispatching one another.

@@ -45,47 +45,23 @@ dependencies, or native configuration require a new build and installation.
 A Release build contains its JavaScript bundle, so restarting Metro does not
 update it.
 
-## Routine update: an existing Debug app with only app-code changes
+## Routine update on a known Debug simulator
 
-First confirm that Metro belongs to this repository. A listening port only shows
-that a service exists; it does not show that the service uses the right
-directory. Use the PID from the previous step to inspect the process and its
-working directory:
+Use this path when the simulator is booted, its previous installation receipt identifies a compatible native Debug shell, and the change affects only JavaScript or bundled assets. Compare the source change with that receipt first. A change to a Pod, native dependency, build role or native configuration goes through the native installation section below.
 
-```bash
-ps -p METRO_PID -o command=
-lsof -a -p METRO_PID -d cwd
-curl -s http://localhost:8081/status
-```
-
-If the process is a stale service from this project, stop that exact PID and
-start Metro from the current repository:
+Run from the authoritative checkout, including its pending edits. Use the Metro port and the attempt directory in the handoff. With a previous receipt, reuse its native provenance and record the new source HEAD and diff fingerprint once.
 
 ```bash
-kill METRO_PID
-EXPO_PUBLIC_OPENREADER_VARIANT=debug npx expo start --port 8081
+python3 test/manual-test/kit/ios_guard.py run --wait 90 --timeout 210 \
+  --record "$ATTEMPT/reload-$(date +%Y%m%d-%H%M%S).json" -- \
+  bash test/manual-test/kit/reload-debug-simulator.sh "$SIMULATOR_UDID" "$METRO_PORT" "$ATTEMPT"
 ```
 
-If no service is running, only run the start command. If the existing service is
-correct, keep it. If the port belongs to another project that is still in use,
-choose an available port for this project and use the same port in its build and
-run configuration. Keep the terminal running Metro open during development.
+The command checks which checkout owns the port, the installed role and build number, and the Beta in the bundle Metro serves. It then silences the simulator, launches it against that port, waits for its debugger target and checks app readiness. Each run records its identity, bundle hash and launch receipt under the attempt directory. Readiness and the recovery allowance are shared across runs.
 
-In another terminal, restart the app so that it requests the current bundle:
+A Metro started with `CI=1` can serve the previous graph after the source changes. If the bundle check reports an older Beta, refresh the verified Metro using its original launch method. For a session-owned launchd job, check its label, PID, working directory and role, then use `launchctl kickstart -k "gui/$(id -u)/$METRO_JOB"`. For a session-owned terminal Metro, restart it from the authoritative checkout with the same port and Debug role. A port belonging to another checkout needs a separate Metro on a free port.
 
-```bash
-xcrun simctl terminate SIMULATOR_UDID top.xujialiu.openreader
-xcrun simctl launch SIMULATOR_UDID top.xujialiu.openreader
-curl -s http://localhost:8081/json/list
-```
-
-If the app was not running, a “process not found” result from `terminate` does
-not prevent the later `launch` from working.
-Check Metro for a bundling record from this run and confirm that the debug target
-includes `top.xujialiu.openreader`.
-You must also open the screen affected by the change and confirm that the final
-change is actually visible; a successful connection alone does not prove that
-the update is complete.
+Confirm the exact Settings version on screen and return the receipt with the app open for the requested preview. The tester handles the feature interactions. When the owner asks the parent to install directly, the parent uses this same path and carries the attempt forward.
 
 ## The Trial and the Unlock in a simulator build
 

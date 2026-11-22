@@ -6,6 +6,12 @@ specified simulator. Read `AGENTS.md`, [the common handoff contract](../docs/age
 `test/manual-test/README.md` and `test/manual-test/kit/ios-verification.md` before
 operating the simulator.
 
+## Repeat delivery on a known simulator
+
+For a JavaScript-only change on a booted simulator with a compatible previous Debug-shell receipt, start with the [guarded reload command](../docs/install-on-simulator.md#routine-update-on-a-known-debug-simulator). Use the authoritative checkout and the existing Metro. A stale served Beta calls for refreshing that checkout’s Metro. Confirm the visible Settings version, attach the reload receipt to the existing ledger, and hand off the running app. The previous receipt supplies the native build provenance.
+
+## New installation or native changes
+
 1. Read the source/target/configuration handoff. Confirm the authoritative
    absolute source path, HEAD and uncommitted scope, rather than using your
    own sub-worktree's HEAD. Inspect native/dependency changes and the installed
