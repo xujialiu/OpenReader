@@ -676,8 +676,9 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       if (pageReady.current && displayedFor.current !== block.sectionIndex &&
           (restoring.current || message.reveal || (message.recover && following.current))) {
         displayedFor.current = block.sectionIndex;
-        debugLog('renderer', `the app asks epub.js to display ${cutText(block.cfi)} (the new page has not reported the reading's section)`);
-        goToLocation(block.cfi);
+        const target = block.cfi || String(block.sectionIndex);
+        debugLog('renderer', `the app asks epub.js to display ${cutText(target)} (the new page has not reported the reading's section)`);
+        goToLocation(target);
       }
       return;
     }
@@ -963,8 +964,8 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     reportedSince.current = new Set();
     const block = cued.current ? firstBlock(blocks.current, cued.current) : null;
     awaiting.current = block ? block.sectionIndex : null;
-    displayedFor.current = awaiting.current;
-    return block ? block.cfi : null;
+    displayedFor.current = block?.cfi ? block.sectionIndex : null;
+    return block?.cfi || null;
   }, []);
 
   const onWebViewMessage = useCallback(

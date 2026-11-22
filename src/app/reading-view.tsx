@@ -372,7 +372,7 @@ export function ReadingView({
   const [page, setPage] = useState<{ generation: number; at: string | null }>({ generation: 0, at: null });
   const restarts = useRef<number[]>([]);
   const restartBridge = reading.bridge.restart;
-  const shownAt = currentLocation?.start?.cfi ?? null;
+  const shownAt = currentLocation?.start?.cfi || null;
   const onPageGone = useCallback(() => {
     const now = Date.now();
     restarts.current = [...restarts.current.filter((at) => now - at < PAGE_RESTART_WINDOW_MS), now];

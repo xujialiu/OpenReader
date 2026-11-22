@@ -16,9 +16,9 @@ describe('a heading is not a substring of a longer word or number (#282)', () =>
     const stored = readingPlaceAt(locator, heading, 0, heading.length);
     const wrong = at(longer, 1);
     const right = at(heading, 2);
-    for (const textAt of [() => null, () => longer]) {
-      expect(resolveReadingPosition(stored, { textAt, places: () => [wrong, right] })).toMatchObject({ outcome: 'recovered', locator: right.locator, start: 0 });
-      expect(resolveReadingPosition(stored, { textAt, places: () => [wrong] })).toMatchObject({ outcome: 'unresolved' });
+    for (const candidates of [[], [wrong]]) {
+      expect(resolveReadingPosition(stored, { at: () => candidates, places: () => [wrong, right] })).toMatchObject({ outcome: 'recovered', locator: right.locator, start: 0 });
+      expect(resolveReadingPosition(stored, { at: () => candidates, places: () => [wrong] })).toMatchObject({ outcome: 'unresolved' });
     }
   });
 
@@ -70,8 +70,8 @@ describe('every occurrence can be the stored one (#283)', () => {
     const stored = readingPlaceAt(locator, original, start, start + 'Yes indeed.'.length);
     for (const text of [original, original.replaceAll('Yes indeed.', 'Yes  indeed.')]) {
       const expected = text.indexOf('Yes', text.indexOf(`number ${copy}?`));
-      for (const textAt of [() => text, () => null]) {
-        expect(resolveReadingPosition(stored, { textAt, places: () => [{ locator, text }] })).toMatchObject({ start: expected, ambiguous: false });
+      for (const candidates of [[{ locator, text }], []]) {
+        expect(resolveReadingPosition(stored, { at: () => candidates, places: () => [{ locator, text }] })).toMatchObject({ start: expected, ambiguous: false });
       }
     }
   });
@@ -79,7 +79,7 @@ describe('every occurrence can be the stored one (#283)', () => {
   it.each([true, false])('refuses indistinguishable copies even when the locator resolves: %s', (resolves) => {
     const text = Array(100).fill('Yes.').join(' ');
     const stored = readingPlaceAt(locator, text, 200, 204);
-    expect(resolveReadingPosition(stored, { textAt: () => resolves ? text : null, places: () => [{ locator, text }] })).toMatchObject({ outcome: 'unresolved', search: 'ambiguous' });
+    expect(resolveReadingPosition(stored, { at: () => resolves ? [{ locator, text }] : [], places: () => [{ locator, text }] })).toMatchObject({ outcome: 'unresolved', search: 'ambiguous' });
     const block: ReportedBlock = { id: '0.0', text, role: 'paragraph', section: 's.xhtml', sectionIndex: 0, cfi: resolves ? 'epubcfi(/6/2!/4/2)' : 'epubcfi(/6/2!/4/4)' };
     expect(resolveResume(stored, segmentDocument([block], 'en'), [block], { spine: 1, reported: new Set([0]) })).toMatchObject({ outcome: 'lost', why: 'ambiguous' });
   });

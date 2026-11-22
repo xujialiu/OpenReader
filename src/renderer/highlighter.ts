@@ -1341,6 +1341,19 @@ ${constants}
       var children = node.childNodes;
       var i;
       if (inline) {
+        if (tag === 'IMG') {
+          var label = (node.getAttribute('aria-label') || '').trim();
+          var alt = (node.getAttribute('alt') || '').trim();
+          // Zotero omits filename-like alt text but always uses an explicit accessible label.
+          var path = !/\\s/.test(alt) && (/^(?:https?|file|data):/i.test(alt) ||
+            /[\\\\/]/.test(alt) || /\\.(?:png|jpe?g|gif|svg|webp|bmp|tiff?|avif)$/i.test(alt));
+          var description = label || (path ? '' : alt);
+          if (description) {
+            if (!open) open = { element: owner, text: '', parts: [], item: item, broken: false };
+            if (!open.images) open.images = [];
+            open.images.push({ at: open.text.length, text: description });
+          }
+        }
         for (i = 0; i < children.length; i++) visit(children[i], owner, item);
         return;
       }
@@ -1988,6 +2001,7 @@ ${constants}
         text: found[i].text,
         role: roleOf(found[i].element),
         item: itemOf(found[i]),
+        images: found[i].images,
         section: href,
         sectionIndex: index,
         cfi: cfi

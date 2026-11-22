@@ -72,6 +72,12 @@ explicit refusal when the stored 32-code-unit context cannot distinguish
 copies, rather than a silent jump presented as a verified sentence. No shared
 Reading Position field, locator dialect or context length changes.
 
+## Split paragraphs and image descriptions
+
+A single element CFI can name several Blocks when a child interrupts its text. The resolver ranks every Block at that CFI using the quotation and context. Both local verification and a document-wide search return the winning Block with offsets in its own text. An equally strong match in two Blocks remains ambiguous (#194).
+
+An inline image can contribute an accessible label or a prose description to a desktop quotation (#337). The page reports each description at its offset in the Block. The resolver compares the quotation against the spoken text and the text with descriptions inserted, maps the latter match back to spoken offsets and ranks them by the same agreement and context rules. The Positions File continues to store the element CFI and the quotation.
+
 ## Consequences
 
 Text anchors must be Unicode-normalised on both the storing and the matching

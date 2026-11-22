@@ -582,7 +582,7 @@ describe('a stored Reading Position becoming an Utterance to read from (ADR 0008
     const nameless = reported([paragraph], ['']);
     const utterances = segment(nameless);
     expect([...reportedPlaces(nameless).places()]).toHaveLength(0);
-    expect(reportedPlaces(nameless).textAt(createLocator('epub', ''))).toBeNull();
+    expect(reportedPlaces(nameless).at(createLocator('epub', ''))).toEqual([]);
     const written = readingPlaceAt(createLocator('epub', ''), paragraph, 19, 48);
     expect(resolveResume(written, utterances, nameless, renderedOf(nameless))).toMatchObject({ outcome: 'lost' });
   });
@@ -729,14 +729,14 @@ describe('canonicalCfi: the one spelling the Positions File allows (issue #20)',
       block('1.1', 'epubcfi(/6/8[cop]!/4/2/4/4[p2])', 'Copyright by the author.'),
     ];
     const places = reportedPlaces(blocks);
-    expect(places.textAt(createLocator('epub', 'epubcfi(/6/8!/4/2/4/4)'))).toBe('Copyright by the author.');
-    expect(places.textAt(createLocator('epub', 'epubcfi(/6/8[cop]!/4/2/4/4[p2])'))).toBe('Copyright by the author.');
+    expect(places.at(createLocator('epub', 'epubcfi(/6/8!/4/2/4/4)')).map(place => place.text)).toEqual(['Copyright by the author.']);
+    expect(places.at(createLocator('epub', 'epubcfi(/6/8[cop]!/4/2/4/4[p2])')).map(place => place.text)).toEqual(['Copyright by the author.']);
     expect([...places.places()].map((place) => readLocator(place.locator, 'epub'))).toEqual(['epubcfi(/6/8!/4/2/4/2)', 'epubcfi(/6/8!/4/2/4/4)']);
   });
 
   it('never lets a Block with no CFI answer for one', () => {
     const places = reportedPlaces([block('1.0', '', 'Nameless')]);
-    expect(places.textAt(createLocator('epub', ''))).toBeNull();
+    expect(places.at(createLocator('epub', ''))).toEqual([]);
     expect([...places.places()]).toEqual([]);
   });
 });

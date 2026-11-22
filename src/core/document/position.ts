@@ -125,6 +125,8 @@ export function readingPositionAt(locator: Locator, text: string, start: number,
 
 /** One candidate place and its own text. For EPUB, a Block: its element CFI and the text the renderer reports for it, verbatim. */
 export interface Place {
+  /** Optional matcher for another representation of this text, returning offsets in this place. */
+  match?(anchor: TextAnchor): AnchorMatch | null;
   locator: Locator;
   text: string;
 }
@@ -134,16 +136,9 @@ export interface Place {
  * everything platform-shaped enters `src/core/` — here the implementation is the
  * renderer, which is the only thing that can turn a CFI into text.
  */
-export interface PlaceReader {
-  /**
-   * The text of the place a locator names, or **null** when the locator does not
-   * resolve in this document at all.
-   *
-   * Null and "text that does not match" are different answers and both are
-   * expected: a document re-saved with a different spine gives the first, and
-   * the CFI disagreement of ADR 0008 gives the second.
-   */
-  textAt(locator: Locator): string | null;
+export interface PlaceReader<P extends Place = Place> {
+  /** All runs named by the locator. A block-level child can split one element into several runs. */
+  at(locator: Locator): readonly P[];
   /**
    * Every place the anchor could be, in reading order.
    *
@@ -151,7 +146,7 @@ export interface PlaceReader {
    * a method and not an array: on the ordinary resume it is never called, and
    * walking a whole book's Blocks across the bridge is not free.
    */
-  places(): Iterable<Place>;
+  places(): Iterable<P>;
 }
 
 /** Why the stored locator was not used as it stood. */
@@ -186,28 +181,23 @@ export type SearchProblem =
  * disappointment; resuming three paragraphs from where the owner stopped is the
  * failure this project was built to avoid.
  */
-export type PositionResolution =
+export type PositionResolution<P extends Place = Place> =
   | {
       outcome: 'verified';
+      place: P;
       locator: Locator;
       /** UTF-16 code-unit offsets into the text of that place, half-open — the coordinates a `Range` is built from. */
       start: number;
       end: number;
       agreement: AnchorAgreement;
       /**
-       * The same text occurs more than once *inside this one place* and the
-       * offsets are the first of them.
-       *
-       * Reported, not refused. The place is right either way, and the candidates
-       * are a sentence apart rather than a chapter apart; refusing to resume a
-       * book because a paragraph says "He said nothing." twice would be the
-       * wrong trade. Ambiguity **between** places is refused — see
-       * `SearchProblem`.
+       * A tied match is refused before returning a verified position.
        */
       ambiguous: boolean;
     }
   | {
       outcome: 'recovered';
+      place: P;
       locator: Locator;
       start: number;
       end: number;
@@ -233,29 +223,26 @@ export type PositionResolution =
  * 3. failing that, a search for the anchor, which is slow and is what makes a
  *    position survive a document the locator no longer describes.
  */
-export function resolveReadingPosition(position: ReadingPlace, document: PlaceReader): PositionResolution {
-  const text = document.textAt(position.locator);
-  if (text !== null) {
-    const match = matchAnchor(position.anchor, text);
-    if (match) {
-      // The locator verifies a Block, not which copy of a sentence inside it.
-      if (match.ambiguous) return { outcome: 'unresolved', because: 'text-disagreed', search: 'ambiguous' };
-      return { outcome: 'verified', locator: position.locator, ...found(match) };
-    }
+export function resolveReadingPosition<P extends Place>(position: ReadingPlace, document: PlaceReader<P>): PositionResolution<P> {
+  const candidates = document.at(position.locator);
+  const local = findAnchor(position.anchor, candidates);
+  if (local) {
+    if (local.ambiguous) return { outcome: 'unresolved', because: 'text-disagreed', search: 'ambiguous' };
+    return { outcome: 'verified', place: local.place, locator: position.locator, ...found(local.match) };
   }
 
-  const because: LocatorProblem = text === null ? 'locator-did-not-resolve' : 'text-disagreed';
+  const because: LocatorProblem = candidates.length ? 'text-disagreed' : 'locator-did-not-resolve';
   const search = findAnchor(position.anchor, document.places());
   if (!search) return { outcome: 'unresolved', because, search: anchorHasWords(position.anchor) ? 'not-found' : 'anchor-not-matchable' };
   if (search.ambiguous) return { outcome: 'unresolved', because, search: 'ambiguous' };
-  return { outcome: 'recovered', locator: search.place.locator, ...found(search.match), because };
+  return { outcome: 'recovered', place: search.place, locator: search.place.locator, ...found(search.match), because };
 }
 
 const found = (match: AnchorMatch) => ({ start: match.start, end: match.end, agreement: match.agreement, ambiguous: match.ambiguous });
 
 /** The best place for an anchor, and whether anything tied with it. */
-export interface AnchorSearch {
-  place: Place;
+export interface AnchorSearch<P extends Place = Place> {
+  place: P;
   match: AnchorMatch;
   /** Another place matched exactly as well. Nothing may choose between them. */
   ambiguous: boolean;
@@ -269,11 +256,11 @@ export interface AnchorSearch {
  * first in the spine — a wrong answer that looks like a right one. The cost is a
  * pass over the document's Blocks, paid only on the fallback path.
  */
-export function findAnchor(anchor: TextAnchor, places: Iterable<Place>): AnchorSearch | null {
-  let best: { place: Place; match: AnchorMatch } | null = null;
+export function findAnchor<P extends Place>(anchor: TextAnchor, places: Iterable<P>): AnchorSearch<P> | null {
+  let best: { place: P; match: AnchorMatch } | null = null;
   let tied = false;
   for (const place of places) {
-    const match = matchAnchor(anchor, place.text);
+    const match = place.match ? place.match(anchor) : matchAnchor(anchor, place.text);
     if (!match) continue;
     if (!best) {
       best = { place, match };

@@ -106,6 +106,22 @@ afterEach(() => {
 });
 
 describe('a new page after the web content process ended (#120)', () => {
+  it('falls back without a sentence CFI and requests the missing section before painting (#256)', () => {
+    mount();
+    const blocks = SECOND.map(block => ({ ...block, cfi: '' }));
+    report(blocks);
+    bridge.setUtterances(segmentDocument(blocks, 'en'), blocks);
+    bridge.clock.onClip({ utterance: 0, words: null, duration: 2, rate: 1 } as never);
+    expect(bridge.restart()).toBeNull();
+    page.sent.length = 0;
+    bridge.readerProps.onWebViewMessage({ type: DOCUMENT_MESSAGE, spine: 3, hrefs: ['s0.xhtml', 's1.xhtml', 's2.xhtml'] });
+    report(FIRST);
+    expect(page.displayed).toEqual(['1']);
+    expect(kinds()).not.toContain('speak');
+    report(blocks);
+    expect(page.sent).toContainEqual(expect.objectContaining({ kind: 'speak', utterance: 0, reveal: true }));
+  });
+
   it('opens at the Block of the sentence last cued, and paints it once its section reports, with the correction and the hold', () => {
     const utterances = opened();
     const at = utteranceIn(utterances, '1.0', [...FIRST, ...SECOND, ...THIRD]);

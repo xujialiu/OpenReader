@@ -60,7 +60,11 @@ export function withSection(index: BlockIndex, message: BlocksMessage): BlockInd
 
 function sameBlocks(a: readonly ReportedBlock[], b: readonly ReportedBlock[]): boolean {
   if (a.length !== b.length) return false;
-  return a.every((block, at) => block.id === b[at].id && block.text === b[at].text);
+  return a.every((block, at) => block.id === b[at].id && block.text === b[at].text && block.cfi === b[at].cfi && sameImages(block.images, b[at].images));
+}
+
+function sameImages(a: ReportedBlock['images'], b: ReportedBlock['images']): boolean {
+  return a === b || (!!a && !!b && a.length === b.length && a.every((image, i) => image.at === b[i].at && image.text === b[i].text));
 }
 
 /** The ids, positionally — what `cursor.ts` turns `UtteranceSpan.block` into so that an index never crosses the bridge. */

@@ -211,7 +211,7 @@ export function standInPage(options: { toc?: readonly unknown[]; debugMode?: boo
     }
     document.body.querySelectorAll = () => Array.from(document.body.getElementsByTagName('a')).filter((a: any) => a.hasAttribute('href'));
     follow(document.body, (href) => followed.push(href));
-    contents.push({ document, window: document.defaultView, sectionIndex: index, cfiFromNode: () => 'epubcfi(/6/' + index + '!/4)' });
+    contents.push({ document, window: document.defaultView, sectionIndex: index, cfiFromNode: (_node: unknown) => 'epubcfi(/6/' + index + '!/4)' });
     return section;
   }
 

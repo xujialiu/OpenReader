@@ -74,6 +74,8 @@ export const PROBE_MESSAGE = 'openreader:probe';
  * (#192); no sentence or word starts or ends on it.
  */
 export interface ReportedBlock extends Block {
+  /** Inline image descriptions at UTF-16 offsets in spoken text, for matching desktop quotations. */
+  images?: readonly { at: number; text: string }[];
   /**
    * Stable across re-renders of the same section: the spine index and the
    * Block's ordinal within it. epub.js destroys and rebuilds a section's iframe
@@ -778,7 +780,15 @@ function isReportedBlock(value: unknown): value is ReportedBlock {
     (value.item === undefined || isIndex(value.item)) &&
     typeof value.section === 'string' &&
     isIndex(value.sectionIndex) &&
-    typeof value.cfi === 'string'
+    typeof value.cfi === 'string' &&
+    (value.images === undefined || isImageDescriptions(value.images, value.text.length))
+  );
+}
+
+function isImageDescriptions(value: unknown, length: number): boolean {
+  return Array.isArray(value) && value.every((image, index) =>
+    isObject(image) && isIndex(image.at) && image.at <= length && typeof image.text === 'string' &&
+    (index === 0 || image.at >= value[index - 1].at)
   );
 }
 

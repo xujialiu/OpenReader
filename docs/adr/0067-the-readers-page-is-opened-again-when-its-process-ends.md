@@ -47,7 +47,9 @@ page (`test/manual-test/library-and-reader/webcontent-killed.sh`).
 3. The new page opens at the first Block of the sentence the bridge last cued
    (`bridge.restart()`), else where the old page was (the library's
    `currentLocation`), else where the book opened. A book opened and not yet
-   read reopens where it was being looked at.
+   read reopens where it was being looked at. An empty sentence CFI leaves
+   that fallback available. If the new page still lacks the cued section,
+   the bridge requests its spine index and paints the cue when it reports (#256).
 4. The bridge keeps its Blocks. The new page reports the same sections with the
    same ids and text, which `withSection` reads as no change, so nothing is
    segmented again and no Utterance is renumbered. What the new page lacks is

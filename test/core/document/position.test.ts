@@ -44,9 +44,9 @@ const FOX = 'The quick brown fox jumps over the lazy dog.';
  */
 function documentOf(blocks: readonly Block[], resolved: Record<string, string>, onSearch: () => void = () => {}): PlaceReader {
   return {
-    textAt: (locator) => {
+    at: (locator) => {
       const cfi = readLocator(locator, 'epub');
-      return cfi !== null && cfi in resolved ? resolved[cfi] : null;
+      return cfi !== null && cfi in resolved ? [{ locator, text: resolved[cfi] }] : [];
     },
     places: () => {
       onSearch();

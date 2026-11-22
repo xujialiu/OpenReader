@@ -57,6 +57,7 @@ import type { Timestamp } from '../core/providers/types';
 import type { Utterance } from '../core/segmenter';
 import type { ClipCue, PositionCorrection } from '../playback/reader-clock';
 
+import { matchImageAnchor } from './image-anchor';
 import type { AnchoredRange, BlockRange, CorrectMessage, ReportedBlock, SpeakMessage, WordCue } from './messages';
 
 /**
@@ -325,20 +326,25 @@ export function correctMessage(correction: PositionCorrection, cued: SpeakMessag
  * loses an Utterance that could in principle have been resumed to, and keeps the
  * answer unambiguous, which ADR 0008 ranks first.
  */
-export function reportedPlaces(blocks: readonly ReportedBlock[]): PlaceReader {
+export function reportedPlaces(blocks: readonly ReportedBlock[]): PlaceReader<Place & { blockId: string }> {
+  function* places(cfi?: string) {
+    for (const block of blocks) {
+      if (!block.cfi) continue;
+      const canonical = canonicalCfi(block.cfi);
+      if (cfi !== undefined && canonical !== cfi) continue;
+      const place = { locator: createLocator('epub', canonical), text: block.text, blockId: block.id };
+      const images = block.images;
+      yield images?.length
+        ? { ...place, match: (anchor: ReadingPlace['anchor']) => matchImageAnchor(anchor, block.text, images) }
+        : place;
+    }
+  }
   return {
-    textAt(locator) {
+    at(locator) {
       const cfi = readLocator(locator, 'epub');
-      // An empty locator matches the Blocks that have no CFI rather than none of
-      // them, which is the one way this lookup could answer with the wrong text.
-      if (!cfi) return null;
-      return findBlock(blocks, cfi)?.text ?? null;
+      return cfi ? [...places(canonicalCfi(cfi))] : [];
     },
-    *places(): Iterable<Place> {
-      for (const block of blocks) {
-        if (block.cfi) yield { locator: createLocator('epub', canonicalCfi(block.cfi)), text: block.text };
-      }
-    },
+    places,
   };
 }
 
@@ -359,12 +365,6 @@ export function reportedPlaces(blocks: readonly ReportedBlock[]): PlaceReader {
  */
 export function canonicalCfi(cfi: string): string {
   return cfi.replace(/\[[^\]]*\]/g, '');
-}
-
-/** The Block a CFI names, whichever side spelled it. */
-function findBlock(blocks: readonly ReportedBlock[], cfi: string): ReportedBlock | undefined {
-  const wanted = canonicalCfi(cfi);
-  return blocks.find((block) => block.cfi !== '' && canonicalCfi(block.cfi) === wanted);
 }
 
 /**
@@ -510,11 +510,7 @@ export function resolveResume(
   }
 
   const moved = resolution.outcome === 'recovered' ? resolution.because : null;
-  const cfi = readLocator(resolution.locator, 'epub');
-  const found = cfi ? findBlock(blocks, cfi) : undefined;
-  const at = found
-    ? utteranceAt(utterances, blocks.map((block) => block.id), found.id, resolution.start)
-    : null;
+  const at = utteranceAt(utterances, blocks.map((block) => block.id), resolution.place.blockId, resolution.start);
   // The text was found and nothing speaks it: a Block of whitespace, or a Block
   // array the Utterances were not segmented from. Neither is a place to resume
   // at, and neither is a reason to pick a neighbouring sentence.
