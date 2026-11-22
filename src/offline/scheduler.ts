@@ -191,10 +191,13 @@ export function createScheduler(deps: SchedulerDeps) {
    * provider failure fails the chapter it came from.
    */
   async function record(task: DownloadTask, chapter: string, error: unknown) {
-    task.error = error instanceof Error ? error.message : String(error);
-    if (!deps.connected()) { task.state = 'waiting'; task.error = 'No network connection, waiting to reconnect'; }
-    else if (!(error instanceof SynthesisError) || STOPS_ALL.includes(error.kind)) task.state = 'blocked';
-    else if (!task.failed.includes(chapter)) task.failed.push(chapter);
+    if (!deps.connected()) {
+      task.state = 'waiting';
+    } else {
+      task.error = error instanceof Error ? error.message : String(error);
+      if (!(error instanceof SynthesisError) || STOPS_ALL.includes(error.kind)) task.state = 'blocked';
+      else if (!task.failed.includes(chapter)) task.failed.push(chapter);
+    }
     await deps.changed();
   }
   /** A chapter being written in a pass. */
@@ -381,7 +384,7 @@ export function createScheduler(deps: SchedulerDeps) {
         }
         if (going() && !beginning) {
           while (out < width()) {
-            if (!deps.connected()) { task.state = 'waiting'; task.error = 'No network connection, waiting to reconnect'; break; }
+            if (!deps.connected()) { task.state = 'waiting'; break; }
             const next = take();
             if (next) { launch(next.b, next.text); continue; }
             if (!ended && !away) beginning = begin().finally(() => { beginning = null; poke(); });

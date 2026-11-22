@@ -1,8 +1,8 @@
-import { createElement, type ReactNode } from 'react';
+import { createElement, Fragment, type ReactNode } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { expect, it, vi } from 'vitest';
 import { DownloadContent } from '../../src/app/download-sheet';
-import type { OfflineVoice } from '../../src/offline/model';
+import type { Chapter, DownloadTask, OfflineVoice } from '../../src/offline/model';
 import { narrationIdentity } from '../../src/offline/narration-voice';
 
 const mock = vi.hoisted(() => ({
@@ -11,6 +11,9 @@ const mock = vi.hoisted(() => ({
   document: 30, voice: 10,
   /** What `savedVoices` answers, when a test sets it. */
   saved: null as OfflineVoice[] | null,
+  chapters: [] as Chapter[],
+  tasks: [] as DownloadTask[],
+  progress: new Map<string, { count: number; complete: boolean }>(),
   removeVoiceDownloads: vi.fn(async () => {}),
 }));
 const hosts = vi.hoisted(() => async (...names: string[]) => {
@@ -22,16 +25,20 @@ vi.mock('react-native', async () => ({ ...await hosts('View', 'Text', 'Pressable
 }));
 vi.mock('react-native-gesture-handler', () => hosts('GestureDetector'));
 vi.mock('../../src/app/controls', async () => ({ ...await hosts('ChoiceMenu'), INK: {}, useAccent: () => ({}), useBorders: () => ({}) }));
-vi.mock('../../src/app/drawer', async () => ({ ...await hosts('DrawerList', 'DrawerRow', 'DrawerRowText'), DRAWER: { row: {} } }));
+vi.mock('../../src/app/drawer', async () => ({
+  ...await hosts('DrawerRow', 'DrawerRowText'), DRAWER: { row: {} },
+  DrawerList: ({ data, renderItem }: { data: Chapter[]; renderItem(row: { item: Chapter }): ReactNode }) =>
+    data.map((item) => createElement(Fragment, { key: item.id }, renderItem({ item }))),
+}));
 vi.mock('../../src/app/download-ring', () => hosts('DownloadRing'));
 vi.mock('../../src/app/icon', () => hosts('Icon'));
-vi.mock('../../src/app/use-sweep', () => ({ useSweep: () => ({ list: {}, gesture: {} }) }));
+vi.mock('../../src/app/use-sweep', () => ({ useSweep: () => ({ list: {}, gesture: {}, guard: (press: () => void) => press }) }));
 vi.mock('../../src/app/routes', () => ({ useShell: () => ({ settings: { fish: { model: mock.model } } }) }));
 vi.mock('../../src/app/settings', () => ({ PROVIDER_LABELS: { fish: 'Fish Audio', azure: 'Azure' } }));
 vi.mock('../../src/offline/runtime', () => ({
-  useDownloads: () => {}, requestPlan: () => {}, downloadTasks: () => [], indexingState: () => null,
+  useDownloads: () => {}, requestPlan: () => {}, downloadTasks: () => mock.tasks, indexingState: () => null,
   requestProgress: mock.requestProgress, releaseProgress: mock.releaseProgress,
-  planOf: () => ({ version: 2, chapters: [] }), chapterProgress: () => new Map(),
+  planOf: () => ({ version: 2, chapters: mock.chapters }), chapterProgress: () => mock.progress,
   sameVoice: (a: OfflineVoice, b: OfflineVoice) => narrationIdentity(a) === narrationIdentity(b),
   savedVoices: () => mock.saved ?? [
     { provider: 'fish', voice: 'old', label: 'Hidden old-model Voice' },
@@ -50,6 +57,40 @@ const switchVoice = (view: ReactTestRenderer) => view.root.findAll((node) => Str
 /** The button whose words are `label`. */
 const pressable = (view: ReactTestRenderer, label: string) => view.root.findAll((node) => String(node.type) === 'Pressable')
   .find((node) => node.findAll((child) => String(child.type) === 'DrawerRowText' && child.props.children === label).length)!;
+
+it.each([false, true])('exposes chapter progress and independent volume controls with manage=%s', async (manage) => {
+  const voice: OfflineVoice = { provider: 'azure', voice: 'v', label: 'Voice' };
+  mock.chapters = [
+    { id: 'volume', title: 'Volume', depth: 0, parent: null, texts: [] },
+    { id: 'failed', title: 'First', depth: 1, parent: 'volume', texts: [], textCount: 8 },
+    { id: 'partial', title: 'Second', depth: 1, parent: 'volume', texts: [], textCount: 12 },
+  ];
+  mock.tasks = [{ id: 'task', document: 'book', voice, chapters: ['failed'], failed: ['failed'], state: 'done', error: null }];
+  mock.progress = new Map([['failed', { count: 2, complete: false }], ['partial', { count: 3, complete: false }]]);
+  let tree!: ReactTestRenderer;
+  const rows = (label: string) => tree.root.findAll(n => String(n.type) === 'DrawerRow' && n.props.accessibilityLabel === label);
+  const arrow = (label: string) => tree.root.find(n => String(n.type) === 'Pressable' && n.props.accessibilityLabel === label);
+  try {
+    await act(async () => { tree = create(createElement(DownloadContent, {
+      document: 'book', title: 'Book', voice, place: null, manage, onManage: vi.fn(), onSelectAll: vi.fn(),
+    })); });
+    expect(rows('First, failed, 2 of 8 saved')).toHaveLength(1);
+    expect(rows('Second, 3 of 12 saved')).toHaveLength(1);
+    const volume = () => rows('Volume')[0];
+    expect(volume().findAll(n => n.props.accessibilityLabel === 'Collapse Volume')).toHaveLength(0);
+    await act(async () => volume().props.onPress());
+    await act(async () => arrow('Collapse Volume').props.onPress());
+    expect(volume().props.accessibilityState.checked).toBe(true);
+    expect(rows('First, failed, 2 of 8 saved')).toHaveLength(0);
+    await act(async () => arrow('Expand Volume').props.onPress());
+    expect(rows('First, failed, 2 of 8 saved')[0].props.accessibilityState.checked).toBe(true);
+  } finally {
+    if (tree) await act(async () => tree.unmount());
+    mock.chapters = [];
+    mock.tasks = [];
+    mock.progress.clear();
+  }
+});
 
 it('shows Provider and Model on their own row, filters saved Fish Voices, and keeps delete-all document-wide', async () => {
   let view!: ReactTestRenderer;

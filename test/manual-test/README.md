@@ -99,6 +99,7 @@ and what is committed is what was measured, never their text.
 
 ## Pitfalls
 
+- **A Download disclosure can have an accessibility frame behind the sheet header.** A tap aimed at Volume One in #298 hit Select all and changed the count from 0 to 12. Check the arrow's frame against the list viewport and header before tapping. On a visible volume, verify that its children disappear and reappear and the selected count stays the same. `TwoFingerProbe.testDrawerFoldArrows` expects a Library launch; a cold launch can restore the open reader, where the fixture title is static text.
 - **A fresh bundle fetched over HTTP can disagree with the running app.** On #370 a direct fetch contained beta7 while the selected simulator's Settings and Debug Log still showed beta5 after relaunch. Restarting the session-owned Metro and then relaunching that simulator's app brought both to beta7. Use the visible version or the live app's version file as the delivery check.
 - **A successful tap on Highlight proves the save only.** On #370 the excerpt was yellow on disk and on the page, yet the five swatches were missing from the screenshot. Check for the actual swatches in the open Drawer, touch a different colour and verify the resulting excerpt colour.
 

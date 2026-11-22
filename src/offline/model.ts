@@ -24,6 +24,8 @@ export interface OfflineVoice {
   model?: string;
 }
 export type TaskState = 'queued' | 'preparing' | 'downloading' | 'paused' | 'waiting' | 'blocked' | 'interrupted' | 'done';
+/** Older versions also persisted the waiting state's message as a task error. */
+export const NETWORK_WAIT_MESSAGE = 'No network connection, waiting to reconnect';
 export interface DownloadTask {
   id: string; document: string; voice: OfflineVoice; chapters: string[];
   state: TaskState; error: string | null; failed: string[];

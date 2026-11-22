@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import type { ReadingSpineItem } from '../core/document/contents';
-import { chapterTextCount, descendants, speaks, type Chapter, type DownloadTask, type OfflineVoice, type TaskState } from '../offline/model';
+import { chapterTextCount, descendants, NETWORK_WAIT_MESSAGE, speaks, type Chapter, type DownloadTask, type OfflineVoice, type TaskState } from '../offline/model';
 import * as downloads from '../offline/runtime';
 import { inFishModel, withFishModel } from '../offline/narration-voice';
 import { useShell } from './routes';
@@ -22,11 +22,12 @@ import { TEXT } from './text-styles';
  * end of the same line, already says it (#56).
  */
 const STATE_LINE: Partial<Record<TaskState, string>> = {
-  preparing: 'Preparing selected chapter…', downloading: 'Downloading…', queued: 'Queued', waiting: 'No network connection, waiting to reconnect',
+  preparing: 'Preparing selected chapter…', downloading: 'Downloading…', queued: 'Queued', waiting: NETWORK_WAIT_MESSAGE,
   blocked: 'Needs attention', interrupted: 'Interrupted · continues when available',
 };
 /** The two deletes share a row: each takes the row's height, and a little either side, to be pressed. */
 const DELETE_SLOP = { top: DRAWER.row.padding, bottom: DRAWER.row.padding, left: 8, right: 8 };
+const MARKER_WIDTH = 24;
 const stateLine = (task: DownloadTask) => task.state === 'done' ? chapterCount(task.failed.length, 'failed') : STATE_LINE[task.state];
 
 /**
@@ -231,18 +232,16 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
     const name = item.title || 'Untitled chapter';
     const label = `${name}${current ? ', being read' : ''}`;
     const folded = collapsed.has(item.id);
-    const arrow = children ? <Pressable accessibilityRole="button" accessibilityLabel={`${folded ? 'Expand' : 'Collapse'} ${item.title}`} hitSlop={8}
-      onPress={sweep.guard(() => setCollapsed((was) => { const next = new Set(was); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; }))}
-      style={styles.arrow}>
-      <Icon name={folded ? 'next' : 'down'} color={INK.quiet} size={20} strokeWidth={2} />
-    </Pressable> : null;
+    const total = chapterTextCount(item);
+    const showCount = !done && (count > 0 || failed);
+    const summary = showCount ? `${failed ? ', failed' : ''}, ${count} of ${total} saved` : '';
     const words = <>
       <DrawerRowText emphasized={current || children} style={current && { color: ink }}>{name}</DrawerRowText>
-      {!done && (count || failed) ? <Text style={styles.count}>{failed ? 'Failed · ' : ''}{count} / {chapterTextCount(item)}</Text> : null}
+      {showCount ? <Text style={styles.count}>{failed ? 'Failed · ' : ''}{count} / {total}</Text> : null}
     </>;
     if (mark?.kind === 'ring' && task) {
       return <DrawerRow level={item.depth} marked={current} accessibilityLabel={label}
-        accessory={<>{arrow}<DownloadRing colour={ink} fraction={mark.fraction} spinning={mark.spinning} halted={mark.halted} onPress={sweep.guard(() => downloads.toggleChapter(task, item.id))} /></>}>
+        accessory={<DownloadRing colour={ink} fraction={mark.fraction} spinning={mark.spinning} halted={mark.halted} onPress={sweep.guard(() => downloads.toggleChapter(task, item.id))} />}>
         {words}
       </DrawerRow>;
     }
@@ -250,11 +249,25 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
       : ids.length || !children ? <View style={[styles.circle, { borderColor: picked ? ink : borders.quiet }, picked && { backgroundColor: ink }]}>
         {picked ? <Icon name="check" color={INK.page} size={17} /> : null}
       </View> : <View style={styles.column} />;
-    return <DrawerRow level={item.depth} marked={current} onPress={sweep.guard(() => toggle(ids))} disabled={!ids.length}
-      accessibilityRole="checkbox" accessibilityLabel={`${label}${done ? ', downloaded' : ''}`} accessibilityState={{ checked: picked, disabled: !ids.length }}
-      accessory={<>{arrow}{box}</>}>
+    const row = <DrawerRow level={item.depth} marked={current} onPress={sweep.guard(() => toggle(ids))} disabled={!ids.length}
+      accessibilityRole="checkbox" accessibilityLabel={`${label}${done ? ', downloaded' : summary}`} accessibilityState={{ checked: picked, disabled: !ids.length }}
+      accessory={<>{children && <View style={styles.arrow} />}{box}</>}>
       {words}
     </DrawerRow>;
+    if (!children) return row;
+    // Keep the disclosure in its accessory slot, outside the accessible checkbox.
+    return <View style={styles.volume}>
+      {row}
+      <Pressable accessibilityRole="button" accessibilityLabel={`${folded ? 'Expand' : 'Collapse'} ${name}`}
+        accessibilityState={{ expanded: !folded }} hitSlop={8} style={[styles.arrow, styles.volumeArrow]}
+        onPress={sweep.guard(() => setCollapsed((was) => {
+          const next = new Set(was);
+          if (next.has(item.id)) next.delete(item.id); else next.add(item.id);
+          return next;
+        }))}>
+        <Icon name={folded ? 'next' : 'down'} color={INK.quiet} size={20} strokeWidth={2} />
+      </Pressable>
+    </View>;
   };
 
   const { ref: sweepRef, ...sweepList } = sweep.list;
@@ -329,9 +342,11 @@ const styles = StyleSheet.create({
   list: { flexGrow: 1 },
   empty: { paddingLeft: DRAWER.row.textInset, paddingTop: 12 },
   count: { ...TEXT.footnote, color: INK.quiet },
-  arrow: { alignItems: 'center', height: 44, justifyContent: 'center', width: 24 },
-  circle: { alignItems: 'center', borderRadius: 12, borderWidth: 1.5, height: 24, justifyContent: 'center', width: 24 },
-  column: { width: 24 },
+  volume: { justifyContent: 'center' },
+  volumeArrow: { position: 'absolute', end: DRAWER.row.inset + MARKER_WIDTH + DRAWER.row.gap / 2 },
+  arrow: { alignItems: 'center', height: 44, justifyContent: 'center', width: MARKER_WIDTH },
+  circle: { alignItems: 'center', borderRadius: 12, borderWidth: 1.5, height: MARKER_WIDTH, justifyContent: 'center', width: MARKER_WIDTH },
+  column: { width: MARKER_WIDTH },
   destructive: { color: INK.attention },
   // Delete all audio at the row's left, Delete all current voice audio at its right end (#306).
   deletes: { flexDirection: 'row', gap: 16, justifyContent: 'space-between' },

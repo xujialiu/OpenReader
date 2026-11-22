@@ -36,6 +36,7 @@ import {
 } from "../app/settings";
 import {
   navigationPlan,
+  NETWORK_WAIT_MESSAGE,
   type Chapter,
   type DownloadTask,
   type NarrationPlan,
@@ -1069,6 +1070,7 @@ export function startDownloads(): () => void {
       for (const document of new Set(tasks.map((t) => t.document))) await refreshRecheckHolds(document);
       tasks.forEach((task) => {
         task.writing = []; // No request survives a fresh runtime.
+        if ((task.state === 'waiting' || task.state === 'queued') && task.error === NETWORK_WAIT_MESSAGE) task.error = null;
         registerVoice(task.voice);
         // Settings may have changed before async task loading finished.
         if (task.voice.provider === 'fish' && task.state !== 'done' &&

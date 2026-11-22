@@ -50,6 +50,7 @@ describe('durable download scheduling', () => {
     await f.scheduler.run();
     expect(f.fetch).toHaveBeenCalledTimes(1);
     expect(f.tasks[0].state).toBe('waiting');
+    expect(f.tasks[0].error).toBeNull();
     expect(f.tasks[0].failed).toEqual([]);
   });
   it('bounds transient retries then continues later chapters without false whole completion', async () => {
@@ -333,6 +334,7 @@ describe('several sentences at once (#64), carried past the end of a chapter (#3
     await f.scheduler.run();
     expect(r.starts()).toEqual(['start A1', 'start A2', 'start A3']);
     expect(f.task.state).toBe('waiting');
+    expect(f.task.error).toBeNull();
     expect(f.task.failed).toEqual([]);
   });
   it('yields to background expiration with several requests out, and keeps what they bring', async () => {

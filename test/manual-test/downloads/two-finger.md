@@ -135,8 +135,9 @@ ordinary tap fails as much as a lost start row does). Run each method after a fr
   ends when the first lifts, so the lone finger's press is what reaches the row afterwards: the counts stay 1, 2 and 2 and
   the next tap still chooses.
 - `testDrawerFoldArrows`: needs `Nested Volumes Fold Check` (`../fixtures/nested-volumes-fixture.ts`, added through the
-  harness) in the Library; it launches, opens that book and its drawer. The volume's arrow is a Pressable inside the row's
-  own accessible one, so it is not in the AX tree and is tapped by point (`row.maxX - 66`); fold state is read from every row
+  harness) in the Library; it launches, opens that book and its drawer. The probe taps the arrow by point
+  (`row.maxX - 66`). The AX tree also exposes the separate `Collapse Volume N` or `Expand Volume N` button (#298).
+  Pick an arrow inside the visible list viewport for an AX tap. Fold state is read from every row
   in the tree, since a reopened volume's chapters sit below the viewport, rendered but clipped, and the volume's row moves
   when its chapters leave. A tap on the arrow folds and unfolds with no sweep before it, after the short sweep 0 to 2 and
   back to 0, and after 0 to 2, without changing what is chosen.

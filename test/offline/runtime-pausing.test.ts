@@ -43,6 +43,30 @@ vi.mock('../../src/offline/database', () => ({ offlineRepository: () => mock.ope
 
 const { downloadTasks, downloadsReady, enqueue, startDownloads, toggleChapter } = await import('../../src/offline/runtime');
 
+it('drops the legacy network message across restart and reconnect, preserving a chapter failure', async () => {
+  vi.resetModules();
+  const runtime = await import('../../src/offline/runtime');
+  const message = 'No network connection, waiting to reconnect';
+  const task: DownloadTask = { id: 'one', document: 'book', voice: { provider: 'azure', voice: 'A', label: 'A' },
+    chapters: ['a', 'b'], state: 'waiting', error: message, failed: [] };
+  const queued: DownloadTask = { ...task, id: 'two', document: 'other', state: 'queued' };
+  const failed: DownloadTask = { ...task, id: 'three', document: 'third', state: 'done', error: 'Provider refused the chapter', failed: ['a'] };
+  mock.open.mockResolvedValue({ tasks: async () => [task, queued, failed], catalog: {
+    recheckHolds: async () => [], recheckSections: async () => [], saveTasks: async () => {},
+    preparedWalk: async () => BLOCK_WALK, preparedSegmentation: async () => SEGMENTATION, speechKeying: async () => null,
+  } });
+  const stop = runtime.startDownloads();
+  try {
+    mock.connectivity!({ connected: false });
+    await vi.waitFor(() => expect(queued.state).toBe('waiting'));
+    expect(task.error).toBeNull();
+    expect(queued.error).toBeNull();
+    mock.connectivity!({ connected: true });
+    expect(queued).toMatchObject({ state: 'queued', error: null });
+    expect(failed).toMatchObject({ state: 'done', error: 'Provider refused the chapter', failed: ['a'] });
+  } finally { stop(); }
+});
+
 it('keeps the chapters the owner paused paused across a restart and when other chapters are added', async () => {
   const voice = { provider: 'fish' as const, voice: 'A', label: 'A' };
   const stored: DownloadTask = { id: 't', document: 'book', voice, chapters: ['a', 'b'], state: 'downloading', error: null, failed: [], paused: ['a'] };
