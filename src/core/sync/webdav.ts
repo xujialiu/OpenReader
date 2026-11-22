@@ -25,7 +25,7 @@ export type WebDAVConfig = { url: string; username: string; password: string };
 export type WebDAVErrorKind =
   /** The settings are unusable — no URL, or not an http(s) one */
   | 'config'
-  /** 401 or 403 */
+  /** 401, or a refused read/check (403) */
   | 'auth'
   /** The folder (check) or the file (download) is not there */
   | 'not-found'
@@ -156,6 +156,10 @@ export function createWebDAVClient(cfg: WebDAVConfig, deps: { fetch: typeof fetc
             method, headers: { ...auth, ...init.headers }, body: init.body,
             cache: 'no-store', signal: controller.signal,
           });
+          if (response.status === 403 && (method === 'PUT' || method === 'MKCOL')) {
+            const action = method === 'PUT' ? 'write to the Sync Folder' : 'create the Sync Folder';
+            throw new WebDAVError('http', `The server did not allow this account to ${action} (HTTP 403).`, 403);
+          }
           if (response.status === 401 || response.status === 403) {
             throw new WebDAVError('auth', `The server rejected the username or password (HTTP ${response.status}).`, response.status);
           }

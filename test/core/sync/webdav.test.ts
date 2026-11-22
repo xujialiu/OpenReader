@@ -146,6 +146,20 @@ describe('upload', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  it.each([
+    [403, 'write to the Sync Folder'],
+    [409, 'create the Sync Folder'],
+  ] as const)('explains the denied write after an initial PUT returns %s (#285)', async (putStatus, action) => {
+    const dav = client(async (_url: string, { method }: RequestInit) => {
+      if (method === 'PROPFIND') return status(207);
+      if (method === 'GET') return new Response('{}');
+      return status(method === 'PUT' ? putStatus : 403);
+    });
+    await dav.check();
+    expect(await dav.download('f')).toBe('{}');
+    await expect(dav.upload('f', 'x')).rejects.toMatchObject({ kind: 'http', status: 403, message: expect.stringContaining(action) });
+  });
+
   it('reports rejected credentials and other failures', async () => {
     await expect(client(vi.fn(async () => status(401))).upload('f', 'x')).rejects.toMatchObject({ kind: 'auth' });
     await expect(client(vi.fn(async () => status(507))).upload('f', 'x')).rejects.toMatchObject({ kind: 'http', status: 507 });

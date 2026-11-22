@@ -207,6 +207,14 @@ Pause syncs **at once** rather than after a quiet period: a phone paused from
 the lock screen may be suspended within seconds, and the plugin's ten quiet
 seconds are a desktop's luxury.
 
+A network failure from a request interrupted across sleep allows one fresh
+foreground run (#294). The transport handles either delivery order of the
+network error and the foreground event. A fresh failure restores normal
+backoff. A write refused with HTTP 403 names the denied file write or folder
+creation (#285). A failed run reports work already done, including unique
+remote items read, positions adopted and any confirmed compatibility-file
+upload (#238). The next attempt reads and merges both copies again.
+
 A stop means every stop, and until #155 it meant only the owner's pause. The
 write and the sync lived in the screen's pause handler, so a Reading stopped by
 the AirPods switching away, by a refused Clip, at the end of the book or by a

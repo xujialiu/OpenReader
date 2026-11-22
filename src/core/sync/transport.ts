@@ -76,6 +76,7 @@ export interface SyncOutcome {
   remote: number;
   /** Document Ids whose position moved on this device. */
   adopted: readonly string[];
+  /** At least one file write was confirmed, even if a subsequent write failed. */
   uploaded: boolean;
   /** A damaged file is not an ordinary absent file, even when its repair succeeds. */
   warning: { kind: 'unreadable-file'; reason: string } | null;
@@ -85,6 +86,7 @@ export interface SyncOutcome {
 export function syncWarning(outcome: SyncOutcome): string | null {
   if (!outcome.warning) return null;
   const problem = `The positions file in the Sync Folder could not be read (${outcome.warning.reason}).`;
+  if (outcome.uploaded && outcome.result === 'error') return `${problem} The sync did not finish.`;
   if (outcome.uploaded) return `${problem} It was replaced with this device's reading positions.`;
   // A rejected PUT may have reached the server before its reply was lost.
   if (outcome.result === 'error') return `${problem} Its replacement was not confirmed.`;
@@ -121,6 +123,10 @@ export function createPositionsTransport(deps: PositionsTransportDeps): Position
   let unreachableAt: number | null = null;
   let runningSince: number | null = null;
 
+  let background = false;
+  let wakeGeneration = 0;
+  let retryOnWake = false;
+
   function reportGated(problem: string): void {
     const at = deps.now();
     if (at - lastReportAt < SYNC_RETRY_MS) return;
@@ -147,7 +153,10 @@ export function createPositionsTransport(deps: PositionsTransportDeps): Position
     if (!deps.enabled()) return null;
     if (!force && deps.now() - lastFailureAt < SYNC_RETRY_MS) return null;
     const at = deps.now();
+    const startGeneration = wakeGeneration;
+    const progress: Pick<SyncOutcome, 'remote' | 'adopted' | 'uploaded'> = { remote: 0, adopted: [], uploaded: false };
     let warning: SyncOutcome['warning'] = null;
+    retryOnWake = false;
     runningSince = at;
     try {
       const client = await deps.client();
@@ -176,27 +185,37 @@ export function createPositionsTransport(deps: PositionsTransportDeps): Position
         }
       }
       const remote = mergePositions([], entries);
+      progress.remote = remote.length;
       const merged = mergePositions(deps.local(), remote);
-      const adopted = deps.adopt(usableItems(merged));
+      progress.adopted = deps.adopt(usableItems(merged));
       const text = serializePositionsFile(merged);
-      let uploaded = false;
       for (const copy of copies) {
         if (copy.text === text || (copy.text === null && merged.length === 0)) continue;
         await client.upload(copy.name, text);
-        uploaded = true;
+        progress.uploaded = true;
       }
       lastFailureAt = Number.NEGATIVE_INFINITY;
       unreachableAt = null;
-      const outcome: SyncOutcome = { at, trigger, result: 'ok', error: null, remote: remote.length, adopted, uploaded, warning };
+      const outcome: SyncOutcome = { at, trigger, result: 'ok', error: null, ...progress, warning };
       const said = syncWarning(outcome);
       if (said) reportGated(said);
       return finish(outcome);
     } catch (problem) {
       const error = problem instanceof Error ? problem.message : String(problem);
+      const outcome: SyncOutcome = { at, trigger, result: 'error', error, ...progress, warning };
+      const networkFailure = problem instanceof WebDAVError && problem.kind === 'network';
+      if (networkFailure && wakeGeneration !== startGeneration) {
+        // The foreground poke is already queued. Keep any completed work in
+        // the log and let the queued run establish current reachability.
+        lastFailureAt = Number.NEGATIVE_INFINITY;
+        unreachableAt = null;
+        return finish({ ...outcome, error: 'The pending sync was interrupted on return to the foreground.' });
+      }
       lastFailureAt = deps.now();
-      // Any other failure is a server that answered, or settings that never reached one.
-      unreachableAt = problem instanceof WebDAVError && problem.kind === 'network' ? lastFailureAt : null;
-      const outcome: SyncOutcome = { at, trigger, result: 'error', error, remote: 0, adopted: [], uploaded: false, warning };
+      unreachableAt = networkFailure ? lastFailureAt : null;
+      // The overdue timer can run before the AppState notification. An attempt
+      // older than the entire retry window can also span a suspended JS event loop.
+      retryOnWake = networkFailure && (background || lastFailureAt - at >= SYNC_RETRY_MS);
       const said = syncWarning(outcome);
       reportGated(said ? `${said} ${error}` : error);
       return finish(outcome);
@@ -208,7 +227,20 @@ export function createPositionsTransport(deps: PositionsTransportDeps): Position
   const flight = createSingleFlight(run);
 
   return {
-    poke: flight.poke,
+    poke(trigger) {
+      if (trigger === 'foreground') {
+        if (background || (runningSince !== null && deps.now() - runningSince >= SYNC_RETRY_MS)) wakeGeneration++;
+        background = false;
+        if (retryOnWake) {
+          lastFailureAt = Number.NEGATIVE_INFINITY;
+          unreachableAt = null;
+          retryOnWake = false;
+        }
+      } else if (trigger === 'background') {
+        background = true;
+      }
+      flight.poke(trigger);
+    },
     flush: flight.flush,
     last: () => last,
     running: flight.running,

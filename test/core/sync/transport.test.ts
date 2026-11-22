@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { parsePositionsFile, serializePositionsFile, type PositionsItem } from '../../../src/core/sync/positions-file';
 import { createPositionsTransport, SYNC_RETRY_MS, type SyncClient, type SyncOutcome } from '../../../src/core/sync/transport';
-import { WebDAVError } from '../../../src/core/sync/webdav';
+import { createWebDAVClient, WebDAVError, WEBDAV_TIMEOUT_MS } from '../../../src/core/sync/webdav';
 
 /**
  * Download, merge, adopt, conditional upload — the plugin's transport shape on
@@ -89,6 +89,15 @@ describe('an ordinary sync', () => {
     expect(uploaded.items.map((one) => one.stamp?.at)).toEqual([9, 2]);
   });
 
+  it('reports the remote place already adopted when the first upload fails (#238)', async () => {
+    const remote = serializePositionsFile([item(A, 9, 'desk')]);
+    const h = harness(null, [item(B, 5)], { client: {
+      download: async () => remote,
+      upload: async () => { throw new WebDAVError('http', 'Write refused', 403); },
+    } });
+    expect(await h.transport.flush('play')).toMatchObject({ result: 'error', remote: 1, adopted: [A], uploaded: false });
+  });
+
   it('does not upload when the merged text equals what came down', async () => {
     const remote = serializePositionsFile([item(A, 9, 'desk')]);
     const h = harness(remote, [item(A, 5)]);
@@ -160,6 +169,47 @@ describe('a server that is down', () => {
     });
     const outcome = await h.transport.flush('launch');
     expect(outcome).toMatchObject({ result: 'error', error: 'Set the WebDAV URL first.' });
+  });
+});
+
+describe('waking during a positions sync (#294)', () => {
+  it.each(['foreground first', 'timeout first', 'server stays offline'])('%s', async (order) => {
+    vi.useFakeTimers();
+    try {
+      const requests: string[] = [];
+      let awake = false;
+      const client = createWebDAVClient({ url: 'https://dav.example/', username: '', password: '' }, {
+        fetch: async (_url, init) => {
+          requests.push(String(init?.method));
+          if (!awake) return new Promise<Response>(() => {});
+          if (order === 'server stays offline') throw new Error('offline');
+          return new Response(null, { status: init?.method === 'GET' ? 404 : 201 });
+        },
+      });
+      const h = harness(null, [item(A, 5)], { client });
+      h.transport.poke('pause');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(requests).toEqual(['GET', 'GET']);
+      h.transport.poke('background');
+      h.advance(3 * 3_600_000);
+      awake = true;
+      if (order !== 'timeout first') h.transport.poke('foreground');
+      await vi.advanceTimersByTimeAsync(WEBDAV_TIMEOUT_MS);
+      if (order === 'timeout first') h.transport.poke('foreground');
+      await vi.advanceTimersByTimeAsync(0);
+      if (order === 'server stays offline') {
+        expect(h.transport.last()).toMatchObject({ trigger: 'foreground', result: 'error', error: expect.stringContaining('offline') });
+        h.transport.poke('open');
+        h.transport.poke('foreground');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(requests).toEqual(['GET', 'GET', 'GET', 'GET']);
+      } else {
+        expect(h.transport.last()).toMatchObject({ trigger: 'foreground', result: 'ok', uploaded: true });
+        expect(requests).toEqual(['GET', 'GET', 'GET', 'GET', 'PUT', 'PUT']);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -334,7 +384,7 @@ describe('WebDAV filename transition', () => {
     };
     const h = harness(null, [], { client });
     const merged = serializePositionsFile([first, latest]);
-    await h.transport.flush('partial');
+    expect(await h.transport.flush('partial')).toMatchObject({ result: 'error', remote: 2, adopted: [A, B], uploaded: true });
     expect(files.get(current)).toBe(merged);
     expect(files.get(legacy)).toBe(serializePositionsFile([latest]));
     failLegacy = false;
