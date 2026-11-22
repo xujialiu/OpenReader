@@ -17,7 +17,7 @@ const paths = {
   folder: 'M3 7V5h7l2 3h9v12H3V7Z',
   minus: 'M5 12h14',
   download: 'M12 3v12 m-5-5 5 5 5-5 M4 16v5h16v-5',
-  rename: 'm15 4 5 5 M4 20l5-1L21 7l-5-5L4 14v6Z',
+  rename: 'M4 9h7.5 M4 15h5.5 M17.5 5.5v13 M15 5.5h5 M15 18.5h5',
   more: '',
   contents: 'M9 6h11 M9 12h11 M9 18h11',
   settings: 'M4 6h8 M16 6h4 M4 12h3 M11 12h9 M4 18h9 M17 18h3 M12 3v6 M7 9v6 M17 15v6',
