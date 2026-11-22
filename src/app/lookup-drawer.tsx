@@ -7,6 +7,7 @@ import type { LookupMode, TranslationService } from '../translation/settings';
 import { INK, useAccent } from './controls';
 import { DRAWER, Drawer, DrawerMenuRow } from './drawer';
 import { Icon } from './icon';
+import { SelectionButton } from './selection-button';
 import { TRANSLATION_SERVICES } from './translation-screen';
 import type { LookupHandle } from './use-lookup';
 import { TEXT, TEXT_EMPHASIZED } from './text-styles';
@@ -39,13 +40,33 @@ const LOOKUP_MODES: readonly { mode: LookupTab; label: string }[] = [
 export function LookupDrawer({ lookup, service, onService, onHighlight, highlightContent }: {
   onHighlight(): void; highlightContent: React.ReactNode; lookup: LookupHandle; service: TranslationService; onService(service: TranslationService): void;
 }) {
-  const tab = lookup.selection?.highlight ? 'highlight' : lookup.selection?.mode ?? 'dictionary';
+  const selection = lookup.selection;
+  const tab = lookup.highlightOnly || selection?.highlight ? 'highlight' : selection?.mode ?? 'dictionary';
   return (
-    <Drawer visible={Boolean(lookup.selection && lookup.requested)} title="Lookup" onClose={() => lookup.close()}
-      heading={<LookupModes mode={tab} onMode={(next) => next === 'highlight' ? onHighlight() : lookup.mode(next)} />}>
+    <Drawer visible={!!selection} title={lookup.highlightOnly ? 'Highlight' : 'Lookup'} selectionFooter onClose={() => lookup.close()}
+      heading={lookup.highlightOnly ? undefined : <LookupModes mode={tab} onMode={(next) => next === 'highlight' ? onHighlight() : lookup.mode(next)} />}>
       {tab === 'highlight' ? highlightContent : lookup.selection ? <LookupResult lookup={lookup} service={service} onService={onService} /> : null}
+      {selection ? <CopySelection key={JSON.stringify([selection.session, selection.location?.cfi ?? selection.text])}
+        text={selection.text} disabled={!!selection.highlight?.expandingTo} /> : null}
     </Drawer>
   );
+}
+
+function CopySelection({ text, disabled }: { text: string; disabled: boolean }) {
+  const [feedback, setFeedback] = useState<'copied' | 'error' | null>(null);
+  useEffect(() => {
+    if (feedback !== 'copied') return;
+    const timer = setTimeout(() => setFeedback(null), 1500);
+    return () => clearTimeout(timer);
+  }, [feedback]);
+  const copy = async () => {
+    try { setFeedback(await Clipboard.setStringAsync(text) ? 'copied' : 'error'); }
+    catch { setFeedback('error'); }
+  };
+  return <>
+    {feedback === 'error' ? <Text style={styles.error}>Could not copy. Try again.</Text> : null}
+    <SelectionButton action="Copy" copied={feedback === 'copied'} disabled={disabled} onPress={copy} />
+  </>;
 }
 
 /** The phone's own segmented control, as wide as the header leaves it. */
@@ -96,7 +117,7 @@ function LookupResult({ lookup, service, onService }: {
         <Text selectable style={styles.definition}>{lookup.result.text}</Text>
         <View style={styles.footer}><Text style={styles.source}>{lookup.result.source}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Copy result" onPress={() => { void copy(); }} style={styles.copy}>
-            <Text style={action}>{copied ? 'Copied' : 'Copy'}</Text>
+            <Text style={action}>{copied ? 'Copied' : 'Copy result'}</Text>
           </Pressable>
         </View>
       </> : null}

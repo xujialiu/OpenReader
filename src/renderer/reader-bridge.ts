@@ -467,6 +467,7 @@ export interface ReaderBridge {
    * half of it.
    */
   readerProps: {
+    menuItems: [];
     injectedJavascript: string;
     onWebViewMessage(event: unknown): void;
     manager: 'continuous';
@@ -983,7 +984,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       }
       if (message.type === SELECTION_MESSAGE) {
         if (lookupEnabled.current) {
-          selectionCallback.current?.({ ...message, text: message.text.slice(0, 5001) });
+          selectionCallback.current?.(message);
         }
         return;
       }
@@ -1100,6 +1101,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
 
   const readerProps = useMemo<ReaderBridge['readerProps']>(
     () => ({
+      menuItems: [],
       injectedJavascript,
       onWebViewMessage,
       // ADR 0011. `flow` picks the layout and `manager` picks the view manager

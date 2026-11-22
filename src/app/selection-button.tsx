@@ -3,14 +3,14 @@ import { INK } from './controls';
 import { DRAWER_LIST } from './drawer-list';
 import { TEXT } from './text-styles';
 
-export function SelectionButton({ action, count, disabled, onPress }: {
-  action: 'Delete' | 'Download'; count: number; disabled?: boolean; onPress(): void;
-}) {
-  const inactive = !!disabled || count === 0;
-  const label = `${action} selected (${count})`;
-  const deleting = action === 'Delete';
+type SelectionAction = { action: 'Copy'; copied: boolean } | { action: 'Delete' | 'Download'; count: number };
+
+export function SelectionButton(props: SelectionAction & { disabled?: boolean; onPress(): void }) {
+  const inactive = !!props.disabled || (props.action !== 'Copy' && props.count === 0);
+  const label = props.action === 'Copy' ? (props.copied ? 'Copied' : 'Copy selected') : `${props.action} selected (${props.count})`;
+  const deleting = props.action === 'Delete';
   return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: inactive }}
-    disabled={inactive} onPress={onPress} style={({ pressed }) => [
+    disabled={inactive} onPress={props.onPress} style={({ pressed }) => [
       styles.button, deleting && styles.deleteButton, inactive && styles.disabled, pressed && styles.pressed,
     ]}>
     <Text style={[styles.label, deleting && styles.deleteLabel]}>{label}</Text>

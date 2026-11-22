@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { currentRow, type Contents } from '../core/document/contents';
 import { HIGHLIGHT_PALETTE, type HighlightColour, type SavedHighlight } from '../core/document/saved-highlight';
@@ -13,9 +13,9 @@ import { TEXT } from './text-styles';
 import type { LookupHandle } from './use-lookup';
 import { useRowSweep } from './use-sweep';
 
-function Action({ label, onPress, destructive }: { label: string; onPress(): void; destructive?: boolean }) {
+function Action({ label, onPress }: { label: string; onPress(): void }) {
   return <Pressable accessibilityRole="button" onPress={onPress} style={styles.action}>
-    <Text style={[styles.label, destructive && { color: INK.attention }]}>{label}</Text>
+    <Text style={styles.label}>{label}</Text>
   </Pressable>;
 }
 
@@ -107,14 +107,9 @@ export function SavedHighlights({ document, lookup, bridge, contents, anchors, l
   renderLookup(onHighlight: () => void, highlightContent: ReactNode): ReactNode;
 }) {
   const [marks, setMarks] = useState<SavedHighlight[]>([]);
-  const [pen, setPen] = useState<{ id: number; owner: string } | null>(null);
-  const surface = listOpen ? 'list' : lookup.selection?.location?.cfi;
-  const palette = pen && pen.owner === surface ? pen.id : null;
-  const setPalette = (id: number | null) => setPen(id !== null && surface ? { id, owner: surface } : null);
-  // A dismissed Drawer cannot leave an invisible touch target on the page.
-  if (pen && pen.owner !== surface) setPen(null);
+  const [palette, setPalette] = useState<number | null>(null);
+  if (!listOpen && palette !== null) setPalette(null);
   const [removed, setRemoved] = useState<SavedHighlight | null>(null);
-  const { height } = useWindowDimensions();
   const refresh = useCallback(() => setMarks(readHighlights(document)), [document]);
   useEffect(() => {
     // Load this Document's durable marks after mount.
@@ -139,6 +134,13 @@ export function SavedHighlights({ document, lookup, bridge, contents, anchors, l
   const edit = lookup.selection?.highlight;
   const edited = edit && marks.find((mark) => mark.id === edit.id);
   const selecting = lookup.selection?.selecting;
+  const { highlightOnly, editHighlight } = lookup;
+  const hasSelection = !!lookup.selection;
+  useEffect(() => {
+    if (!highlightOnly || !hasSelection || selecting || edit) return;
+    // Enter the palette without writing. Existing passages take their full range.
+    editHighlight(active?.id ?? null, active?.cfi);
+  }, [highlightOnly, hasSelection, selecting, edit, active, editHighlight]);
   useEffect(() => {
     if (!edited || edit?.expandingTo || selecting || !location || crossesChapter || edited.cfi === location.cfi) return;
     try {
@@ -152,15 +154,7 @@ export function SavedHighlights({ document, lookup, bridge, contents, anchors, l
     try { write(); refresh(); return true; }
     catch (error) { Alert.alert('Could not change highlights', String(error)); return false; }
   };
-  const finishPalette = () => {
-    setPalette(null);
-    if (!lookup.requested && lookup.selection) lookup.close();
-  };
-  const highlight = () => {
-    if (!location || crossesChapter) return;
-
-    change(() => setPalette(saveHighlight(document, location, chapter, chapterKey)));
-  };
+  const finishPalette = () => setPalette(null);
   const openHighlight = () => {
     if (active && !(lookup.selection?.adjusted && !exact)) {
       lookup.editHighlight(active.id, active.cfi);
@@ -184,51 +178,26 @@ export function SavedHighlights({ document, lookup, bridge, contents, anchors, l
     const one = single ? marks.find((mark) => mark.id === ids[0]) : null;
     if (!change(() => removeHighlights(document, ids))) return false;
     setRemoved(one ?? null);
-    if (!listOpen && !lookup.requested) lookup.close();
     return true;
   };
   const undo = removed ? <Action label="Undo remove" onPress={() => {
     if (change(() => restoreHighlight(document, removed))) setRemoved(null);
   }} /> : null;
-  const actions = <View style={styles.card}>
-    {active ? <ScrollView style={styles.previewBox}><Text style={styles.preview}>{active.text}</Text></ScrollView> : null}
-    <View style={styles.actions}>
-      {active ? <Action label="Recolour" onPress={() => setPalette(active.id)} /> : null}
-      {location && !crossesChapter && (!active || (!exact && lookup.selection?.adjusted)) ?
-        <Action label="Highlight" onPress={highlight} /> : null}
-      {active ? <Action label="Remove" destructive onPress={() => remove([active.id], true)} /> : null}
-      {!lookup.requested ? <>
-        <Action label={lookup.selection?.mode === 'translation' ? 'Translate' : 'Look up'} onPress={lookup.request} />
-        <Action label="Close" onPress={() => lookup.close()} />
-      </> : null}
-    </View>
-    {crossesChapter ? <DrawerFooter>Select a passage within one chapter.</DrawerFooter> : null}
-  </View>;
-  const menuTop = location && location.top > 140 ? location.top - (active ? 110 : 58) : (location?.bottom ?? 90) + 12;
   const selectedColour = marks.find((mark) => mark.id === palette)?.colour;
   const colourPicker = palette !== null ? <View style={styles.overlay}>
     <Pressable accessibilityRole="button" accessibilityLabel="Close colours" style={StyleSheet.absoluteFill} onPress={finishPalette} />
-    <View style={!listOpen && !lookup.requested ?
-      { position: 'absolute', top: Math.max(4, Math.min(height - 100, menuTop)) } : undefined}>
-      <HighlightColours selected={selectedColour} choose={(colour) => {
-        if (change(() => colourHighlight(document, palette, colour))) finishPalette();
-      }} />
-    </View>
+    <HighlightColours selected={selectedColour} choose={(colour) => {
+      if (change(() => colourHighlight(document, palette, colour))) finishPalette();
+    }} />
   </View> : null;
   return <>
     {renderLookup(openHighlight, <ScrollView contentContainerStyle={styles.highlightTab}>
       {location && !crossesChapter ? <HighlightColours inline selected={edited?.colour} choose={chooseInlineColour} /> :
         <DrawerFooter>Select a passage within one chapter.</DrawerFooter>}
-      <Text style={styles.passage}>{edit?.expandingTo ? edited?.text : location?.text ?? lookup.selection?.text}</Text>
+      <Text style={styles.passage}>{edit?.expandingTo ? edited?.text : lookup.selection?.text}</Text>
     </ScrollView>)}
-    {lookup.selection && !lookup.requested && !lookup.selection.selecting ?
-      <View style={[styles.floating, { top: Math.max(4, Math.min(height - 150, menuTop)) }]}>
-        {actions}
-      </View> : null}
-    {!listOpen && !lookup.requested && undo ? <View style={styles.undo}>{undo}</View> : null}
     {listOpen ? <HighlightsList marks={marks} close={() => closeList?.()} overlay={colourPicker} undo={undo} recolour={setPalette} remove={remove}
       browse={(mark) => { closeList?.(); bridge.browse(mark.section, '', mark.cfi); }} /> : null}
-    {palette !== null && !listOpen && !lookup.requested ? colourPicker : null}
     {palette !== null && listOpen ? <Pressable accessibilityLabel="Close colours"
       accessibilityRole="button" style={StyleSheet.absoluteFill} onPress={finishPalette} /> : null}
   </>;
@@ -244,11 +213,6 @@ const styles = StyleSheet.create({
   action: { minHeight: 44, paddingHorizontal: 10, justifyContent: 'center' },
   label: { ...TEXT.body, color: INK.text },
   more: { width: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
-  previewBox: { maxHeight: 72 },
-  preview: { ...TEXT.footnote, color: INK.quiet, paddingHorizontal: 12 },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
-  card: { padding: 3 }, floating: { position: 'absolute', alignSelf: 'center', maxWidth: '95%', backgroundColor: INK.page, borderRadius: 16 },
-  undo: { position: 'absolute', alignSelf: 'center', bottom: '30%', backgroundColor: INK.page, borderRadius: 12 },
   overlay: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   palette: { borderRadius: 32, backgroundColor: INK.panel, padding: 8, gap: 5, flexDirection: 'row' },
   highlightTab: { alignItems: 'center', padding: 12, gap: 16 },

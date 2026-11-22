@@ -14,21 +14,29 @@ Dictionary, Translate and Highlight each have a tab, in that order. A new select
 
 Switching tabs keeps the Drawer at its current height. Highlight shows a single row of five coloured circles directly below the tabs, followed by the words being edited.
 
-The existing Long-press lookup switch controls whether lookup opens immediately. It starts on for a new reader and keeps the reader's saved choice on upgrade. With it off, a long press selects text and shows a menu beside it. The reader can drag the handles to adjust the passage, then highlight it or explicitly ask for lookup or translation. This gives occasional dictionary users access to lookup while saving a passage takes no dictionary request.
+The selection and copying changes in this section are the design for [issue #376](https://github.com/xujialiu/OpenReader/issues/376). A long press on Document text opens the Drawer directly. The reader can still drag the selection handles. Both the phone’s selection menu and OpenReader’s floating selection menu are hidden.
+
+Dictionary, Translate and Highlight share a **Copy selected** button at the foot of the Drawer. It copies the full Document text between the handles, preserving paragraph breaks even in a passage too long to translate. It works while a definition or translation is loading or has failed. The button stays the same distance from the bottom as the selection actions in Highlights, Download and Manage. Definitions and translations scroll above it, with room to read the last line in full.
+
+Copying keeps the Drawer open and the handles in place. The button briefly reads **Copied**, then returns to **Copy selected**. At the end of a definition or translation, **Copy result** copies that result.
+
+Long-press lookup starts on for a new reader and keeps the reader’s saved choice on upgrade. Turning it off gives a long press a single-purpose Highlight Drawer. A fresh selection opens with five unselected colours. The reader can adjust the handles, copy the passage or dismiss the Drawer before choosing a colour. Only tapping a colour saves the passage. This path works offline and sends no text to a dictionary or Translation Service.
 
 Selecting text for a highlight follows the same Pause reading during lookup preference as selecting it for a definition. With the preference on, the long press pauses ongoing speech even when immediate lookup is off. The reader presses Play to resume. With the preference off, speech continues and the page holds the selected words in view while the reader adjusts or colours them. When selection and lookup are both closed, a page that was following the voice returns to it and a reader who was browsing stays in place.
 
 ## Choosing a colour
 
-Pressing Highlight saves the passage immediately and shows the colour choices. The first highlight is yellow. The next highlight uses the last colour chosen. The five colours, in order, are yellow, green, pink, purple and blue.
+With Long-press lookup on, pressing the Highlight tab saves the passage immediately and shows the colour choices. The first such highlight is yellow. The next uses the last colour chosen. The five colours, in order, are yellow, green, pink, purple and blue.
 
 In the Highlight tab, the circle for the passage's current colour carries a ×. Tapping another colour applies it immediately and moves the × to that circle. Tapping the × removes the whole Saved Highlight. The tab stays open with all five circles unmarked and the handles around the same passage. The reader can adjust the selection and tap a colour to save it again.
 
-In the selection menu and the book's Highlights list, choosing a colour closes the palette. Tapping outside keeps the saved colour and dismisses the palette without sending that tap to the sentence underneath.
+In the book's Highlights list, choosing a colour closes the palette. Tapping outside keeps the saved colour and dismisses the palette without sending that tap to the sentence underneath.
 
 ## Editing a saved passage
 
-Long-pressing a word inside a Saved Highlight still selects that word for lookup. Opening Highlight expands the selection handles to the whole saved passage. For example, looking up “cloud” inside a yellow “white cloud” and then opening Highlight puts the handles around “white cloud”, shows those words below the palette and marks yellow with a ×. With immediate lookup off, the selection menu offers Recolour and Remove. Keeping these actions on the long press preserves the ordinary sentence tap and the existing Tap Lock behaviour.
+With Long-press lookup on, long-pressing a word inside a Saved Highlight selects that word for lookup. Opening Highlight expands the selection handles to the whole saved passage. For example, looking up “cloud” inside a yellow “white cloud” and then opening Highlight puts the handles around “white cloud”, shows those words below the palette and marks yellow with a ×.
+
+With Long-press lookup off, pressing “cloud” in that same passage opens Highlight directly with “white cloud” selected and yellow marked with a ×. The reader can copy the full passage, change its colour, drag a handle to edit its range or tap the × to remove it.
 
 If the reader highlights “white cloud” and then “cloud soil”, both excerpts stay in the list with their original text and colour. On the page, “cloud” shows the colour of the more recently created highlight. Removing that highlight reveals the earlier colour. Selecting the exact same range again opens the existing highlight for editing.
 
@@ -52,7 +60,7 @@ The first version keeps Saved Highlights on the device where they were made. Sav
 
 ## Removing highlights
 
-Undo is available for an individual removal from the selection menu or the Highlights list. In the Highlight tab the colour choices themselves let the reader mark the passage again. To remove several, the reader taps Select at the top right of Highlights, then taps anywhere on a row to toggle it. A two-finger sweep can start or extend a selection, as in the Library. The selection can include excerpts from several chapters. Select All includes every highlight in this Document, even those off screen.
+Undo is available for an individual removal from the Highlights list. In the Highlight tab the colour choices themselves let the reader mark the passage again. To remove several, the reader taps Select at the top right of Highlights, then taps anywhere on a row to toggle it. A two-finger sweep can start or extend a selection, as in the Library. The selection can include excerpts from several chapters. Select All includes every highlight in this Document, even those off screen.
 
 In selection mode, Select all sits at the top left and becomes Deselect all when every excerpt is checked. Cancel stays at the top right. A red Delete selected button shows the count and stays at the bottom center as the reader scrolls. The space below it matches the space above Select all. Download and Manage use the same bottom position, so the button stays under the reader’s thumb across the three Drawers. One confirmation gives the total for the batch. Cancelling it leaves the rows checked so the reader can adjust the selection. Confirming removes the selected excerpts and returns to the ordinary list.
 

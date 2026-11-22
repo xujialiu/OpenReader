@@ -28,14 +28,12 @@ export function useLookup(settings: LookupSettings, reading: {
   bridge: ReaderBridge; pause(): void; play(): void; carryOn(): void; status: { playing: boolean };
 }, focused: boolean, pause: () => void = reading.pause, rememberMode: (mode: LookupMode) => void) {
   const [selection, setSelection] = useState<LookupSelection | null>(null);
-  const [requested, setRequested] = useState(false);
   const [result, setResult] = useState<LookupResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [pronouncing, setPronouncing] = useState(false);
   const [loading, setLoading] = useState(false);
   const opened = useRef(false);
-  const lastRange = useRef<string | null>(null);
   const editingSession = useRef<number | undefined>(undefined);
   const latest = useRef({ settings, reading, pause, rememberMode });
   const preferred = useRef(settings.preferredMode);
@@ -60,9 +58,7 @@ export function useLookup(settings: LookupSettings, reading: {
   const close = useCallback((resumeAudio = true) => {
     pronunciation.stop(resumeAudio);
     opened.current = false;
-    lastRange.current = null;
     editingSession.current = undefined;
-    setRequested(false);
     setSelection(null); setResult(null); setError(null); setAudioError(null);
     latest.current.reading.bridge.closeLookup(resumeAudio && latest.current.reading.status.playing);
   }, [pronunciation]);
@@ -78,11 +74,8 @@ export function useLookup(settings: LookupSettings, reading: {
       const range = message.location?.cfi ?? message.text;
       const editing = message.session !== undefined && message.session === editingSession.current;
       if (!editing) editingSession.current = undefined;
-      if (!latest.current.settings.enabled && !editing && lastRange.current !== range) setRequested(false);
-      lastRange.current = range;
       if (!opened.current) {
         opened.current = true;
-        setRequested(latest.current.settings.enabled);
         if (latest.current.settings.pauseReading) latest.current.pause();
       }
       if (message.selecting) pronunciation.stop();
@@ -114,7 +107,7 @@ export function useLookup(settings: LookupSettings, reading: {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setResult(null); setError(null); setAudioError(null);
     pronunciation.stop();
-    if (!requested || !selection || selection.selecting || selection.highlight) { setLoading(false); return; }
+    if (!settings.enabled || !selection || selection.selecting || selection.highlight) { setLoading(false); return; }
     const abort = new AbortController();
     let live = true;
     setLoading(true);
@@ -150,7 +143,7 @@ export function useLookup(settings: LookupSettings, reading: {
       if (live) setError(failure instanceof Error ? failure.message : 'The request failed. Try again.');
     }).finally(() => { if (live) setLoading(false); });
     return () => { live = false; abort.abort(); };
-  }, [requested, selection, requestSettings, pronunciation, close]);
+  }, [settings.enabled, selection, requestSettings, pronunciation, close]);
 
   const mode = (next: LookupMode) => {
     if (!selection) return;
@@ -160,16 +153,17 @@ export function useLookup(settings: LookupSettings, reading: {
     editingSession.current = undefined;
     setSelection((was) => was ? { ...was, highlight: undefined, mode: next, selecting: false } : null);
   };
-  const editHighlight = (id: number | null, cfi?: string) => {
-    if (!selection) return;
-    const from = selection.location?.cfi;
+  const from = selection?.location?.cfi;
+  const session = selection?.session;
+  const editHighlight = useCallback((id: number | null, cfi?: string) => {
+    if (!opened.current) return;
     const expandingTo = from && cfi !== from ? cfi : undefined;
-    editingSession.current = selection.session;
+    editingSession.current = session;
     setSelection((was) => was ? { ...was, highlight: { id, expandingTo } } : null);
     if (from && expandingTo) reading.bridge.expandSelection(from, expandingTo);
-  };
+  }, [from, session, reading.bridge]);
   const retry = () => setSelection((was) => was ? { ...was, selecting: false, attempt: was.attempt + 1 } : null);
   const pronounce = (url: string) => { setAudioError(null); void pronunciation.play(url); };
-  return { selection, requested, request: () => setRequested(true), result, error, audioError, loading, pronouncing, close, mode, editHighlight, retry, pronounce, stopPronunciation: pronunciation.stop };
+  return { selection, highlightOnly: !settings.enabled, result, error, audioError, loading, pronouncing, close, mode, editHighlight, retry, pronounce, stopPronunciation: pronunciation.stop };
 }
 export type LookupHandle = ReturnType<typeof useLookup>;

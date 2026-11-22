@@ -814,7 +814,7 @@ ${constants}
 
   function selected(doc) {
     var selection = doc && doc.getSelection ? doc.getSelection() : null;
-    return selection && !selection.isCollapsed ? selection.toString().trim() : '';
+    return selection && !selection.isCollapsed ? selection.toString() : '';
   }
   function holdForLookup() {
     if (lookupHeld) return;
@@ -868,7 +868,7 @@ ${constants}
       rememberEnds(range);
       lookupSelection = {
         section: contents.sectionIndex, cfi: cfi,
-        text: text.slice(0, 5001), multipleWords: multipleWords,
+        text: text, multipleWords: multipleWords,
         backward: selection.anchorNode === range.endContainer && selection.anchorOffset === range.endOffset
       };
       var first = blockOffsetOf(doc, range.startContainer, range.startOffset);
@@ -898,7 +898,7 @@ ${constants}
   }
   function postSelection(text, multipleWords, selecting) {
     suppressTapUntil = Date.now() + 700;
-    post({ type: SELECTION, text: text.slice(0, 5001), multipleWords: multipleWords, selecting: selecting,
+    post({ type: SELECTION, text: text, multipleWords: multipleWords, selecting: selecting,
       session: selectionSession, location: lookupSelection ? lookupSelection.location : undefined });
   }
   function emitSelection(doc, selecting) {

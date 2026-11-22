@@ -125,17 +125,19 @@ describe('explicit lookup preference versus the current result (#323)', () => {
   });
 });
 
-it('lets a selection pause and become a highlight without contacting a lookup service until explicitly requested', async () => {
+it('opens Highlight with lookup off and keeps both colour choices and handle adjustments offline', async () => {
   disk = JSON.stringify({ ...DEFAULT_LOOKUP, enabled: false, pauseReading: true });
   const pause = vi.spyOn(reading, 'pause');
   await mount();
   await selected('cloud');
   expect(pause).toHaveBeenCalledOnce();
   expect(handle.selection?.text).toBe('cloud');
-  expect(handle.requested).toBe(false);
+  expect(handle.highlightOnly).toBe(true);
   expect(mock.lookup).not.toHaveBeenCalled();
-  await act(async () => handle.request());
-  expect(mock.lookup).toHaveBeenCalledOnce();
+  await act(async () => handle.editHighlight(12));
+  await selected('cloud soil', true);
+  expect(mock.lookup).not.toHaveBeenCalled();
+  expect(writes).toEqual([]);
   pause.mockRestore();
 });
 

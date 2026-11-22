@@ -17,6 +17,13 @@ function selections(...texts: string[]) {
 }
 
 describe('selection word boundaries (#323, #274)', () => {
+  it('keeps paragraph breaks, surrounding spaces and text beyond the lookup limit for copying', () => {
+    const passage = '  first paragraph\n\n' + 'second '.repeat(800);
+    const { page } = selections(passage);
+    const messages = page.posted.filter((message) => message.type === SELECTION_MESSAGE);
+    expect(messages.map((message) => message.text)).toEqual([passage, passage]);
+  });
+
   it('a new word with the Drawer still open is not a multiword expansion', () => {
     const { modes } = selections('selectable', 'words');
     expect(modes()).toEqual([false, false, false, false]);

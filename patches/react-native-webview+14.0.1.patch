@@ -1,0 +1,30 @@
+diff --git a/node_modules/react-native-webview/apple/RNCWebViewImpl.m b/node_modules/react-native-webview/apple/RNCWebViewImpl.m
+index 3890426..33d891c 100644
+--- a/node_modules/react-native-webview/apple/RNCWebViewImpl.m
++++ b/node_modules/react-native-webview/apple/RNCWebViewImpl.m
+@@ -100,6 +100,11 @@ - (void)buildMenuWithBuilder:(id<UIMenuBuilder>)builder API_AVAILABLE(ios(13.0))
+       }
+     }
+     [super buildMenuWithBuilder:builder];
++    if (builder.system == UIMenuSystem.contextSystem && [self.suppressMenuItems containsObject:@"all"]) {
++        [builder replaceChildrenOfMenuForIdentifier:UIMenuRoot fromChildrenBlock:^NSArray<UIMenuElement *> *(NSArray<UIMenuElement *> *children) {
++            return @[];
++        }];
++    }
+ }
+ #else // TARGET_OS_OSX
+ - (void)scrollWheel:(NSEvent *)theEvent {
+diff --git a/node_modules/react-native-webview/src/WebView.ios.tsx b/node_modules/react-native-webview/src/WebView.ios.tsx
+index 970acb0..24e362f 100644
+--- a/node_modules/react-native-webview/src/WebView.ios.tsx
++++ b/node_modules/react-native-webview/src/WebView.ios.tsx
+@@ -199,6 +199,9 @@ const WebViewComponent = forwardRef<unknown, IOSWebViewProps>(
+       <NativeWebView
+         key="webViewKey"
+         {...otherProps}
++        // Fabric encodes both an omitted menu and [] as an empty vector.
++        // Carry the explicit empty-menu request through a nonempty native prop.
++        suppressMenuItems={otherProps.menuItems?.length === 0 ? ['all'] : otherProps.suppressMenuItems}
+         fraudulentWebsiteWarningEnabled={fraudulentWebsiteWarningEnabled}
+         javaScriptEnabled={javaScriptEnabled}
+         cacheEnabled={cacheEnabled}
