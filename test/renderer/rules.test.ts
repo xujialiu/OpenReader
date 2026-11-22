@@ -340,7 +340,7 @@ describe('never highlight by mutating the DOM, and never check whether you can (
     // side of the bridge, so the argument is a value a test can read.
     const css = highlightCss(DEFAULT_HIGHLIGHT_COLOURS);
     pin(css, '::highlight(' + UTTERANCE_HIGHLIGHT + ') {', 'the stylesheet highlightCss builds');
-    pin(css, '::highlight(' + WORD_HIGHLIGHT + ') {', 'the stylesheet highlightCss builds');
+    pin(css, '\n::highlight(' + WORD_HIGHLIGHT + ') {', 'the stylesheet highlightCss builds');
   });
 
   it('has no capability check and no fallback around it', () => {
@@ -363,16 +363,18 @@ describe('never highlight by mutating the DOM, and never check whether you can (
     const preparation = fn(source, 'prepareSection');
     expect(preparation).toContain('host.appendChild(view.element)');
     expect(preparation).toContain('host.remove()');
-    const layer = fn(source, 'savedLayer');
+    const layer = fn(source, 'createPaintLayer');
+    const mixed = fn(source, 'paintMixedText');
     const saved = fn(source, 'drawSaved');
     const paint = fn(source, 'updateSavedSpeech');
     expect(layer).toContain('doc.documentElement.appendChild(svg)');
     expect(saved).toContain('svg.appendChild(one.group)');
     expect(paint).toContain('group.appendChild(rect)');
-    for (const code of [layer, saved, paint]) {
+    expect(mixed).toContain('group.appendChild(rect)');
+    for (const code of [layer, saved, paint, mixed]) {
       expect(code).not.toMatch(/doc\.body\.append|innerHTML|surroundContents|splitText|CSS\.highlights/);
     }
-    const program = source.replace(preparation, '').replace(layer, '').replace(saved, '').replace(paint, '');
+    const program = source.replace(preparation, '').replace(layer, '').replace(saved, '').replace(paint, '').replace(mixed, '');
     // Two stylesheets, and the second is not in a Document at all: it is the
     // page epub.js lays the sections out on, and it holds the room kept for
     // the navigation bar and the Player (#67, #371, `reserve`). Nothing of
@@ -385,7 +387,8 @@ describe('never highlight by mutating the DOM, and never check whether you can (
     // ADR 0034: one attribute, under one name, on the elements a Document centres
     // or sets to the right — an attribute moves no text node, offset or CFI, and
     // nothing else about an element is touched.
-    expect(program.match(/setAttribute\(/g)).toHaveLength(1);
+    expect(program.match(/setAttribute\(/g)).toHaveLength(2);
+    expect(program).toContain("live.element.setAttribute('data-or-mixed-text', '');");
     expect(program).toContain("own[k].setAttribute(OWN_ALIGNMENT, '');");
     expect(program).not.toMatch(/removeAttribute|toggleAttribute|setAttributeNS|\.dataset\b|classList|className\s*=|\.style\./);
     for (const mutation of [

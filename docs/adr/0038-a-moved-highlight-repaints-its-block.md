@@ -106,3 +106,9 @@ only place a highlight changes, so that no later change can skip the repaint.
 - **Draw the word as an underline or a text colour instead of a background.**
   No strip, but not the look the owner chose.
 - **Wait for WebKit.** The fix is not in iOS 27.0, and the app supports 17.2.
+
+## Direct text beside a block-level child
+
+On iOS 27.0, the CSS Highlight registry can contain the correct Range after a horizontal rule while the screenshot shows no sentence colour (#194). Registering the range again and changing its boundaries to select the text node both left the line white. Giving the text its own inline element made the colour appear, but inserting an element would change the EPUB's CFI paths.
+
+The walker records elements with an in-flow block child. For direct text runs of such an element the active sentence and word paint their line rectangles in a separate, non-interactive SVG after the EPUB body. Each group uses the configured colour and opacity for its level; the word group sits above the sentence. A marker on the owning element suppresses the native colour on its direct text, and the registered ranges still describe the entire cue. Inline descendants continue to use the native colour. Moving or clearing the cue removes the old rectangles. The layer observes section layout and font loads in the same way as the saved-highlight layer.

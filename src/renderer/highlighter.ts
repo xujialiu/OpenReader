@@ -498,7 +498,8 @@ export function highlightCss(colours: HighlightColours): string {
   return (
     SELECTABLE +
     '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: ' + rgba(sentence) + '; }\n' +
-    '::highlight(' + WORD_HIGHLIGHT + ') { background-color: ' + rgba(word) + '; }\n'
+    '::highlight(' + WORD_HIGHLIGHT + ') { background-color: ' + rgba(word) + '; }\n' +
+    '[data-or-mixed-text]::highlight(' + UTTERANCE_HIGHLIGHT + '), [data-or-mixed-text]::highlight(' + WORD_HIGHLIGHT + ') { background-color: transparent; }\n'
   );
 }
 
@@ -666,6 +667,8 @@ ${constants}
      does, and the element is in the Range's own document; put() still asks that
      document for its defaultView before it repaints anything. */
   var owners = new WeakMap();
+  var mixedOwners = new WeakSet();
+  var bareRanges = new WeakMap();
   var state = null;
   var frame = 0;
   /* How much of the bottom of the scroll container the player is covering, in CSS
@@ -733,34 +736,31 @@ ${constants}
     return parts;
   }
 
-  function savedLayer(doc) {
-    var layer = savedLayers.get(doc);
-    if (layer) return layer;
+  function createPaintLayer(doc, attribute, refresh) {
     var svg = doc.createElementNS(svgNamespace, 'svg');
     svg.setAttribute('aria-hidden', 'true');
     svg.setAttribute('focusable', 'false');
     // Append after the EPUB body. Existing CFI child indexes, text nodes,
     // selection handles and the section's flow all continue to belong to it.
-    svg.setAttribute('data-or-saved', '');
+    svg.setAttribute(attribute, '');
     doc.documentElement.appendChild(svg);
     function reflow() {
       if (!layer.frame) layer.frame = window.requestAnimationFrame(function () {
         layer.frame = 0;
-        if (doc.defaultView && savedLayers.get(doc) === layer) updateSavedSpeech(doc, true);
+        if (doc.defaultView && svg.parentNode) refresh();
       });
     }
     var observer = new doc.defaultView.ResizeObserver(reflow);
     observer.observe(doc.body);
     doc.fonts.addEventListener('loadingdone', reflow);
     doc.addEventListener('load', reflow, true);
-    layer = { svg: svg, frame: 0, dispose: function () {
+    var layer = { svg: svg, frame: 0, dispose: function () {
       observer.disconnect();
       doc.fonts.removeEventListener('loadingdone', reflow);
       doc.removeEventListener('load', reflow, true);
       if (layer.frame) window.cancelAnimationFrame(layer.frame);
       svg.parentNode.removeChild(svg);
     } };
-    savedLayers.set(doc, layer);
     return layer;
   }
 
@@ -783,7 +783,11 @@ ${constants}
       savedLayers.delete(doc);
       return;
     }
-    var svg = savedLayer(doc).svg;
+    if (!layer) {
+      layer = createPaintLayer(doc, 'data-or-saved', function () { updateSavedSpeech(doc, true); });
+      savedLayers.set(doc, layer);
+    }
+    var svg = layer.svg;
     while (svg.firstChild) svg.removeChild(svg.firstChild);
     live.forEach(function (one) {
       one.group = doc.createElementNS(svgNamespace, 'g');
@@ -1358,6 +1362,7 @@ ${constants}
         return;
       }
       close();
+      if (node.parentNode === owner && !outOfFlow(style)) mixedOwners.add(owner);
       var within = ITEM[tag] || display === 'list-item' || display === 'table-cell' ? items++ : item;
       for (i = 0; i < children.length; i++) visit(children[i], node, within);
       close();
@@ -1640,6 +1645,8 @@ ${constants}
     for (var i = 0; i < list.length; i++) {
       if (list[i] && list[i].document && list[i].document.defaultView) {
         ensureStyle(list[i].document);
+        var registry = registries.get(list[i].document);
+        if (registry && registry.mixedLayer) refreshMixedText(registry);
         if (savedLayers.has(list[i].document)) updateSavedSpeech(list[i].document, true);
       }
     }
@@ -2069,6 +2076,56 @@ ${constants}
     return found;
   }
 
+  function paintMixedText(registry, highlight) {
+    var layer = registry.mixedLayer;
+    var pieces = [];
+    highlight.forEach(function (range) {
+      var bare = bareRanges.get(range);
+      if (bare) bare.forEach(function (part) { pieces.push(part); });
+    });
+    if (!layer && !pieces.length) return;
+    var doc = registry.doc;
+    if (!doc.defaultView) return;
+    if (!layer) {
+      layer = createPaintLayer(doc, 'data-or-reading', function () { refreshMixedText(registry); });
+      registry.mixedLayer = layer;
+      layer.sentence = doc.createElementNS(svgNamespace, 'g');
+      layer.word = doc.createElementNS(svgNamespace, 'g');
+      layer.svg.appendChild(layer.sentence);
+      layer.svg.appendChild(layer.word);
+    }
+    var isWord = highlight === registry.word;
+    var group = isWord ? layer.word : layer.sentence;
+    while (group.firstChild) group.removeChild(group.firstChild);
+    if (pieces.length) {
+      layer.svg.setAttribute('style', 'position:absolute!important;top:0!important;left:0!important;width:1px!important;height:1px!important;overflow:visible!important;pointer-events:none!important;z-index:2147483647!important;mix-blend-mode:' + (THEME ? 'lighten' : 'darken') + '!important;');
+      var level = isWord ? WORD : UTTERANCE;
+      var colour = doc.defaultView.getComputedStyle(doc.documentElement, '::highlight(' + level + ')').backgroundColor;
+      var origin = layer.svg.getBoundingClientRect();
+      pieces.forEach(function (part) {
+        Array.from(part.getClientRects()).forEach(function (box) {
+          if (!box.width || !box.height) return;
+          var rect = doc.createElementNS(svgNamespace, 'rect');
+          rect.setAttribute('x', String(box.left - origin.left));
+          rect.setAttribute('y', String(box.top - origin.top));
+          rect.setAttribute('width', String(box.width));
+          rect.setAttribute('height', String(box.height));
+          rect.setAttribute('style', 'pointer-events:none!important;stroke:none!important;fill:' + colour + '!important;');
+          group.appendChild(rect);
+        });
+      });
+    }
+    if (!layer.sentence.firstChild && !layer.word.firstChild) {
+      layer.dispose();
+      registry.mixedLayer = null;
+    }
+  }
+
+  function refreshMixedText(registry) {
+    paintMixedText(registry, registry.utterance);
+    paintMixedText(registry, registry.word);
+  }
+
   /* Every change to a highlight goes through here, and so does the repaint the
      change needs and WebKit does not do (#35, ADR 0038).
 
@@ -2101,6 +2158,7 @@ ${constants}
       touched.push(owners.get(ranges[i]));
     }
     repaintBlocks(touched);
+    paintMixedText(installed, highlight);
   }
 
   /* A Block repainted whole without touching the DOM or a style. Adding a Range
@@ -2176,6 +2234,25 @@ ${constants}
     dom.setStart(from.node, range.start - from.at);
     dom.setEnd(to.node, range.end - to.at);
     owners.set(dom, live.element);
+    if (mixedOwners.has(live.element)) {
+      // WebKit leaves direct text in anonymous line boxes beside block children
+      // unpainted (#194). Inline descendants of the same owner paint normally.
+      var bare = [];
+      for (var i = 0; i < live.parts.length; i++) {
+        var part = live.parts[i];
+        var start = Math.max(0, range.start - part.at);
+        var end = Math.min(part.len, range.end - part.at);
+        if (end <= start || part.node.parentNode !== live.element) continue;
+        var piece = live.document.createRange();
+        piece.setStart(part.node, start);
+        piece.setEnd(part.node, end);
+        bare.push(piece);
+      }
+      if (bare.length) {
+        live.element.setAttribute('data-or-mixed-text', '');
+        bareRanges.set(dom, bare);
+      }
+    }
     return dom;
   }
 

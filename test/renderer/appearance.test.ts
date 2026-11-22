@@ -379,8 +379,10 @@ describe('Highlight Colours as a stylesheet', () => {
       expect(css.startsWith(selectable)).toBe(true);
       const rest = css.slice(selectable.length);
       expect(rest).not.toMatch(/user-select|touch-callout|display/);
-      expect(rest.split('\n').filter(Boolean)).toHaveLength(2);
-      for (const rule of rest.split('\n').filter(Boolean)) {
+      const rules = rest.trim().split('\n');
+      expect(rules.pop()).toBe('[data-or-mixed-text]::highlight(openreader-utterance), [data-or-mixed-text]::highlight(openreader-word) { background-color: transparent; }');
+      expect(rules).toHaveLength(2);
+      for (const rule of rules) {
         expect(rule).toMatch(/^::highlight\(openreader-(utterance|word)\) \{ background-color: rgba\(\d{1,3}, \d{1,3}, \d{1,3}, (0|1|0\.\d+)\); \}$/);
       }
     }
