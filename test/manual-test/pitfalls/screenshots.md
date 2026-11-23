@@ -993,7 +993,7 @@
 
 ## App Store screenshots on new simulators (1.0.2, 2026-10-24)
 
-What `app-store-screenshots/shoot.py` had to work around, on new iOS 27.0
+What `assets/app-store-screenshots/shoot.py` had to work around, on new iOS 27.0
 simulators (iPhone 17, iPad Pro 13-inch (M5)):
 
 - **The status bar says "09:41" after `status_bar override --time 9:41`.** A
@@ -1041,7 +1041,7 @@ simulators (iPhone 17, iPad Pro 13-inch (M5)):
 
 ## The App Store screenshot script
 
-- **An iPad run of `app-store-screenshots/shoot.py shoot ipad` stopped at
+- **An iPad run of `assets/app-store-screenshots/shoot.py shoot ipad` stopped at
   "'Connection successful' did not appear within 20 s"** right after it
   touched 'Enable Kokoro FastAPI' (2026-11-01, 1.0.4 (26)-free Release for
   the simulator, iOS 27.0). Its own run had built the app and shot the iPhone

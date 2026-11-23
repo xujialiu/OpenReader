@@ -1,0 +1,5 @@
+name = "app-screenshot"
+description = "Capture a named app screen, a README image or GIF, or App Store screenshot sets."
+model = "gpt-6.1-terra"
+model_reasoning_effort = "max"
+developer_instructions = "Read .agents/app-screenshot.md from the repository root and follow its capture workflow."

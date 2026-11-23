@@ -37,7 +37,7 @@ them. The iPhone and iPad sets show the same four screens, in this order:
 ## Making them
 
 Each step is a heavy simulator phase, so it runs under the shared iOS guard
-([ios-verification.md](../test/manual-test/kit/ios-verification.md)). From the
+([ios-verification.md](../../test/manual-test/kit/ios-verification.md)). From the
 repository root:
 
 ```sh
@@ -45,12 +45,12 @@ export DEVELOPER_DIR=/Applications/Xcode-27.1.0.app/Contents/Developer
 OUT=/tmp/openreader-screenshots
 # 1. The free role's Release app for the simulator. This rewrites ios/.
 python3 test/manual-test/kit/ios_guard.py run --wait 900 --timeout 1800 \
-  --record "$OUT/build.json" -- python3 app-store-screenshots/shoot.py build "$OUT/build"
+  --record "$OUT/build.json" -- python3 assets/app-store-screenshots/shoot.py build "$OUT/build"
 APP="$OUT/build/derived/Build/Products/Release-iphonesimulator/OpenReader.app"
 # 2. Each set, on a new simulator deleted afterwards with its work directory (--keep keeps both).
 for device in iphone ipad; do
   python3 test/manual-test/kit/ios_guard.py run --wait 900 --timeout 1500 \
-    --record "$OUT/$device.json" -- python3 app-store-screenshots/shoot.py shoot "$device" --app "$APP"
+    --record "$OUT/$device.json" -- python3 assets/app-store-screenshots/shoot.py shoot "$device" --app "$APP"
 done
 ```
 
@@ -100,14 +100,14 @@ App Store Connect → the version → Media Manager. Put the four iPhone files,
 four iPad files and two Duo files in their respective slots above, in file
 order. Smaller devices use the scaled-down set
 unless one of their own is added. See
-[App Store Connect reference](../docs/app-store-connect.md#metadata-and-review),
+[App Store Connect reference](../../docs/app-store-connect.md#metadata-and-review),
 whose **Working in the page** covers the sign-in and blank pages.
 
 - **Replacing a set**: Remove All, then confirm. It removes the set from this
   version only; the pictures stay in the media library.
 - **The file input** belongs to the selected device slot. With Playwright MCP,
   follow the visible-window and original-file-byte upload steps in
-  [the App Store Connect reference](../docs/app-store-connect.md#metadata-and-review)
+  [the App Store Connect reference](../../docs/app-store-connect.md#metadata-and-review)
   if the browser rejects native file-path upload. The zero-size `DropZone`
   accessibility button is a focus helper; its visible container is the drop
   target.

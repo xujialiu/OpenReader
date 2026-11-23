@@ -1,6 +1,6 @@
 # Delegation
 
-When a GLM subagent exhausts its quota, follow the [model fallback](../.agents/subagent-models.md).
+Choose the role for each assignment from the [agent guide](../.agents/README.md). When a GLM subagent exhausts its quota, follow the [model fallback](../.agents/README.md#glm-quota-fallback).
 
 ## Waiting for delegated agents
 

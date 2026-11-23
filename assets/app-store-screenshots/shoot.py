@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build the app for the simulator and take OpenReader's App Store screenshots.
 
-  python3 app-store-screenshots/shoot.py build OUT
-  python3 app-store-screenshots/shoot.py shoot iphone|ipad --app APP [--out DIR] [--keep]
+  python3 assets/app-store-screenshots/shoot.py build OUT
+  python3 assets/app-store-screenshots/shoot.py shoot iphone|ipad --app APP [--out DIR] [--keep]
 
 `build` makes the free role's Release app for the simulator in OUT and prints
 its path. It runs `expo prebuild`, which rewrites this checkout's `ios/`.
@@ -32,7 +32,7 @@ import urllib.parse
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(HERE)
+REPO = os.path.dirname(os.path.dirname(HERE))
 KIT = os.path.join(REPO, 'test', 'manual-test', 'kit')
 FAKE_KOKORO = os.path.join(REPO, 'test', 'manual-test', 'player-and-reading-held', 'fake-kokoro.cjs')
 BUNDLE = 'top.xujialiu.openreader'
