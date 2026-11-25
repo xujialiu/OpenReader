@@ -1007,6 +1007,8 @@ describe('language hint', () => {
   it.each([
     ['2/50 HP', true],
     ['Level Up!', true],
+    ['co\u00adoperate now please', true],
+    ['we co\u00adoperate now please', false],
     ['— 100 —', true],
     ['You gained 100 exp.', false],
     ['one two three four', false],

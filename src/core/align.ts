@@ -73,6 +73,10 @@ const DIGIT = /\p{Nd}/u;
 const SYMBOL = /\p{S}/u;
 /** Scripts written without spaces between words: every character is a token, so a word is a run of them. */
 const SPACELESS = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+// These scripts also join words without spaces. Keep their decimal digits in
+// numeric runs and let their punctuation separate words as before.
+const SOUTHEAST_ASIAN_SCRIPT = /[\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
+const LETTER_OR_MARK = /[\p{L}\p{M}]/u;
 const APOSTROPHE = /['’‘ʼ′]/u;
 
 /**
@@ -116,7 +120,7 @@ export function tokenize(text: string): Token[] {
   for (let c = 0; c < chars.length; c++) {
     const ch = chars[c];
     const next = chars[c + 1] ?? '';
-    if (SPACELESS.test(ch)) {
+    if (SPACELESS.test(ch) || (SOUTHEAST_ASIAN_SCRIPT.test(ch) && LETTER_OR_MARK.test(ch))) {
       flush();
       tokens.push({ key: keyOf(ch), start: i, end: i + ch.length });
     } else if (WORD_CHAR.test(ch)) {

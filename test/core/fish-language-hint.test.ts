@@ -22,6 +22,8 @@ describe('countWords', () => {
     'a.1', '1.a', "a'1", "1'a", 'a;b', 'HP:10', '10:30', 'a_b c', 'e-mail me', 'hello·world', 'a‘b',
     '“Hi”', 'C++ rocks', '$5 off', '50% off', 'A&B', '#hashtag', '@you', 'x=y', 'i.e., that', 'Mr. Smith',
     'café au lait', 'nai\u0308ve', '* * *', '— —', '', '   ',
+    'co\u00adoperate now please', 'می\u200cخواهم این را', 'क्\u200dष हम', 'wo\u2060rd', 'a\ufeffb',
+    'don\u200c’t', '3.\u200e14', 'two\u200bwords', 'one \u200d two', '\u00ad\u200d',
   ])('counts %j as Intl.Segmenter does', (text) => {
     expect(countWords(text)).toBe(icuWords(text));
   });

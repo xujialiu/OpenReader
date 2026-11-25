@@ -47,6 +47,9 @@ const LETTER = /\p{L}/u;
 const MARK = /\p{M}/u;
 const DIGIT = /\p{Nd}/u;
 const WORD = /[\p{L}\p{M}\p{N}_\u203F\u2040\u2054\uFE33\uFE34\uFE4D-\uFE4F\uFF3F]/u;
+// Unicode WordBreakProperty.txt: format controls with Word_Break=Format,
+// Extend or ZWJ are transparent to WB4. U+200B ZERO WIDTH SPACE is a break.
+const TRANSPARENT_FORMAT = /[\u00AD\u061C\u180E\u200C-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF\uFFF9-\uFFFB\u{13430}-\u{1343F}\u{1BCA0}-\u{1BCA3}\u{1D173}-\u{1D17A}\u{E0001}\u{E0020}-\u{E007F}]/gu;
 /** UAX #29's MidLetter, MidNumLet and Single_Quote: what keeps `don't`, `e.g`, `a:b` and `hello·world` one word. */
 const BETWEEN_LETTERS = new Set([':', '\u00B7', '\u0387', '\u05F4', '\u2027', '\uFE13', '\uFE55', '\uFF1A', '.', '\u2018', '\u2019', '\u2024', '\uFE52', '\uFF07', '\uFF0E', "'"]);
 /** UAX #29's MidNum, MidNumLet and Single_Quote: what keeps `3.14`, `1,000` and `1'000` one number. */
@@ -74,7 +77,7 @@ const isLetter = (ch: string | undefined): boolean => !!ch && LETTER.test(ch) &&
  * rather than being taken for one long word, which would have hinted it.
  */
 export function countWords(text: string, limit = Number.POSITIVE_INFINITY): number {
-  const chars = Array.from(text);
+  const chars = Array.from(text.replace(TRANSPARENT_FORMAT, ''));
   let words = 0;
   let inWord = false;
   for (let i = 0; i < chars.length; i++) {

@@ -228,6 +228,17 @@ describe('createAzureProvider', () => {
     ]);
   });
 
+  it('keeps Thai word boundaries when the source has no spaces', async () => {
+    const pending = provider().synthesize('ฉันรักเธอ', { ...opts, voice: 'th-TH-PremwadeeNeural' });
+    await opened();
+    FakeSocket.last.respond([boundary('ฉัน', 0, 5_000_000), boundary('รัก', 5_000_000, 5_000_000), boundary('เธอ', 10_000_000, 5_000_000)], [1, 2]);
+    expect((await pending).timestamps).toEqual([
+      { start: 0, end: 0.5, charStart: 0, charEnd: 3 },
+      { start: 0.5, end: 1, charStart: 3, charEnd: 6 },
+      { start: 1, end: 1.5, charStart: 6, charEnd: 9 },
+    ]);
+  });
+
   it('omits timestamps entirely when no word boundary arrived', async () => {
     const pending = provider().synthesize('Hello', opts);
     await opened();

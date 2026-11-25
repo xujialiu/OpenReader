@@ -72,6 +72,19 @@ describe('alignWordsToText', () => {
     ]);
   });
 
+  it.each([
+    ['Thai', ['ฉัน', 'รัก', 'เธอ']],
+    ['Lao', ['ສະບາຍດີ', 'ທຸກຄົນ']],
+    ['Khmer', ['សួស្តី', 'អ្នក']],
+    ['Myanmar', ['မင်္ဂလာပါ', 'ခင်ဗျာ']],
+  ] as const)('places adjacent %s words at the times the provider supplied', (_script, parts) => {
+    const text = parts.join('');
+    const words = spoken([...parts]);
+    const stamps = alignWordsToText(words, text);
+    expect(slices(text, stamps)).toEqual(parts);
+    expect(stamps.map(({ start, end }) => [start, end])).toEqual(words.map(({ start, end }) => [start, end]));
+  });
+
   it('returns an empty array when there are no words', () => {
     expect(alignWordsToText([], 'anything')).toEqual([]);
   });
