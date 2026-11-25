@@ -84,6 +84,36 @@ describe('a floated or absolutely positioned element in running text (#189, #194
     expect(segmentDocument(blocks, 'en').map((u) => u.text)).toEqual(['Chapter One', 'The door opened.', 'It was late.']);
   });
 
+  it.each(['float:left', 'position:absolute'])('reads and downloads a wrapped initial as part of its word (%s)', async (style) => {
+    const { page, section } = open(`<p><b><a><span style="${style}">T</span></a></b><em>he door opened.</em></p>`);
+    expect(segmentDocument(page.blocks(section), 'en').map(u => u.text)).toEqual(['The door opened.']);
+    const prepared = await page.prepare(3);
+    expect(sectionChapters(3, prepared.blocks, [], 'en')[0].texts).toEqual(['The door opened.']);
+  });
+
+  it('keeps wrapped positioned lines separate when the only text belongs to those lines', () => {
+    const html = '<p>Before.</p><div><b><span style="float:left">First.</span></b>' +
+      '<em><span style="float:left">Second.</span></em></div><p>After.</p>';
+    expect(blocksOf(html).map(b => b.text)).toEqual(['Before.', 'First.', 'Second.', 'After.']);
+  });
+
+  it.each(['position:absolute', 'float:left'])('reads only a linear number of styles for independent lines (%s)', async (style) => {
+    const size = 200;
+    const body = Array.from({ length: size }, (_, i) => `<div style="${style}">Line ${i}.</div>`).join('');
+    const page = standInPage();
+    const section = page.addSection(3, body);
+    const win = section.document.defaultView;
+    const computed = win.getComputedStyle;
+    let reads = 0;
+    win.getComputedStyle = (element: unknown) => { reads++; return computed(element); };
+    page.sweep();
+    expect(page.blocks(section)).toHaveLength(size);
+    expect(reads).toBeLessThan(8 * size);
+    reads = 0;
+    expect((await page.prepare(3)).blocks).toHaveLength(size);
+    expect(reads).toBeLessThan(8 * size);
+  });
+
   it('Chapter I of the Gutenberg Pride and Prejudice opens with "IT is a truth", as the Document spells it', () => {
     expect(sentencesOf(
       '<h2>Chapter I.</h2><p class="nind"><span class="letra" style="font-size:250%; float:left; margin-top:-1%">I</span>T is a truth universally acknowledged, that a single man in possession of a good fortune must be in want of a wife.</p>',

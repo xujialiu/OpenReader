@@ -129,8 +129,9 @@ export const HIGHLIGHTER = '__openReaderHighlighter';
  * 1 is every walk before #184: unrecorded in any catalogue. 2 keeps list items
  * and cells apart (#184), a drop cap in its word (#189) and the two lines of a
  * `<br>` apart (#192). 3 reports explicit paragraph break offsets (#380).
+ * 4 keeps a wrapped drop cap inside its word (#263).
  */
-export const BLOCK_WALK = 3;
+export const BLOCK_WALK = 4;
 
 /**
  * The fonts **Appearance** offers, as the owner reads them and as CSS names
@@ -1252,27 +1253,6 @@ ${constants}
     return floated !== 'none' || position === 'absolute' || position === 'fixed';
   }
 
-  /* Whether the element stands in running text: a sibling that stays in the line
-     holds text. A drop cap does ("<span>I</span>T is a truth"), and so does a
-     page number or a pull quote set inside a paragraph. The lines a converted
-     book positions each in an absolute box of its own do not: their siblings are
-     the other boxes, and they stay Blocks of their own. */
-  function inRunningText(win, node) {
-    var siblings = node.parentNode ? node.parentNode.childNodes : [];
-    for (var i = 0; i < siblings.length; i++) {
-      var sibling = siblings[i];
-      if (sibling === node) continue;
-      if (sibling.nodeType === 3) {
-        if (/\\S/.test(sibling.data)) return true;
-        continue;
-      }
-      if (sibling.nodeType !== 1 || SKIP[String(sibling.tagName || '').toUpperCase()]) continue;
-      var style = win.getComputedStyle(sibling);
-      if (String(style.display || '').lastIndexOf('inline', 0) === 0 && !outOfFlow(style) && /\\S/.test(sibling.textContent || '')) return true;
-    }
-    return false;
-  }
-
   function roleOf(element) {
     var tag = element && element.tagName ? element.tagName.toUpperCase() : '';
     if (HEADING[tag]) return 'heading';
@@ -1287,13 +1267,41 @@ ${constants}
     /* The items of this section, numbered as the walk enters them. */
     var items = 0;
 
+    /* A floated or positioned box belongs to its line when another part of
+       that line carries in-flow text. Look through inline wrappers on both
+       sides of a drop cap, but never use the letters inside positioned boxes
+       themselves as evidence. A group of positioned lines stays separate.
+       Results live for this walk so another rendering can use different CSS. */
+    var runningText = new WeakMap();
+    function hasRunningText(container) {
+      if (runningText.has(container)) return runningText.get(container);
+      var children = container.childNodes;
+      var foundText = false;
+      for (var i = 0; i < children.length && !foundText; i++) {
+        var child = children[i];
+        if (child.nodeType === 3) {
+          foundText = /\\S/.test(child.data);
+        } else if (child.nodeType === 1 && !SKIP[String(child.tagName).toUpperCase()]) {
+          var style = win.getComputedStyle(child);
+          var display = String(style.display || '');
+          if (inlineDisplay(display) && !outOfFlow(style)) foundText = hasRunningText(child);
+        }
+      }
+      runningText.set(container, foundText);
+      return foundText;
+    }
+
+    function inlineDisplay(display) {
+      return display.lastIndexOf('inline', 0) === 0 || display === 'contents' || display.lastIndexOf('ruby', 0) === 0;
+    }
+
     function close() {
       if (open && /\\S/.test(open.text)) found.push(open);
       open = null;
     }
 
     /* \`item\` is the number of the list item or cell the node is in, or null. */
-    function visit(node, owner, item) {
+    function visit(node, owner, item, line) {
       if (node.nodeType === 3) {
         if (!node.data.length) return;
         if (!open) open = { element: owner, text: '', parts: [], item: item, broken: false };
@@ -1338,15 +1346,8 @@ ${constants}
          is treated as a Block, because welding two Blocks the document presents
          apart is a lie about the document (rejoin.ts) while splitting one is only
          a pause in the wrong place. */
-      var inline =
-        display.lastIndexOf('inline', 0) === 0 ||
-        display === 'contents' ||
-        display.lastIndexOf('ruby', 0) === 0 ||
-        /* Taken out of a line of running text, it is still read in it: a
-           floated drop cap is the first letter of its word (#189), and a page
-           number or a pull quote set in a paragraph leaves the paragraph one
-           Block with one CFI (#194). */
-        (!!style && outOfFlow(style) && inRunningText(win, node));
+      var positioned = !!style && outOfFlow(style);
+      var inline = inlineDisplay(display) || (positioned && hasRunningText(line));
       var children = node.childNodes;
       var i;
       if (inline) {
@@ -1363,18 +1364,20 @@ ${constants}
             open.images.push({ at: open.text.length, text: description });
           }
         }
-        for (i = 0; i < children.length; i++) visit(children[i], owner, item);
+        /* A float or an atomic inline box lays out its own contents. */
+        var innerLine = positioned || display.indexOf('inline-') === 0 ? node : line;
+        for (i = 0; i < children.length; i++) visit(children[i], owner, item, innerLine);
         return;
       }
       close();
       if (node.parentNode === owner && !outOfFlow(style)) mixedOwners.add(owner);
       var within = ITEM[tag] || display === 'list-item' || display === 'table-cell' ? items++ : item;
-      for (i = 0; i < children.length; i++) visit(children[i], node, within);
+      for (i = 0; i < children.length; i++) visit(children[i], node, within, node);
       close();
     }
 
     var body = contents.document.body;
-    if (body) visit(body, body, null);
+    if (body) visit(body, body, null, body);
     close();
     return found;
   }
