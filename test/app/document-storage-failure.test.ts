@@ -5,15 +5,16 @@ import { File } from 'expo-file-system';
 
 import { DOCUMENT_ID_RULE, asDocumentId, createLocator, readingPositionAt, serializeLibrary, type LibraryEntry } from '../../src/core/document';
 import { createFolderStore } from '../../src/core/folders';
-import { documentFile, keepDocument } from '../../src/app/library';
+import { documentFile, keepDocument, readLibrary } from '../../src/app/library';
+import { importDocument } from '../../src/app/import-document';
 import { openDocument } from '../../src/app/document';
 import { useLibrary, type Library } from '../../src/app/use-library';
 
 const disk = vi.hoisted(() => ({
   files: new Map<string, string>(), directories: new Set<string>(),
-  failure: null as 'copy' | 'replace' | null, nativeAvailable: true, identify: vi.fn(),
+  failure: null as 'copy' | 'replace' | null, nativeAvailable: true, identify: vi.fn(), alert: vi.fn(), failFolders: false, failLibrary: false,
 }));
-vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
+vi.mock('react-native', () => ({ Platform: { OS: 'ios' }, Alert: { alert: disk.alert } }));
 vi.mock('expo-file-system', () => {
   class File {
     uri: string;
@@ -56,12 +57,15 @@ vi.mock('expo-file-system', () => {
       disk.directories.delete(this.uri);
     }
   }
-  return { File, Directory, Paths: { document: 'file:///documents' }, FileMode: { ReadOnly: 'r' } };
+  return { File, Directory, Paths: { document: { uri: 'file:///documents' } }, FileMode: { ReadOnly: 'r' } };
 });
 vi.mock('../../modules/open-reader-offline', () => ({
   get offlineNative() {
     return disk.nativeAvailable ? {
-      writeJson: (uri: string, text: string) => { disk.files.set(uri, text); },
+      writeJson: (uri: string, text: string) => {
+        if (disk.failLibrary) throw new Error('Library write refused');
+        disk.files.set(uri, text);
+      },
       replaceFile: (source: string, destination: string) => {
         if (disk.failure === 'replace') throw new Error('Replacement refused');
         const bytes = disk.files.get(source);
@@ -78,7 +82,7 @@ vi.mock('../../src/app/document', async () => ({
 }));
 vi.mock('../../src/app/display-names', () => ({ displayNames: () => ({}), forgetDisplayName() {}, saveDisplayName() {} }));
 vi.mock('../../src/app/folder-storage', () => ({ openFolderStore: () => createFolderStore({
-  read: () => null, write: () => {}, id: () => 'folder',
+  read: () => null, write: () => { if (disk.failFolders) throw new Error('Folder write refused'); }, id: () => 'folder',
 }) }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -102,6 +106,7 @@ function expectNoStaging() {
   expect([...disk.directories].filter((uri) => uri.includes('/.import-'))).toEqual([]);
 }
 beforeEach(() => {
+  disk.alert.mockReset(); disk.failFolders = false; disk.failLibrary = false;
   disk.files.clear(); disk.directories.clear(); disk.failure = null; disk.nativeAvailable = true;
   disk.files.set('file:///documents/this-device', 'iPhone-test0001');
   disk.files.set('file:///documents/library-id-rule', DOCUMENT_ID_RULE);
@@ -161,5 +166,66 @@ describe('real duplicate-import path (#261)', () => {
     expect(disk.files.get('file:///documents/library.json')).toBe(serializeLibrary([entry]));
     expect((await openDocument(entry, entry.title)).base64).toBe('OLD EPUB');
     expectNoStaging();
+  });
+});
+
+
+const newId = asDocumentId(`sha256:${'b'.repeat(64)}`)!;
+function identifyNew(title: string) {
+  disk.identify.mockResolvedValue({ identity: { ...entry, id: newId }, title });
+}
+
+describe('files after import cancellation or refusal (#265, #309)', () => {
+  it.each(['Folder', 'Library'])('rolls back a newly kept EPUB on a %s write failure and permits retry', async (store) => {
+    identifyNew('Another book');
+    const app = await mount();
+    const target = documentFile(newId, 'epub');
+    disk.failFolders = store === 'Folder';
+    disk.failLibrary = store === 'Library';
+    await act(async () => {
+      await expect(importDocument(app.library, new File(source), { move: false }, vi.fn())).rejects.toThrow(`${store} write refused`);
+    });
+    expect(target.exists).toBe(false);
+    expect(readLibrary().entries).toEqual([entry]);
+    expect(disk.files.get(source)).toBe('NEW EPUB');
+    disk.failFolders = disk.failLibrary = false;
+    await act(async () => { await importDocument(app.library, new File(source), { move: false }, vi.fn()); });
+    expect(readLibrary().entries).toHaveLength(2);
+    expect(disk.files.get(target.uri)).toBe('NEW EPUB');
+    expectNoStaging();
+  });
+
+  it('restores a pre-existing unlisted file when registration fails', async () => {
+    identifyNew('Another book');
+    const target = documentFile(newId, 'epub');
+    disk.files.set(target.uri, 'PREVIOUS CONTENTS');
+    const app = await mount();
+    disk.failLibrary = true;
+    await act(async () => {
+      await expect(app.library.add(new File(source), { move: false })).rejects.toThrow('Library write refused');
+    });
+    expect(disk.files.get(target.uri)).toBe('PREVIOUS CONTENTS');
+    expectNoStaging();
+  });
+
+  it.each(['cancel', 'corrupt'])('%s clears only the arriving Inbox copy', async (reason) => {
+    const app = await mount();
+    identifyNew(entry.title);
+    disk.alert.mockImplementation((_title, _message, buttons) => buttons[0].onPress());
+    if (reason === 'corrupt') disk.identify.mockRejectedValue(new Error('Invalid EPUB'));
+    for (const move of [true, false]) {
+      const file = new File(move ? 'file:///documents/Inbox/book.epub' : source);
+      disk.files.set(file.uri, 'INCOMING');
+      const open = vi.fn();
+      await act(async () => {
+        const importing = importDocument(app.library, file, { move }, open);
+        if (reason === 'cancel') await importing;
+        else await expect(importing).rejects.toThrow('Invalid EPUB');
+      });
+      expect(open).not.toHaveBeenCalled();
+      expect(file.exists).toBe(!move);
+    }
+    expect(readLibrary().entries).toEqual([entry]);
+    expect(disk.files.get(documentFile(id, 'epub').uri)).toBe('OLD EPUB');
   });
 });

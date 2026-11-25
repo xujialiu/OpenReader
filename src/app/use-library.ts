@@ -292,13 +292,14 @@ export function useLibrary(): Library {
        * write refuses the import and keeps nothing.
        */
       if (displayNames()[added.identity.id] !== undefined) forgetDisplayName(added.identity.id);
-      keepFile(added, source, options);
       const entry: LibraryEntry = { ...added.identity, title, position: null, stamp: stamp() };
       // Membership is saved first: an interrupted import may leave an unused
       // mapping, but can never expose a successfully imported book in the wrong folder.
-      clearDocumentHighlights(entry.id);
-      folders.place(entry.id, parent);
-      commit((was) => [...was, entry], true);
+      keepFile(added, source, options, () => {
+        clearDocumentHighlights(entry.id);
+        folders.place(entry.id, parent);
+        commit((was) => [...was, entry], true);
+      });
       return { entry, duplicate: false };
     },
     [commit, stamp, folders],

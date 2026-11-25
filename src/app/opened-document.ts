@@ -64,7 +64,10 @@ export interface HandedOverFile {
 }
 
 /** The directory iOS copies a shared document into. Apple requires the app to empty it; that is what `move` does. */
-const INBOX = 'Inbox/';
+export function isInboxFile(file: File): boolean {
+  const inbox = `${Paths.document.uri.replace(/\/+$/, '')}/Inbox/`;
+  return file.uri.startsWith(inbox);
+}
 
 /**
  * Hand every EPUB another app sends to `onFile`, starting with the one that
@@ -127,6 +130,5 @@ function handedOver(url: string): HandedOverFile | null {
   // an extended attribute to go on.
   if (file.type !== EPUB_MEDIA_TYPE && file.extension.toLowerCase() !== '.epub') return null;
 
-  const inbox = `${Paths.document.uri.replace(/\/+$/, '')}/${INBOX}`;
-  return { file, move: file.uri.startsWith(inbox) };
+  return { file, move: isInboxFile(file) };
 }

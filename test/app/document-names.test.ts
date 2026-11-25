@@ -21,7 +21,10 @@ const disk = vi.hoisted(() => ({ entries: [] as LibraryEntry[], folders: null as
 vi.mock('expo-file-system', () => ({ File: class {} }));
 vi.mock('react-native', () => ({ Alert: { alert: disk.alert } }));
 vi.mock('../../src/app/document', () => ({
-  keepFile: (added: { identity: { id: string } }) => { disk.kept.push(added.identity.id); },
+  keepFile: (added: { identity: { id: string } }, _source: unknown, _options: unknown, register?: () => void) => {
+    disk.kept.push(added.identity.id);
+    register?.();
+  },
   identifyFile: async (source: { name: string; bytes: string }) => ({
     identity: { id: `sha256:${source.bytes.repeat(64).slice(0, 64)}`, format: 'epub', publicationId: null, publicationIdSource: 'none' },
     title: source.name.replace(/\.[^.]+$/, ''),

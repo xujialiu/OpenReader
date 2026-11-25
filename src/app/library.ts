@@ -140,16 +140,24 @@ export function documentFile(id: DocumentId, format: DocumentFormat): File {
  * Expo's overwrite copy/move deletes the destination before copying (#261):
  * stage a complete copy on this filesystem, then commit it with native rename.
  */
-export function keepDocument(id: DocumentId, format: DocumentFormat, source: File, options: { move: boolean }): File {
+export function keepDocument(id: DocumentId, format: DocumentFormat, source: File, options: { move: boolean }, register?: () => void): File {
   const destination = documentFile(id, format);
-  if (source.uri === destination.uri) return destination;
+  if (source.uri === destination.uri) {
+    register?.();
+    return destination;
+  }
   if (!offlineNative?.replaceFile) throw new Error('Atomic document storage is unavailable. The document was not added.');
 
   // A private directory reserves the name without ever overwriting another import.
   const staging = new Directory(booksDirectory(), `.import-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   staging.create();
   const pending = new File(staging, destination.name);
+  // A new entry can reattach previously unlisted bytes. Keep those bytes until
+  // the Folder and Library both accept the entry (#309). A duplicate already
+  // has an entry and takes the usual atomic replacement path.
+  const previous = register && destination.exists ? new File(staging, 'previous.epub') : null;
   try {
+    if (previous) destination.copySync(previous);
     // Keep Expo's scoped access to a file handed over by Files. Even a move keeps
     // its source until the new file has been committed successfully.
     source.copySync(pending);
@@ -159,6 +167,18 @@ export function keepDocument(id: DocumentId, format: DocumentFormat, source: Fil
       staging.delete();
     } catch (cleanup) {
       throw new Error(`${describe(problem)} The temporary copy could not be removed: ${describe(cleanup)}`);
+    }
+    throw problem;
+  }
+  try {
+    register?.();
+  } catch (problem) {
+    try {
+      if (previous) offlineNative.replaceFile(previous.uri, destination.uri);
+      else destination.delete();
+      staging.delete();
+    } catch (cleanup) {
+      throw new Error(`${describe(problem)} The document file could not be rolled back: ${describe(cleanup)}`);
     }
     throw problem;
   }

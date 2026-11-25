@@ -169,8 +169,8 @@ export async function identifyFile(source: File): Promise<AddedDocument> {
  * Keep the file `identifyFile` read, under its Document Id, moved or copied as
  * `options` says. Read `source.name` before this, never after (`identifyFile`).
  */
-export function keepFile(added: AddedDocument, source: File, options: { move: boolean }): void {
-  keepDocument(added.identity.id, added.identity.format, source, options);
+export function keepFile(added: AddedDocument, source: File, options: { move: boolean }, register?: () => void): void {
+  keepDocument(added.identity.id, added.identity.format, source, options, register);
 }
 
 /**

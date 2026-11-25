@@ -63,7 +63,7 @@ beforeEach(() => {
   disk.files.clear(); disk.readFailure = false;
   disk.files.set('file:///documents/this-device', 'iPhone-test0001');
   disk.files.set(rule, DOCUMENT_ID_RULE);
-  disk.identify.mockReset(); disk.keep.mockReset(); disk.forgetName.mockReset(); disk.saveName.mockReset(); disk.folderWrite.mockReset();
+  disk.identify.mockReset(); disk.keep.mockReset().mockImplementation((_added, _source, _options, register) => register?.()); disk.forgetName.mockReset(); disk.saveName.mockReset(); disk.folderWrite.mockReset();
   disk.identify.mockResolvedValue({ identity: entry, title: entry.title });
 });
 afterEach(async () => { await act(async () => { for (const tree of trees.splice(0)) tree.unmount(); }); });
