@@ -55,13 +55,14 @@ const engines = vi.hoisted(() => {
     clock: { onClip(cue: { utterance: number; words: null; duration: number; rate: number }): void };
     onState?(state: { playing: boolean; buffering: boolean }): void;
     onError(error: unknown): void;
+    onOutOfText(report: { known: number; unspoken: number; refusal: null }): void;
   }
   interface Load { length: number; from: number; quiet: boolean }
   /** `calls` is every load, extend, seek, play and pause in the order they came, for a test about which came first. */
-  const built: { deps: Deps; loads: Load[]; seeks: number[]; pauses: number; calls: string[] }[] = [];
+  const built: { deps: Deps; loads: Load[]; seeks: number[]; pauses: number; calls: string[]; switches: (() => void)[] }[] = [];
   function create(deps: Deps) {
     let playing = false;
-    const engine = { deps, loads: [] as Load[], seeks: [] as number[], pauses: 0, calls: [] as string[] };
+    const engine = { deps, loads: [] as Load[], seeks: [] as number[], pauses: 0, calls: [] as string[], switches: [] as (() => void)[] };
     built.push(engine);
     return {
       load(list: readonly unknown[], from = 0, options: { quiet?: boolean } = {}) {
@@ -74,7 +75,7 @@ const engines = vi.hoisted(() => {
       silence() { engine.calls.push('silence'); },
       seek(utterance: number) { engine.seeks.push(utterance); engine.calls.push(`seek:${utterance}`); },
       setRate() {},
-      switchVoice() {},
+      switchVoice(_provider: unknown, _voice: string, landed: () => void) { engine.switches.push(landed); },
       cancelVoiceSwitch() {}, stopAfter() {},
       snapshot: () => ({ playing, utterance: 0, rate: 1, queued: 0, fetching: 0 }),
       dispose: async () => {},
@@ -98,6 +99,7 @@ vi.mock('../../src/renderer', async () => {
         show: bridge.show,
         clock: { onClip: bridge.onClip, onPosition() {} },
         setUtterances() {},
+        snapshot() {},
         setInset() {},
         setOpenPlayer() {},
         setLinePosition() {},
@@ -581,22 +583,40 @@ describe('a section reported above the reading (#46)', () => {
     await m.down();
   });
 
-  it('lets go of a Voice being switched to, which the reload cancels, rather than leave it pending', async () => {
+  it('restarts the pending Voice handover at the carried sentence (#292)', async () => {
     const m = mount({ settings: READY, spine: CHAPTERS });
     await m.up();
     await m.report(reported(5, 6), 6);
     await m.press((reading) => reading.play());
     const engine = engines.built[0];
     await m.press(() => engine.deps.clock.onClip({ utterance: 2, words: null, duration: 1, rate: 1 }));
-    await m.press((reading) => reading.chooseVoice('local', 'bf_emma', () => {}));
-    expect(m.reading.status.pendingVoice).toEqual({ provider: 'local', voice: 'bf_emma' });
-
+    const selected = vi.fn();
+    await m.press((reading) => reading.chooseVoice('local', 'bf_emma', selected));
+    expect(engine.switches).toHaveLength(1);
     await m.report(reported(3, 5, 6), 3);
     expect(engine.loads.at(-1)).toEqual({ length: 9, from: indexIn([3, 5, 6], LAST_OF_FIVE), quiet: false });
-    expect(m.reading.status.pendingVoice).toBeNull();
-    // And the same Voice can be chosen again: nothing is left claiming it is on its way.
-    await m.press((reading) => reading.chooseVoice('local', 'bf_emma', () => {}));
+    expect(engine.switches).toHaveLength(2);
+    await m.press(engine.switches[0]);
+    expect(selected).not.toHaveBeenCalled();
     expect(m.reading.status.pendingVoice).toEqual({ provider: 'local', voice: 'bf_emma' });
+    await m.press(engine.switches[1]);
+    expect(selected).toHaveBeenCalledTimes(1);
+    expect(m.reading.status.pendingVoice).toBeNull();
+    await m.down();
+  });
+
+  it('saves a pending Voice once at natural document end (#251)', async () => {
+    const m = mount({ settings: READY, spine: 1 });
+    await m.up();
+    await m.report(blocks(0, ['Final sentence.']), 0);
+    await m.press((reading) => reading.play());
+    const selected = vi.fn();
+    await m.press((reading) => reading.chooseVoice('local', 'bf_emma', selected));
+    const engine = engines.built[0];
+    await m.press(() => engine.deps.onOutOfText({ known: 1, unspoken: 0, refusal: null }));
+    await m.press(engine.switches[0]);
+    expect(m.reading.status).toMatchObject({ playing: false, pendingVoice: null, voiceError: null });
+    expect(selected).toHaveBeenCalledTimes(1);
     await m.down();
   });
 
@@ -647,6 +667,8 @@ describe('a section reported above the reading (#46)', () => {
     const engine = engines.built[0];
     await m.press(() => engine.deps.clock.onClip({ utterance: 2, words: null, duration: 1, rate: 1 }));
 
+    const selected = vi.fn();
+    await m.press((reading) => reading.chooseVoice('local', 'bf_emma', selected));
     // Section 5 reports again with other words in it: the sentence is nowhere.
     const rewritten = [...blocks(5, ['Chapter Five.', 'Other words entirely. Nothing like before.']), ...chapter(6)];
     await m.report(rewritten, 5);
@@ -657,6 +679,9 @@ describe('a section reported above the reading (#46)', () => {
     expect(engine.loads.at(-1)).toEqual({ length: 6, from: 0, quiet: true });
     expect(m.reading.status.utterance).toBeNull();
     expect(m.reading.status.note ?? '').toMatch(RENUMBERED);
+    expect(m.reading.status.voiceError).toMatch(/voice/i);
+    expect(m.reading.status.pendingVoice).toBeNull();
+    expect(selected).not.toHaveBeenCalled();
     await m.down();
   });
 });

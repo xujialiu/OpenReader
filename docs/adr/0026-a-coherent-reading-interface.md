@@ -220,6 +220,12 @@ voice selected. A paused selection still updates settings immediately without
 starting synthesis. Configuration changes and unmount still dispose the engine;
 an accepted live handover alone retains it. The cursor preservation of 0025 stays.
 
+When a section report renumbers the audible sentence, the Reading carries the
+sentence to its new index and starts a fresh handover for the pending choice.
+Its request number retires callbacks for the old indices. Natural document end
+applies the pending choice as a paused preference for the next Reading. ADR
+0089 makes this preference global.
+
 The boundary matcher comes from the owner's Zotero-TTS code, including the
 captured Kokoro negative-onset fixture. It requires a shared, whole text-token
 boundary in both timing arrays and never equates playback seconds across voices.

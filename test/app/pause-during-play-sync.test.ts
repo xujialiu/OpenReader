@@ -1,6 +1,6 @@
 import Module from 'node:module';
 
-import { createElement, useEffect, useMemo } from 'react';
+import { createElement, useEffect, useMemo, useState } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -33,6 +33,9 @@ const world = vi.hoisted(() => ({
   page: null as null | { onBlocks?(blocks: readonly unknown[], section: { index: number; href: string; spine: number }): void },
   /** What the audio graph was last told: whether sound is coming out. */
   sounding: false,
+  rate: 0,
+  spokenVoice: '',
+  voiceSheet: null as null | { onChoose(provider: string, voice: string): void },
   nowPlaying: {
     /** Whether the commands are claimed: the native module claims them in `show`, and not before. */
     claimed: false,
@@ -40,7 +43,7 @@ const world = vi.hoisted(() => ({
     /** The state Now Playing was last told. */
     playing: null as null | boolean,
   },
-  player: null as null | { playing: boolean; buffering: boolean; onPlay(): void; onPause(): void },
+  player: null as null | { playing: boolean; buffering: boolean; onPlay(): void; onPause(): void; onRate(rate: number): void },
   disk: { entries: [] as unknown[] },
   /**
    * The Sync Folder: while `slow`, a download waits in `waiting` until the test
@@ -90,7 +93,7 @@ vi.mock('../../src/playback/audio-graph', () => ({
       prepare: async (clip: { utterance: number }) => ({ clip, samples: new Float32Array(2400), duration: 0.1 }),
       enqueue: (audio: { duration: number }, gap: number, from = 0, to = audio.duration) =>
         [{ bufferId: `b${serial++}`, speech: to - from, gap, offset: from, duration: audio.duration }],
-      remove() {}, setRate() {}, clear() {}, dispose: async () => {},
+      remove() {}, setRate(rate: number) { world.rate = rate; }, clear() {}, dispose: async () => {},
       resume() { world.sounding = true; },
       pause() { world.sounding = false; },
     };
@@ -102,7 +105,10 @@ vi.mock('../../src/offline/runtime', () => ({
   releaseProgress: () => {}, requestProgress: () => {}, requestInventory: async () => {}, useDownloads: () => 0, prioritizeRecheck: () => {}, setReadingPlays: () => {},
   offlineProvider: () => ({
     id: 'local', capabilities: { wordTimestamps: false }, listVoices: async () => [],
-    synthesize: async () => ({ audio: 'pcm' as const, samples: new Uint8Array(4800), sampleRate: 24000 }),
+    synthesize: async (_text: string, options: { voice: string }) => {
+      world.spokenVoice = options.voice;
+      return { audio: 'pcm' as const, samples: new Uint8Array(4800), sampleRate: 24000 };
+    },
   }),
 }));
 // The Library's disk.
@@ -128,7 +134,7 @@ vi.mock('../../src/app/use-lookup', () => ({ useLookup: () => ({ selection: null
 vi.mock('../../src/app/saved-highlights', () => ({ SavedHighlights: ({ renderLookup }: { renderLookup(): unknown }) => renderLookup() }));
 vi.mock('../../src/app/lookup-drawer', () => ({ LookupDrawer: () => null }));
 vi.mock('../../src/app/contents-sheet', () => ({ ContentsSheet: () => null }));
-vi.mock('../../src/app/voice-sheet', () => ({ VoiceSheet: () => null }));
+vi.mock('../../src/app/voice-sheet', () => ({ VoiceSheet: (props: NonNullable<typeof world.voiceSheet>) => { world.voiceSheet = props; return null; } }));
 vi.mock('../../src/app/player', () => ({ Player: (props: NonNullable<typeof world.player>) => { world.player = props; return null; } }));
 vi.mock('../../src/app/document-cover', () => ({ useDocumentCover: () => null }));
 vi.mock('../../src/app/reader-file-system', () => ({ useReaderFileSystem: () => ({}) }));
@@ -196,11 +202,12 @@ function Open() {
 /** What `shell.tsx` holds for every screen: the Library, the sync transport and the settings, in the real context. */
 function ShellProbe() {
   const library = useLibrary();
-  const { sync, last } = useSync(SETTINGS, library, WEBDAV);
+  const [settings, setSettings] = useState(SETTINGS);
+  const { sync, last } = useSync(settings, library, WEBDAV);
   useEffect(() => { world.sync = sync; }, [sync]);
   const value = useMemo<Shell>(
-    () => ({ settings: SETTINGS, setSettings() {}, library, secretsWritten: 0, secretRevisions: {}, noteSecretWritten() {}, sync, syncLast: last }),
-    [library, sync, last],
+    () => ({ settings, setSettings, library, secretsWritten: 0, secretRevisions: {}, noteSecretWritten() {}, sync, syncLast: last }),
+    [settings, library, sync, last],
   );
   return createElement(ShellContext.Provider, { value }, createElement(ReadingHost, null, createElement(Open)));
 }
@@ -249,6 +256,7 @@ beforeEach(() => {
     stamp: { at: 1, device: 'iPhone-test0001' },
   } satisfies LibraryEntry];
   world.folder.slow = false; world.folder.unreachable = false; world.folder.waiting.length = 0;
+  world.rate = 0; world.spokenVoice = ''; world.voiceSheet = null;
   world.sync = null; world.connectivity = null;
 });
 afterEach(async () => {
@@ -258,6 +266,26 @@ afterEach(async () => {
 });
 
 describe('Play in Now Playing, with a Sync Folder that takes a moment to answer', () => {
+  it.each(['reply', 'timeout'])('applies the voice and speed chosen while waiting for a sync %s (#270)', async (outcome) => {
+    await act(async () => { tree = create(createElement(ShellProbe)); });
+    await settle();
+    await act(async () => { world.page!.onBlocks!([SENTENCE], { index: 0, href: 's0.xhtml', spine: 1 }); });
+    await settle();
+    world.folder.slow = true;
+    await act(async () => { world.player!.onPlay(); });
+    await settle();
+    expect(world.folder.waiting.length).toBeGreaterThan(0);
+    expect(world.sounding).toBe(false);
+    await act(async () => {
+      world.player!.onRate(2.5);
+      world.voiceSheet!.onChoose('local', 'af_heart');
+    });
+    if (outcome === 'reply') await folderAnswers();
+    else await act(async () => { await vi.advanceTimersByTimeAsync(WAIT_MS); });
+    await settle();
+    expect([world.sounding, world.rate, world.spokenVoice]).toEqual([true, 2.5, 'af_heart']);
+  });
+
   it('nothing sounds while Play waits for its sync, the Player shows the press as starting at once (#304), and the Reading starts when the folder answers', async () => {
     await pausedWithSlowFolder();
     await press('play');
