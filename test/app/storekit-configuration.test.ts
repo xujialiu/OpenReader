@@ -34,17 +34,20 @@ describe('storekit/OpenReader.storekit', () => {
 
 describe('the scheme edit', () => {
   const scheme = [
+    '<Scheme>',
     '   <LaunchAction',
     '      buildConfiguration = "Debug">',
     '      <BuildableProductRunnable>',
     '      </BuildableProductRunnable>',
     '   </LaunchAction>',
-    '   <ProfileAction>',
+    '   <ProfileAction/>',
+    '</Scheme>',
     '',
   ].join('\n');
 
   it('adds the reference as the last child of the Run action, indented as Xcode writes it', () => {
     expect(withStoreKitReference(scheme, '../../storekit/OpenReader.storekit')).toBe([
+      '<Scheme>',
       '   <LaunchAction',
       '      buildConfiguration = "Debug">',
       '      <BuildableProductRunnable>',
@@ -53,14 +56,19 @@ describe('the scheme edit', () => {
       '         identifier = "../../storekit/OpenReader.storekit">',
       '      </StoreKitConfigurationFileReference>',
       '   </LaunchAction>',
-      '   <ProfileAction>',
+      '   <ProfileAction/>',
+      '</Scheme>',
       '',
     ].join('\n'));
   });
 
-  it('refuses a scheme that already names one, and one with no Run action', () => {
+  it('reuses the same Run configuration and reports both paths for a conflict', () => {
     const once = withStoreKitReference(scheme, 'x.storekit');
-    expect(() => withStoreKitReference(once, 'x.storekit')).toThrow(/already names a StoreKit configuration/);
+    expect(withStoreKitReference(once, 'x.storekit')).toBe(once);
+    expect(() => withStoreKitReference(once, 'y.storekit')).toThrow(/x\.storekit.*y\.storekit/);
+    const misplaced = '<Scheme><LaunchAction></LaunchAction><ProfileAction>' +
+      '<StoreKitConfigurationFileReference identifier="x.storekit"/></ProfileAction></Scheme>';
+    expect(() => withStoreKitReference(misplaced, 'x.storekit')).toThrow(/LaunchAction/);
     expect(() => withStoreKitReference('<Scheme></Scheme>', 'x.storekit')).toThrow(/no LaunchAction/);
   });
 });

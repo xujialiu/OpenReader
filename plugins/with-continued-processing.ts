@@ -19,9 +19,8 @@ import { withInfoPlist, type ConfigPlugin } from 'expo/config-plugins';
  * `BGProcessingTask`), and the react-native-audio-api plugin owns that key
  * (app.config.ts). A `notPermitted` refusal on the device would say otherwise.
  *
- * The house style of `plugins/with-epub-document-types.ts`: if something else
- * has written the key, the prebuild stops and says so, rather than merging two
- * lists nobody reasoned about together.
+ * A repeated prebuild accepts the same singleton list. Any other list
+ * requires an explicit decision about which tasks the app can schedule.
  */
 const withContinuedProcessing: ConfigPlugin = (config) =>
   withInfoPlist(config, (infoPlistConfig) => {
@@ -34,19 +33,12 @@ const withContinuedProcessing: ConfigPlugin = (config) =>
     }
 
     const plist = infoPlistConfig.modResults;
-    if (plist.BGTaskSchedulerPermittedIdentifiers !== undefined) {
-      throw new Error(
-        '[with-continued-processing] The generated Info.plist already contains ' +
-          'BGTaskSchedulerPermittedIdentifiers, so something else is writing it now.\n\n' +
-          'Two writers of one Info.plist key is the failure app.config.ts already warns about ' +
-          'for UIBackgroundModes. This key decides whether a download goes on away from the ' +
-          'screen, and getting it wrong shows only as a download that stops within a minute. ' +
-          'Find the other writer and put both identifiers in one place. Nothing is merged here ' +
-          'on purpose.'
-      );
+    const identifier = `${bundle}.download.*`;
+    const existing = plist.BGTaskSchedulerPermittedIdentifiers;
+    if (existing !== undefined && !(Array.isArray(existing) && existing.length === 1 && existing[0] === identifier)) {
+      throw new Error(`[with-continued-processing] Info.plist already contains BGTaskSchedulerPermittedIdentifiers = ${JSON.stringify(existing)}. Expected only ${identifier}.`);
     }
-
-    plist.BGTaskSchedulerPermittedIdentifiers = [`${bundle}.download.*`];
+    plist.BGTaskSchedulerPermittedIdentifiers = [identifier];
     return infoPlistConfig;
   });
 

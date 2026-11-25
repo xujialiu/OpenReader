@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { withInfoPlist, type ConfigPlugin } from 'expo/config-plugins';
 
 /**
@@ -30,15 +32,8 @@ import { withInfoPlist, type ConfigPlugin } from 'expo/config-plugins';
  * format, it is the platform's, and claiming to own it would put this app above
  * Books in every list on the device for a file it did not create.
  *
- * ## Both edits fail the prebuild if something else has written the key
- *
- * The fail-closed config-plugin rule recorded in ADR 0018, for the same reason.
- * A prebuild prints hundreds of lines, so a warning is not a signal; and the way
- * this fails is that a book the owner taps in Files opens in some other app, or
- * in none, with nothing anywhere saying why. Nothing is merged and nothing is
- * overwritten: if a second writer of either key appears, the build stops and
- * names it, because guessing which of the two declarations should win is exactly
- * the guess that would be wrong silently.
+ * Reapplying these declarations to an existing project is safe. A different
+ * value for either key stops prebuild before either declaration is changed.
  */
 
 /** ADR 0007's list, in Apple's terms. A second format is a second entry here and one more line in `DOCUMENT_FORMATS`. */
@@ -55,32 +50,15 @@ const withEpubDocumentTypes: ConfigPlugin = (config) =>
   withInfoPlist(config, (infoPlistConfig) => {
     const plist = infoPlistConfig.modResults;
 
-    if (plist.CFBundleDocumentTypes) {
-      throw new Error(
-        '[with-epub-document-types] The generated Info.plist already contains ' +
-          'CFBundleDocumentTypes, so something else is writing it now.\n\n' +
-          'Two writers of one Info.plist key is the failure app.config.ts already warns ' +
-          'about for UIBackgroundModes. This key decides whether the app appears in ' +
-          "Files and in every share sheet, and the symptom of getting it wrong is the " +
-          'app being absent from a list with no error anywhere. Find the other writer ' +
-          'and delete either it or this plugin and its line in app.config.ts. Nothing ' +
-          'is merged here on purpose.'
-      );
+    const types = [EPUB_DOCUMENT_TYPE];
+    // Expo reads plist dictionaries into objects with a null prototype. Compare their data.
+    if (plist.CFBundleDocumentTypes !== undefined && !isDeepStrictEqual(structuredClone(plist.CFBundleDocumentTypes), types)) {
+      throw new Error('[with-epub-document-types] Info.plist already contains CFBundleDocumentTypes with a different declaration. Expected the EPUB Viewer declaration.');
     }
-
-    if (plist.LSSupportsOpeningDocumentsInPlace !== undefined) {
-      throw new Error(
-        '[with-epub-document-types] The generated Info.plist already sets ' +
-          `LSSupportsOpeningDocumentsInPlace (to ${String(plist.LSSupportsOpeningDocumentsInPlace)}), ` +
-          'so something else is writing it now.\n\n' +
-          'This key decides whether an opened book arrives as the owner’s own file or ' +
-          'as a copy iOS has already made in Documents/Inbox, and src/app/opened-document.ts ' +
-          'is written for both. It is not overwritten here because a second writer means ' +
-          'two answers to that question and only one of them was reasoned about.'
-      );
+    if (plist.LSSupportsOpeningDocumentsInPlace !== undefined && plist.LSSupportsOpeningDocumentsInPlace !== true) {
+      throw new Error(`[with-epub-document-types] Info.plist already sets LSSupportsOpeningDocumentsInPlace to ${plist.LSSupportsOpeningDocumentsInPlace}. Expected true.`);
     }
-
-    plist.CFBundleDocumentTypes = [EPUB_DOCUMENT_TYPE];
+    plist.CFBundleDocumentTypes = types;
     plist.LSSupportsOpeningDocumentsInPlace = true;
     return infoPlistConfig;
   });

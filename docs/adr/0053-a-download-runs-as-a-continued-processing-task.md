@@ -192,8 +192,8 @@ event, all on the main queue:
 
 **Info.plist.** `plugins/with-continued-processing.ts` writes
 `BGTaskSchedulerPermittedIdentifiers = ["<ios.bundleIdentifier>.download.*"]`.
-Like the other two plugins, it fails the prebuild if something else already
-wrote the key. The prebuild of this tree produced
+A repeated prebuild accepts that exact identifier list and rejects a different
+registration (#221). The prebuild of this tree produced
 `["top.xujialiu.openreader.download.*"]`, and `UIBackgroundModes` remained
 `["audio"]`, which is what the audio plugin writes.
 `test/app-config.test.ts` runs the plugin's mod and pins the Swift's identifier

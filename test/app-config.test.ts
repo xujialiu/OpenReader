@@ -360,6 +360,11 @@ describe('ADR 0053: a download goes on away from the screen as a continued proce
     expect(plist.UIBackgroundModes).toEqual(['audio']);
   });
 
+  it('accepts the identifier left by a previous prebuild', async () => {
+    const previous = await run({});
+    expect(await run(structuredClone(previous))).toEqual(previous);
+  });
+
   it('fails the prebuild when something else already writes the key', async () => {
     await expect(run({ BGTaskSchedulerPermittedIdentifiers: [] })).rejects.toThrow(/already contains\s+BGTaskSchedulerPermittedIdentifiers/);
   });

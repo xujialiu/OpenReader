@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { DOMParser } from '@xmldom/xmldom';
 import { withDangerousMod, type ConfigPlugin } from 'expo/config-plugins';
 
 /**
@@ -21,26 +22,32 @@ import { withDangerousMod, type ConfigPlugin } from 'expo/config-plugins';
  * Automattic/simplenote-ios): `ios/OpenReader.xcodeproj` is two levels below
  * the repository's root.
  *
- * If the scheme already names a StoreKit configuration, the prebuild stops and
- * says so, in the house style of `with-epub-document-types.ts`.
+ * A repeated prebuild accepts the same Run configuration. A conflicting
+ * path or a reference outside the Run action requires inspection.
  */
 const STOREKIT_FILE = 'storekit/OpenReader.storekit';
 
 export function withStoreKitReference(scheme: string, identifier: string): string {
-  if (scheme.includes('<StoreKitConfigurationFileReference')) {
-    throw new Error(
-      '[with-storekit-configuration] The generated scheme already names a StoreKit configuration, ' +
-        'so something else is writing it now. Find the other writer; nothing is merged here on purpose.'
-    );
+  const document = new DOMParser().parseFromString(scheme, 'application/xml');
+  const actions = document.getElementsByTagName('LaunchAction');
+  if (!actions.length) throw new Error('[with-storekit-configuration] The generated scheme has no LaunchAction.');
+  if (actions.length !== 1) throw new Error('[with-storekit-configuration] Expected exactly one LaunchAction.');
+  const references = Array.from(document.getElementsByTagName('StoreKitConfigurationFileReference'));
+  if (references.length) {
+    const [reference] = references;
+    if (references.length === 1 && reference.parentNode === actions[0] && reference.getAttribute('identifier') === identifier) return scheme;
+    const paths = references.map(ref => ref.getAttribute('identifier') ?? '(missing identifier)');
+    throw new Error(`[with-storekit-configuration] Found StoreKit reference(s) ${JSON.stringify(paths)}. Expected one LaunchAction reference to ${identifier}.`);
   }
   const end = scheme.indexOf('</LaunchAction>');
-  if (end < 0) throw new Error('[with-storekit-configuration] The generated scheme has no LaunchAction to add the StoreKit configuration to.');
+  if (end < 0) throw new Error('[with-storekit-configuration] Expected a closing LaunchAction tag in the generated scheme.');
   const reference =
     '      <StoreKitConfigurationFileReference\n' +
     `         identifier = "${identifier}">\n` +
     '      </StoreKitConfigurationFileReference>\n';
   const line = scheme.lastIndexOf('\n', end) + 1;
-  return scheme.slice(0, line) + reference + scheme.slice(line);
+  const insert = scheme.slice(line, end).trim() ? end : line;
+  return scheme.slice(0, insert) + reference + scheme.slice(insert);
 }
 
 const withStoreKitConfiguration: ConfigPlugin = (config) =>

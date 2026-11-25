@@ -62,14 +62,20 @@ describe('ADR 0019: iOS is told this app opens EPUBs', () => {
     expect(plist.UIBackgroundModes).toEqual(['audio']);
   });
 
+  it('accepts its EPUB declaration and in-place flag on the next prebuild', async () => {
+    const previous = await run({});
+    const parsed = structuredClone(previous);
+    const types = parsed.CFBundleDocumentTypes;
+    if (!Array.isArray(types)) throw new Error("Expected the generated document types array");
+    parsed.CFBundleDocumentTypes = types.map(type => Object.assign(Object.create(null), type));
+    expect(await run(parsed)).toEqual(previous);
+  });
+
   it('fails the prebuild when something else already declares document types', async () => {
     await expect(run({ CFBundleDocumentTypes: [] })).rejects.toThrow(/already contains\s+CFBundleDocumentTypes/);
   });
 
   it('fails the prebuild when something else already sets the in-place key', async () => {
-    // `false` and not `true`, because the value this plugin would have written
-    // is the one a merge would silently agree with — and agreeing silently is
-    // the outcome being prevented.
     await expect(run({ LSSupportsOpeningDocumentsInPlace: false })).rejects.toThrow(/already sets\s+LSSupportsOpeningDocumentsInPlace/);
   });
 });
