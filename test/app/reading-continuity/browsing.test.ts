@@ -244,6 +244,7 @@ function createPage(toApp: (message: unknown) => void, stalled: ReadonlySet<numb
     console,
     setTimeout: (run: () => void, ms?: number) => setTimeout(run, ms),
     clearTimeout: (id: ReturnType<typeof setTimeout>) => clearTimeout(id),
+    setInterval,
     requestAnimationFrame: (run: (now: number) => void) => setTimeout(() => run(Date.now()), 16),
     cancelAnimationFrame: (id: ReturnType<typeof setTimeout>) => clearTimeout(id),
     performance: { now: () => Date.now() },
