@@ -645,7 +645,7 @@ export function DocumentRow({ title, progress, cover, onPress, onLongPress, onAc
   title: string; progress: string; cover?: string | null; onPress(): void; onLongPress?(): void; onActions(): void; disabled?: boolean; selected?: boolean;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
-  return <LibraryRow title={title} summary={progress} label={`${title}, ${progress}`} actionsLabel={`Actions for ${title}`}
+  return <LibraryRow title={title} summary={progress} label={progress ? `${title}, ${progress}` : title} actionsLabel={`Actions for ${title}`}
     onPress={onPress} onLongPress={onLongPress} onActions={onActions} disabled={disabled} selected={selected}
     illustration={<View style={styles.cover}>
       {cover && failed !== cover ? <Image source={{ uri: cover }} style={styles.coverImage}

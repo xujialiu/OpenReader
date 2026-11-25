@@ -17,6 +17,7 @@ import { formatBytes, occupied, removeDownloads, requestInventory } from '../off
 import { DocumentRow, FolderRow, HeaderButton, INK, Note } from './controls';
 import { pickDocument } from './document';
 import { useDocumentCover } from './document-cover';
+import { useReadingPercentage } from './document-progress';
 import { Drawer } from './drawer';
 import { AddDrawer, confirmFolderDeletion, FolderActions, useMovePage } from './folder-actions';
 import { importDocument } from './import-document';
@@ -37,12 +38,17 @@ import { useLibrarySearch } from './use-library-search';
 import { useLibrarySelection } from './use-library-selection';
 import { useRowSweep } from './use-sweep';
 
-const QUOTATION = 90;
-function progressOf(entry: LibraryEntry, present: boolean): string {
+function documentSubtitle(entry: LibraryEntry, present: boolean, path: string | undefined, percentage: number | null) {
+  if (path !== undefined) return present ? path : `${path} · File not on this device`;
   if (!present) return 'The file for this book is not on this device any more. The place it was left is kept; add the book again to read it.';
   if (!entry.position) return 'Not started.';
-  const quoted = entry.position.anchor.exact.trim().replace(/\s+/g, ' ');
-  return `Last read: “${quoted.length > QUOTATION ? `${quoted.slice(0, QUOTATION)}…` : quoted}”`;
+  const at = entry.position.stamp.at;
+  const saved = new Date(at);
+  const two = (value: number) => String(value).padStart(2, '0');
+  const date = at > 0 && Number.isFinite(saved.getTime())
+    ? `${saved.getFullYear()}/${two(saved.getMonth() + 1)}/${two(saved.getDate())} ${two(saved.getHours())}:${two(saved.getMinutes())}`
+    : '';
+  return [percentage === null ? '' : `${percentage}%`, date].filter(Boolean).join(' · ');
 }
 
 export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Folder'>) {
@@ -306,7 +312,8 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
 function rowTarget(row: Row): LibraryTarget { return { kind: row.kind, id: row.kind === 'folder' ? row.folder.id : row.entry.id }; }
 function LibraryDocument({ entry, present, path, onPress, onActions, disabled, selected }: { entry: LibraryEntry; present: boolean; path?: string; onPress(): void; onActions(): void; disabled?: boolean; selected?: boolean }) {
   const cover = useDocumentCover(entry);
-  const progress = path === undefined ? progressOf(entry, present) : present ? path : `${path} · File not on this device`;
+  const percentage = useReadingPercentage(entry.id, present && path === undefined ? entry.position : null);
+  const progress = documentSubtitle(entry, present, path, percentage);
   return <DocumentRow title={entry.title} progress={progress} cover={cover} onPress={onPress} onLongPress={onActions} onActions={onActions} disabled={disabled} selected={selected} />;
 }
 const READING_BUTTON_ROOM = READING_BUTTON_PLACE.bottom + 52 + 12;

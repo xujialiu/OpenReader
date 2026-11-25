@@ -19,8 +19,8 @@ const elements = (doc: Document | Element, local: string): Element[] =>
   Array.from(doc.getElementsByTagName('*')).filter((node) => node.localName === local);
 const label = (node?: Element) => node?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 
-/** Inflate only container, package and navigation. Chapter body bytes are never read. */
-export function readDocumentNavigation(archive: ArchiveBytes): DocumentNavigation {
+/** Read the spine independently of the optional table of contents. */
+export function readDocumentPackage(archive: ArchiveBytes) {
   const members = new Map(readZipDirectory(archive).map((entry) => [strFromU8(entry.name), entry]));
   const read = (path: string) => {
     const member = members.get(path);
@@ -41,6 +41,12 @@ export function readDocumentNavigation(archive: ArchiveBytes): DocumentNavigatio
     if (!href) return null;
     return { href, path: resolveArchivePath(packPath, href) };
   });
+  return { pack, packPath, manifest, sections, read, members };
+}
+
+/** Inflate only container, package and navigation. Chapter body bytes are never read. */
+export function readDocumentNavigation(archive: ArchiveBytes): DocumentNavigation {
+  const { pack, packPath, manifest, sections, read } = readDocumentPackage(archive);
   const byPath = new Map<string, number>();
   sections.forEach((section, index) => { if (section) byPath.set(section.path, index); });
   if (sections.length && !byPath.size) throw new Error('A document spine entry has no content file.');

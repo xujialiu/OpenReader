@@ -3,10 +3,11 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LibraryScreen } from '../../src/app/library-screen';
 import type { ScreenProps } from '../../src/app/routes';
-import { asDocumentId, type LibraryEntry } from '../../src/core/document';
+import { asDocumentId, createLocator, readingPositionAt, type LibraryEntry } from '../../src/core/document';
 import type { FolderTree } from '../../src/core/folders';
 
 const shell = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
+const readingProgress = vi.hoisted(() => ({ value: null as number | null }));
 const sweeping = vi.hoisted(() => ({ enabled: false, refuse: false }));
 const insets = vi.hoisted(() => ({ top: 0, bottom: 0, left: 0, right: 0 }));
 const hosts = vi.hoisted(() => async (...names: string[]) => {
@@ -28,6 +29,7 @@ vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => inse
 vi.mock('react-native-gesture-handler', () => hosts('GestureDetector'));
 vi.mock('../../src/app/routes', () => ({ useShell: () => shell.current }));
 vi.mock('../../src/app/controls', async () => ({ ...await hosts('DocumentRow', 'FolderRow', 'HeaderButton', 'Note'), INK: {}, useAccent: () => ({ reading: '#345678' }) }));
+vi.mock('../../src/app/document-progress', () => ({ useReadingPercentage: () => readingProgress.value }));
 vi.mock('../../src/app/document-cover', () => ({ useDocumentCover: () => null }));
 vi.mock('../../src/app/document', () => ({ pickDocument: vi.fn() }));
 vi.mock('../../src/app/import-document', () => ({ importDocument: vi.fn() }));
@@ -60,6 +62,7 @@ const entry = (digit: string, title: string): LibraryEntry => ({
 let entries: LibraryEntry[];
 let tree: FolderTree;
 beforeEach(() => {
+  readingProgress.value = null;
   sweeping.refuse = false;
   Object.assign(insets, { top: 0, bottom: 0, left: 0, right: 0 });
   vi.stubGlobal('requestAnimationFrame', () => 1); vi.stubGlobal('cancelAnimationFrame', vi.fn());
@@ -123,6 +126,27 @@ async function open(at: string | null = 'inner') {
     close: () => act(async () => view.unmount()),
   };
 }
+
+it('shows the adopted position’s time while its text is counted and omits an unknown legacy date', async () => {
+  const stamp = { at: new Date(2026, 10, 24, 9, 5).getTime(), device: 'desktop' };
+  const position = readingPositionAt(createLocator('epub', 'epubcfi(/6/2!/4/2)'), 'Read.', 0, 5, stamp);
+  entries[1] = { ...entries[1], position };
+  const page = await open();
+  try {
+    const subtitle = () => page.nodes('DocumentRow')[0].props.progress;
+    expect(subtitle()).toBe('2026/11/24 09:05');
+    readingProgress.value = 8;
+    await page.update();
+    expect(subtitle()).toBe('8% · 2026/11/24 09:05');
+    readingProgress.value = 37;
+    entries[1] = { ...entries[1], position: { ...position, stamp: { ...stamp, at: new Date(2026, 10, 25, 14, 8).getTime() } } };
+    await page.update();
+    expect(subtitle()).toBe('37% · 2026/11/25 14:08');
+    entries[1] = { ...entries[1], position: { ...position, stamp: { at: 0, device: '' } } };
+    await page.update();
+    expect(subtitle()).toBe('37%');
+  } finally { await page.close(); }
+});
 
 describe('Library Search through the real page and actions Drawer (#332, #339)', () => {
   it('keeps the list, search and selected actions inside live horizontal safe areas (#346)', async () => {

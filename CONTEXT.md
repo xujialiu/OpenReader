@@ -226,6 +226,11 @@ One per document, held as a Locator and a Text Anchor together, not a list of
 places the owner creates.
 _Avoid_: bookmark, progress, location, savedPosition
 
+**Reading Progress**:
+How far through a Document its saved Reading Position lies, expressed as a
+percentage. It can decrease when the reader returns to an earlier sentence.
+_Avoid_: furthest read, completion rate
+
 **Browsing**:
 Moving the page to another part of a document without moving the reading,
 whether it plays or is paused.

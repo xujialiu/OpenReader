@@ -26,6 +26,15 @@ left without listening stays where it was, so a book looked into and put back
 no longer pushes down the one being listened to. Renaming a book does not move
 it either.)_
 
+A book with a saved Reading Position shows “37% · 2026/11/25 14:08” under
+its title. A single space sits on each side of the dot, so at 8% the date
+sits closer to the title’s leading edge. The date uses year, month and day,
+followed by the local time on a 24-hour clock.
+Both values describe the sentence the reader will resume from.
+Choosing an earlier sentence moves the percentage back. A position saved on
+another device carries the time it was saved there. A book with no saved
+position keeps “Not started.”
+
 **The reader is a screen you arrive at and leave.** It carries a back arrow, the
 book's own name, and one more control on the right for how the page looks. Back
 goes to the shelf; the reading stops, and the place is kept. _(Revised in

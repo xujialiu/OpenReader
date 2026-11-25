@@ -301,7 +301,13 @@ resumed to. That was true of a tapped word before today and is simply worth more
 now. Not changed here: the cleanup is the one place the audio session is given
 back, and moving what it clears belongs to whoever next touches it.
 
-## The Library shows a quotation, not a percentage
+## Reading Progress in the Library (#382)
+
+The Library derives an integer percentage from the saved sentence’s start in the EPUB. It counts non-whitespace UTF-16 units in spine-order body text. Short and long sections contribute in proportion to their text. The per-section lengths and paths are rebuildable device-local cache data keyed by Document Id. The first scan yields between chunks, outside the Reader. Subsequent positions need only the section named by the CFI. The element’s text verifies the anchor and supplies the within-section offset. An unresolved anchor or an incomplete index leaves the percentage absent. A position with a known Stamp already has a date to show while its percentage is pending.
+
+Local saves and positions adopted from the Positions File use the same calculation. The Library formats the position’s own Stamp as `YYYY/MM/DD HH:mm` in the device time zone. One text run holds the available fields, joined with a space on either side of the middle dot. A legacy position with the oldest Stamp has no recorded date. The old quotation decision below records the cost of the Reader’s original index.
+
+### Earlier decision on the quotation
 
 "How far through the reading got" is the last Utterance spoken, quoted. A
 percentage would need epub.js to index the whole book — the step that is already

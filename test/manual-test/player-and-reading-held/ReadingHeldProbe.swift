@@ -243,7 +243,7 @@ final class ReadingHeldProbe: XCTestCase {
     XCTAssertTrue(returnButton(app).waitForExistence(timeout: 5), "No Reading Button after leaving while playing")
     // A Library row is its title and where its reading got to.
     let other = app.buttons.matching(NSPredicate(
-      format: "NOT (label BEGINSWITH %@) AND (label CONTAINS ', Last read: ' OR label ENDSWITH ', Not started.')", fixture + ",")).firstMatch
+      format: "NOT (label BEGINSWITH %@) AND (label CONTAINS %@ OR label ENDSWITH ', Not started.')", fixture + ",", "% · ")).firstMatch
     XCTAssertTrue(other.exists, "No second document in the Library")
     other.tap()
     XCTAssertTrue(until(20) { self.inReader(app) && !self.reloading(app) }, "The other document did not open")
