@@ -10,6 +10,11 @@
 - **`$?` after a pipe is the pipe's last command.** `bash sync.sh … | tail -5;
   echo $?` (the wrapper `SyncProbe` had then) printed `0` for a test run that had failed. Redirect the script's
   output to a file and test its own status, or read `PIPESTATUS`.
+- **zsh reserves `status` for the previous command's exit code.** A guarded
+  reload wrapper that assigned `status=$?` failed afterwards with
+  `zsh: read-only variable: status`, obscuring the guard's result although its
+  JSON and log were intact (2026-11-25). Use `rc` or another ordinary variable;
+  if the wrapper fails, inspect its guard record and raw log before retrying.
 - **`lsof -p PID -d 1,2` lists other processes' files too.** `lsof` ORs its
   selectors, so that command prints every process's descriptors 1 and 2 as
   well as PID's, and a `tail` shows some other process. Met 2026-09-22 looking
