@@ -46,7 +46,7 @@ with_variant() {
     EXPO_PUBLIC_OPENREADER_VARIANT="$variant" EXPO_NO_DOTENV=1 "$@"
 }
 for variant in formal free debug; do
-  # SDK 57 recreates native folders by default; --no-clean is the opt-out.
+  # SDK 58 recreates native folders by default; --no-clean is the opt-out.
   with_variant npx expo prebuild --platform ios
   test -f node_modules/expo-sqlite/ios/sqlite3.h
   with_variant xcodebuild -workspace ios/OpenReader.xcworkspace -scheme OpenReader \

@@ -30,7 +30,7 @@ Free/Debug must contain no purchase controller/UI/native bridge, product IDs
 or purchase-cache strings. Formal must retain them.
 
 Generate each native tree with the same role and
-`npx expo prebuild --platform ios --no-install`. SDK 57 recreates native
+`npx expo prebuild --platform ios --no-install`. SDK 58 recreates native
 folders by default; `--no-clean` opts out. The parser still accepts hidden
 `--clean`; its absence from help does not mean it is unsupported.
 Inspect Info.plist's `OpenReaderBuildVariant` and derived Build Number, the

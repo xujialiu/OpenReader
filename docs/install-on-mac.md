@@ -23,7 +23,7 @@ rules. Store uploads use a [different procedure](release-to-app-store.md).
 4. Check `uname -m` is `arm64`, `xcode-select -p` points at the intended Xcode,
    and `security find-identity -v -p codesigning` lists a valid Apple Development
    identity. Xcode must have the owner's Apple Account and team available.
-5. Read [Expo SDK 57](https://docs.expo.dev/versions/v57.0.0/) and the shared
+5. Read [Expo SDK 58](https://docs.expo.dev/versions/v58.0.0/) and the shared
    [build admission rules](../test/manual-test/kit/ios-verification.md). Check
    machine memory and active builds before starting. Leave other sessions'
    devices, Metros and builds alone.
