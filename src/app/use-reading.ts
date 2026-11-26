@@ -34,7 +34,7 @@
  *   for it, and it is never held in React state.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { asDocumentId, createLocator, readLocator, readingPlaceAt, type ReadingPlace } from '../core/document';
@@ -418,7 +418,12 @@ export function useReading(
    */
   const revealCue = useRef(false);
   const switchRequest = useRef(0);
-  const pendingChoice = useRef<{ provider: ProviderId; voice: string } | null>(null);
+  const pendingChoice = useRef<{
+    provider: ProviderId;
+    voice: string;
+    selected(): void;
+    prepare(): void;
+  } | null>(null);
   const retainedIdentity = useRef<string | null>(null);
   const bridgeRef = useRef<ReaderBridge | null>(null);
   /** The Reading has ended: the view unmounted, and a late `play` or `resumeAt` does nothing (#106, the unmount effect). */
@@ -830,15 +835,10 @@ export function useReading(
     const cursor = atRef.current;
     const at = pointed ? cursor : carry(cursor);
 
-    // `load` cancels a voice switch the engine was preparing (`restart`), so the
-    // choice is let go here as a seek lets it go, rather than left spinning.
-    if (engine && pendingChoice.current) {
+    if (cursor !== null && at === null) {
+      const lostVoice = pendingChoice.current !== null;
       switchRequest.current++;
       pendingChoice.current = null;
-      setStatus((was) => ({ ...was, pendingVoice: null }));
-    }
-
-    if (cursor !== null && at === null) {
       engine?.pause();
       bridgeRef.current?.clear();
       // Quiet, as every paused reload here is: a cue of the top of the document
@@ -850,6 +850,8 @@ export function useReading(
         playing: false,
         utterance: null,
         level: null,
+        pendingVoice: null,
+        voiceError: lostVoice ? 'The voice could not switch because the current sentence changed.' : was.voiceError,
         note:
           'The document rendered its sections out of reading order, so the Utterances were renumbered. ' +
           'The reading stopped here rather than carry on from a number that now means a different sentence.',
@@ -869,6 +871,8 @@ export function useReading(
     // (react-native-audio-api 0.13.5 advances its position dispatcher only while
     // `isPlaying()`), and `play()` cues the front before it corrects.
     engine?.load(next, at ?? 0, { quiet: !playIntent.current });
+    // The reload retired the queued audio. Prepare the same choice at the new indices.
+    if (engine && !pointed) pendingChoice.current?.prepare();
     restateStop();
     if (at === null) return;
     setStatus((was) => ({ ...was, utterance: at, ...placeOf(at) }));
@@ -1479,11 +1483,14 @@ export function useReading(
     if (!ended && extent.next !== null) bridgeRef.current?.prepareSection(extent.next);
     if (ended) {
       playIntent.current = false;
+      const choice = pendingChoice.current;
       switchRequest.current++;
       pendingChoice.current = null;
       engineRef.current?.cancelVoiceSwitch();
       engineRef.current?.pause();
       bridgeRef.current?.hold({ stop: true });
+      if (choice && report.unspoken === 0) choice.selected();
+      else if (choice) setStatus((was) => ({ ...was, voiceError: 'The reading stopped before the voice could switch.' }));
     }
     setStatus((was) => ({ ...was, playing: ended ? false : was.playing,
       buffering: ended ? false : was.buffering, pendingVoice: ended ? null : was.pendingVoice, note: sentence }));
@@ -1668,8 +1675,9 @@ export function useReading(
       report(error);
     });
   }, [settings, build, report, walkForward, abandonResume, document, hasKey]);
+  // A Play held by Sync or the purchase gate starts with the latest committed settings.
   const startRef = useRef(start);
-  useEffect(() => {
+  useLayoutEffect(() => {
     startRef.current = start;
   }, [start]);
 
@@ -1688,7 +1696,7 @@ export function useReading(
    */
   const play = useCallback(() => {
     if (endedRef.current || purchases.canStartSpeech()) {
-      start();
+      startRef.current();
       return;
     }
     debugLog('reading', 'play while read-aloud is locked: asking (#148)');
@@ -1699,7 +1707,7 @@ export function useReading(
       // refusal changed nothing it shows, so it is told again (#148).
       else restateNowPlaying();
     });
-  }, [start]);
+  }, []);
 
   /**
    * The section Play was looking for has arrived with text in it, so the reading
@@ -1752,10 +1760,9 @@ export function useReading(
     if (playIntent.current && pendingChoice.current?.provider === provider && pendingChoice.current.voice === voice) return;
     // Choosing a Voice is asking for it: a Provider refused earlier is asked about again (#109).
     consent.again();
-    const request = ++switchRequest.current;
+    switchRequest.current++;
     pendingChoice.current = null;
-    let engine = engineRef.current;
-    engine?.cancelVoiceSwitch();
+    engineRef.current?.cancelVoiceSwitch();
     setStatus((was) => ({ ...was, pendingVoice: null, voiceError: null }));
     if (!settings.enabledProviders.includes(provider)) return;
     if (provider === settings.provider && voice === settings.voice) return;
@@ -1765,34 +1772,39 @@ export function useReading(
       return;
     }
     const next = { ...settings, provider, voice };
-    pendingChoice.current = { provider, voice };
-    setStatus((was) => ({ ...was, pendingVoice: { provider, voice } }));
-    const failed = (error: unknown) => {
-      if (request !== switchRequest.current) return;
-      pendingChoice.current = null;
-      // Refused (#109): the reading goes on in the old Voice, and there is nothing to explain.
-      setStatus((was) => ({ ...was, pendingVoice: null, voiceError: isDeclined(error) ? null : describe(error) }));
-    };
-    void (async () => {
-      engine ??= await buildingRef.current;
-      if (request !== switchRequest.current) return;
-      if (!engine) {
+    async function prepare() {
+      const request = ++switchRequest.current;
+      const failed = (error: unknown) => {
+        if (request !== switchRequest.current) return;
         pendingChoice.current = null;
-        setStatus((was) => ({ ...was, pendingVoice: null }));
-        selected();
-        return;
+        setStatus((was) => ({ ...was, pendingVoice: null, voiceError: isDeclined(error) ? null : describe(error) }));
+      };
+      try {
+        const engine = engineRef.current ?? await buildingRef.current;
+        if (request !== switchRequest.current) return;
+        if (!engine) {
+          pendingChoice.current = null;
+          setStatus((was) => ({ ...was, pendingVoice: null }));
+          selected();
+          return;
+        }
+        if (engine !== engineRef.current) return;
+        const target = offlineProvider(document, next);
+        engine.switchVoice(target, voice, () => {
+          if (request !== switchRequest.current || engine !== engineRef.current) return;
+          pendingChoice.current = null;
+          retainedIdentity.current = engineIdentity(next);
+          setStatus((was) => ({ ...was, pendingVoice: null, voiceError: null,
+            reportsWordTimings: target.capabilities.wordTimestamps }));
+          selected();
+        }, failed);
+      } catch (error) {
+        failed(error);
       }
-      if (request !== switchRequest.current || engine !== engineRef.current) return;
-      const target = offlineProvider(document, next);
-      engine.switchVoice(target, voice, () => {
-        if (request !== switchRequest.current || engine !== engineRef.current) return;
-        pendingChoice.current = null;
-        retainedIdentity.current = engineIdentity(next);
-        setStatus((was) => ({ ...was, pendingVoice: null, voiceError: null,
-          reportsWordTimings: target.capabilities.wordTimestamps }));
-        selected();
-      }, failed);
-    })().catch(failed);
+    }
+    pendingChoice.current = { provider, voice, selected, prepare };
+    setStatus((was) => ({ ...was, pendingVoice: { provider, voice } }));
+    prepare();
   }, [settings, document]);
 
   const opened = useCallback((declared: string | null | undefined) => {

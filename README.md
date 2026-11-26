@@ -58,7 +58,7 @@ Its desktop counterpart is [Zotero-OpenReader](https://github.com/xujialiu/Zoter
 
 ## Building
 
-OpenReader is an Expo SDK 57 app with native modules of its own, so it runs as a development build rather than in Expo Go. [docs/install-on-simulator.md](docs/install-on-simulator.md) and [docs/install-on-iphone.md](docs/install-on-iphone.md) describe both builds.
+OpenReader is an Expo SDK 58 app with native modules of its own, so it runs as a development build rather than in Expo Go. [docs/install-on-simulator.md](docs/install-on-simulator.md) and [docs/install-on-iphone.md](docs/install-on-iphone.md) describe both builds.
 
 A build from source reads aloud for free once the App Store's purchase is turned off. Set `EXPO_PUBLIC_OPENREADER_UNLOCKED=1` in the environment of the build, for example `EXPO_PUBLIC_OPENREADER_UNLOCKED=1 npx expo run:ios`. Without it, the build asks for the same purchase as the App Store, and under your own bundle ID there is nothing to buy.
 

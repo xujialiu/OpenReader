@@ -73,7 +73,7 @@ end, so check these first:
    is `debug`, and `CFBundleVersion` is the formal base in `src/build/app-version.ts`
    plus two. For a missing/stale native tree or changed modules/configuration,
    run `EXPO_PUBLIC_OPENREADER_VARIANT=debug npx expo prebuild --platform ios`,
-   which runs pod install. SDK 57 recreates native folders by default;
+   which runs pod install. SDK 58 recreates native folders by default;
    `--no-clean` opts out. `--clean` remains an accepted hidden argument but is
    unnecessary; help does not list it.
 3. `node_modules/expo-sqlite/ios/sqlite3.h` exists. Pods generate it and
@@ -243,5 +243,5 @@ that the app runs on its own, disconnect the Mac and open it again.
 
 ## References
 
-- [Expo SDK 57 documentation](https://docs.expo.dev/versions/v57.0.0/)
+- [Expo SDK 58 documentation](https://docs.expo.dev/versions/v58.0.0/)
 - [Expo local builds and device selection](https://docs.expo.dev/guides/local-app-development/)

@@ -55,7 +55,8 @@ describe('a Reading speaks only through the gate', () => {
 
   it('carries a Reading on without asking only after a press already let through, or a Pronunciation', () => {
     // The cover-page walk and the wait for a place, both after a press; and `carryOn`.
-    expect(reading.match(/\bstart\(\);/g)).toHaveLength(3);
+    expect(reading.match(/\bstart\(\);/g)).toHaveLength(2);
+    expect(reading.match(/startRef\.current\(\);/g)).toHaveLength(2);
     pin(reading, 'carryOn: start,', 'src/app/use-reading.ts');
     expect(calling(/\.carryOn\(\)/)).toEqual(['src/app/use-lookup.ts']);
     pin(read('src/app/use-lookup.ts'), 'resume: () => latest.current.reading.carryOn(),', 'src/app/use-lookup.ts');

@@ -241,7 +241,10 @@ stops the spinner and shows an error while the old voice continues.
 
 Choosing while paused immediately selects the voice without starting playback;
 audio is prepared on the next Play. Pausing during a pending change never lets
-its eventual arrival resume playback by itself.
+its eventual arrival resume playback by itself. When the book ends before a
+switch can be heard, the chosen voice is saved for the next Play. Loading an
+earlier chapter while browsing keeps the choice pending at the same sentence.
+If the sentence itself has changed, the drawer explains why the switch stopped.
 
 When the owner opens a document and presses Play, the playback button shows a
 loading spinner while waiting for audio. The spinner has the same appearance as
