@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """#271: collapse, hold one real section report, then release it on the first wait note."""
+import atexit
+import hashlib
 import json
 import os
 import pathlib
@@ -14,15 +16,15 @@ STATE_PROBE = HERE / 'continuity-state.js'
 HOLD_PROBE = HERE / 'continuity-hold-report.js'
 RELEASE_PROBE = HERE / 'continuity-release-report.js'
 WAITING = 'The reading has reached the end of the text this document has reported and is waiting for more of it.'
-METRO = os.environ.get('OPENREADER_METRO', 'http://127.0.0.1:8269')
-DEVICE_NAME = os.environ.get('OPENREADER_DEVICE', 'OpenReader1')
-expected_document_id = 'sha256:53c72ce20bd9668579105a54c50afde9b83e13f937859d40c0e4c3236a3071eb'
+METRO = os.environ.get('OPENREADER_METRO', 'http://127.0.0.1:8081')
 
-if len(sys.argv) != 4:
-    raise SystemExit('usage: continuity-wait-release.py SIMULATOR_UDID FAKE_PROVIDER_LOG OUTPUT.log')
-udid, fake_log_name, output_name = sys.argv[1:]
-if udid != '63467D78-C092-45CD-88E3-A21BADE90ADB':
-    raise SystemExit('refusing an unassigned simulator')
+if len(sys.argv) != 5:
+    raise SystemExit('usage: continuity-wait-release.py SIMULATOR_UDID FIXTURE.epub FAKE_PROVIDER_LOG OUTPUT.log')
+udid, fixture_name, fake_log_name, output_name = sys.argv[1:]
+expected_document_id = 'sha256:' + hashlib.sha256(pathlib.Path(fixture_name).read_bytes()).hexdigest()
+devices = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '-j']))
+DEVICE_NAME = next(device['name'] for runtime in devices['devices'].values()
+                   for device in runtime if device['udid'] == udid)
 
 output = pathlib.Path(output_name).resolve()
 fake_log = pathlib.Path(fake_log_name).resolve()
@@ -89,17 +91,25 @@ records = [
 gate_command_written = False
 release_command_written = False
 
+play_requested = False
+
+@atexit.register
+def cleanup():
+    try:
+        if play_requested:
+            hx({'do': 'pause'})
+    finally:
+        if gate_command_written and not release_command_written:
+            hx({}, code_file=RELEASE_PROBE)
+
 def fail(reason):
     records.append('failure=' + reason)
-    if gate_command_written and not release_command_written:
-        try:
-            cleanup = hx({}, code_file=RELEASE_PROBE)
-            records.append('cleanup_release=' + cleanup)
-        except Exception as error:
-            records.append('cleanup_release_error=' + str(error))
     output.write_text('\n'.join(records) + '\n')
-    print('\n'.join(records))
-    raise SystemExit(1)
+    raise SystemExit(reason)
+
+initial = cdp_state()
+if not initial.get('ok') or initial['documents'][0].get('id') != expected_document_id:
+    fail('Open the supplied continuity fixture on the specified simulator before starting.')
 
 # The accepted setup keeps the Player collapsed before Play.
 hx({'do': 'collapse', 'on': True})
@@ -184,6 +194,7 @@ play_shell = (
     f'node test/manual-test/kit/hx.cjs {shlex.quote(udid)} {play_payload}'
 )
 play_started = time.monotonic()
+play_requested = True
 play = run(['bash','-c',play_shell])
 if play.returncode:
     records.append('silence_or_play_failed=' + play.stdout.strip())
@@ -212,8 +223,6 @@ while time.monotonic() < deadline:
 
 if not waiting_line:
     records.append('outcome=waiting-note-not-seen-within-8s')
-    run(['node','test/manual-test/kit/reading.cjs','pause'],use_env=True)
-    hx({},code_file=RELEASE_PROBE)
     output.write_text('\n'.join(records)+'\n')
     raise SystemExit(1)
 
@@ -232,12 +241,13 @@ resumed = None
 while time.monotonic() < deadline:
     state = cdp_state()
     if len(state.get('documents', [])) != 1 or state['documents'][0].get('id') != expected_document_id:
-        fail(f'Reader document changed while resuming: {json.dumps(state.get("documents"))}')
+        fail('The open Document changed while resuming.')
     player = state.get('players', [{}])[0] if state.get('players') else {}
     reading = state.get('readings', [{}])[0] if state.get('readings') else {}
     if (reading.get('playing') is True and reading.get('known',0) >= 55
             and reading.get('utterance') is not None and reading.get('utterance') >= 45
-            and player.get('collapsed') is True and not player.get('waitingNote')):
+            and player.get('collapsed') is True and player.get('noteCount') == 0
+            and not player.get('buffering') and not player.get('waitingNote')):
 
         resumed = {'player':player,'reading':reading}
         break
@@ -245,14 +255,20 @@ while time.monotonic() < deadline:
 if not resumed:
     records.append('resumed_state=' + json.dumps(state,separators=(',',':')))
     records.append('outcome=release-did-not-resume-with-collapsed-player')
-    run(['node','test/manual-test/kit/reading.cjs','pause'],use_env=True)
     output.write_text('\n'.join(records)+'\n')
     raise SystemExit(1)
 records.append('resumed_state=' + json.dumps(resumed,separators=(',',':')))
 records.append('resume_observed_epoch=' + f'{time.time():.6f}')
-pause = run(['node','test/manual-test/kit/reading.cjs','pause'],use_env=True)
-records.append('cleanup_pause=' + pause.stdout.strip())
-final_state = cdp_state()
+hx({'do': 'pause'})
+deadline = time.monotonic() + 4
+while True:
+    final_state = cdp_state()
+    if final_state.get('ok') and final_state['readings'][0]['playing'] is False:
+        play_requested = False
+        break
+    if time.monotonic() >= deadline:
+        fail('Playback did not stop after the cleanup Pause.')
+    time.sleep(0.1)
 records.append('paused_hermes_state=' + json.dumps(final_state,separators=(',',':')))
 lines = fake_log.read_text(errors='replace').splitlines() if fake_log.exists() else []
 records.append('fake_synthesis_requests=' + str(sum('text=' in line for line in lines)))

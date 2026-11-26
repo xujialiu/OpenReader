@@ -87,13 +87,13 @@ a deadline test without touching app source.
   `../fixtures/continuity-fixture.ts`.
 
   With the local fake Kokoro service configured and its Consent answered, run
-  the probe as one guarded phase:
+  the probe as one guarded phase with OPENREADER_METRO set to its Metro URL and FIXTURE.epub pointing to the imported file.
 
   ```sh
   python3 test/manual-test/kit/ios_guard.py run --wait 0 --timeout 120 \
     --record ATTEMPT/issue271-phase.json -- \
     python3 test/manual-test/place-and-following/continuity-wait-release.py \
-    SIMULATOR_UDID FAKE_TTS_LOG ATTEMPT/issue271.log
+    SIMULATOR_UDID FIXTURE.epub FAKE_TTS_LOG ATTEMPT/issue271.log
   ```
 
   The held report is an induced WebView bridge delay in a Debug simulator.

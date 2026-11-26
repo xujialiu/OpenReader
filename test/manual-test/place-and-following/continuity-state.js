@@ -47,21 +47,15 @@
         try {
           const snapshot = value.current.snapshot();
           if (snapshot && typeof snapshot === 'object' && 'queued' in snapshot && 'fetching' in snapshot) {
-            if (snapshot.playing && !globalThis.__openreader271EngineMarker) {
-              globalThis.__openreader271EngineMarker = value.current;
-            }
             engines.push({
               playing: snapshot.playing,
               utterance: snapshot.utterance,
               rate: snapshot.rate,
               queued: snapshot.queued,
               fetching: snapshot.fetching,
-              sameAsPlayMarker: globalThis.__openreader271EngineMarker
-                ? value.current === globalThis.__openreader271EngineMarker
+              sameAsRemoteEventEngine: globalThis.__openreader291EngineMarker
+                ? value.current === globalThis.__openreader291EngineMarker
                 : null,
-            sameAsRemoteEventEngine: globalThis.__openreader291EngineMarker
-              ? value.current === globalThis.__openreader291EngineMarker
-              : null,
             });
           }
         } catch {
