@@ -84,11 +84,13 @@ import {
   type Segmented,
 } from './segment';
 import {
+  DisabledProviderError,
   engineIdentity,
   readiness,
-  readinessNote,
+  readinessRefusal,
   resolveTheme,
   type AppSettings,
+  type Readiness,
 } from './settings';
 import { samePlace } from './sync-items';
 import type { ContentsRow } from '../core/document/contents';
@@ -198,6 +200,8 @@ export interface ReadingStatus {
    */
   following: boolean;
 }
+
+type PendingReadingStatus = Omit<ReadingStatus, 'note'> & { note: string | Error | null };
 
 const NOTHING_YET: ReadingStatus = {
   playing: false,
@@ -336,6 +340,11 @@ function describe(problem: unknown): string {
   return problem instanceof Error ? problem.message : String(problem);
 }
 
+function stopForReadiness(provider: ProviderId, ready: Readiness): Error | null {
+  if (ready.ready || ready.missing.includes('a Voice')) return null;
+  return readinessRefusal(provider, ready.missing);
+}
+
 /**
  * Where a Contents row's fragment starts in its section, as the Block ordinal the
  * page reported (`BlocksMessage.anchors`, #212, #307); the top of the section for
@@ -404,9 +413,13 @@ export function useReading(
    * end up in different themes with a white rectangle between them.
    */
   const scheme = resolveTheme(settings.theme, useColorScheme());
-  const [status, setStatus] = useState<ReadingStatus>(NOTHING_YET);
+  const [storedStatus, setStatus] = useState<PendingReadingStatus>(NOTHING_YET);
+  const note = storedStatus.note instanceof DisabledProviderError
+    ? storedStatus.note.currentNote(settings.enabledProviders)
+    : storedStatus.note instanceof Error ? storedStatus.note.message : storedStatus.note;
+  const status: ReadingStatus = useMemo(() => ({ ...storedStatus, note }), [storedStatus, note]);
   // The Reading's notes and errors, as the owner saw them, in the Debug Log (ADR 0054).
-  const { note, voiceError } = status;
+  const { voiceError } = status;
   useEffect(() => { if (note) debugLog('reading', `note: ${note}`); }, [note]);
   useEffect(() => { if (voiceError) debugLog('reading', `voice error: ${voiceError}`); }, [voiceError]);
 
@@ -600,7 +613,7 @@ export function useReading(
     // A Provider the owner just refused (#109): the engine has stopped where it
     // was, which is all there is to show.
     if (isDeclined(problem)) return;
-    setStatus((was) => ({ ...was, note: describe(problem) }));
+    setStatus((was) => ({ ...was, note: problem instanceof Error ? problem : describe(problem) }));
   }, []);
 
   /**
@@ -1524,7 +1537,8 @@ export function useReading(
     await Promise.resolve();
     const ready = readiness(settings, hasKey);
     if (!ready.ready && inventoryReady(document) && !hasSavedVoice(document, settings.provider, settings.voice, settings.fish.model)) {
-      setStatus((was) => ({ ...was, note: readinessNote(settings.provider, ready) }));
+      const note = stopForReadiness(settings.provider, ready);
+      setStatus((was) => ({ ...was, note }));
       return null;
     }
 
@@ -1606,7 +1620,7 @@ export function useReading(
       engineRef.current?.pause();
       // What `readiness` says, not `enabling` alone: with nothing enabled that
       // would name a Provider the owner never chose (#103).
-      const note = readinessNote(settings.provider, readiness(settings, hasKey));
+      const note = stopForReadiness(settings.provider, readiness(settings, hasKey));
       setStatus((was) => ({ ...was, playing: false, buffering: false, note }));
       restateNowPlaying();
       return;

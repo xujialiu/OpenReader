@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { createLocator, readingPlaceAt, type ReadingPlace } from '../../src/core/document';
 import type { ReportedBlock } from '../../src/renderer/messages';
 import { segmentDocument } from '../../src/app/segment';
-import { DEFAULT_SETTINGS, type AppSettings } from '../../src/app/settings';
+import { DEFAULT_SETTINGS, readinessRefusal, type AppSettings } from '../../src/app/settings';
+import { hasSavedVoice } from '../../src/offline/runtime';
 import { useReading, type Reading } from '../../src/app/use-reading';
 import { SynthesisError } from '../../src/core/providers/errors';
 import { highlighterSource } from '../../src/renderer/highlighter';
@@ -122,7 +123,7 @@ vi.mock('../../src/playback', async () => ({
   createPlaybackEngine: engines.create,
 }));
 vi.mock('../../src/offline/runtime', () => ({
-  hasSavedVoice: () => false,
+  hasSavedVoice: vi.fn(() => false),
   inventoryReady: () => true,
   offlineProvider: () => ({ capabilities: { wordTimestamps: false } }),
 }));
@@ -193,6 +194,45 @@ function mount(options: { settings?: AppSettings; resume?: ReadingPlace | null; 
     get reading() { return reading!; },
   };
 }
+
+it('editing inactive Bracket pairs keeps the Reading playing (#287)', async () => {
+  const settings: AppSettings = { ...DEFAULT_SETTINGS, provider: 'local', voice: 'af_bella', enabledProviders: ['local'], stripBrackets: false };
+  const m = mount({ settings });
+  await m.up();
+  try {
+    await m.report(CHAPTER_ONE, 0);
+    await m.press((r) => r.play());
+    await m.press(() => engines.built[0].deps.onState!({ playing: true, buffering: false }));
+    await m.settings({ ...settings, bracketPairs: '【】' });
+    expect(m.reading.status.playing).toBe(true);
+    await m.settings({ ...settings, stripBrackets: true });
+    expect(m.reading.status.playing).toBe(false);
+  } finally {
+    await m.down();
+  }
+});
+
+it('explains a prefetched disabled-Provider stop using current enablement (#328)', async () => {
+  const settings: AppSettings = { ...DEFAULT_SETTINGS, provider: 'compatible', voice: 'af_nova', enabledProviders: [] };
+  const m = mount({ settings });
+  vi.mocked(hasSavedVoice).mockReturnValue(true);
+  await m.up();
+  try {
+    await m.report(CHAPTER_ONE, 0);
+    await m.press((r) => r.play());
+    const engine = engines.built[0];
+    const refusal = readinessRefusal('compatible', ['no provider']);
+    await m.settings({ ...settings, enabledProviders: ['local'] });
+    await m.press(() => engine.deps.onError(refusal));
+    expect(m.reading.status.note).toBe('OpenAI Compatible is disabled. Choose an enabled provider.');
+    await m.settings(settings);
+    expect(m.reading.status.note).toBe('No provider is enabled. Enable one in Settings to listen.');
+    expect(engines.built).toHaveLength(1);
+  } finally {
+    vi.mocked(hasSavedVoice).mockReturnValue(false);
+    await m.down();
+  }
+});
 
 describe('the highlight when output is lost (#152)', () => {
   it.each(['owner', 'output loss'] as const)('holds the last word when paused by %s', async (source) => {

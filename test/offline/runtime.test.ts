@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS } from '../../src/app/settings';
+import { DEFAULT_SETTINGS, type AppSettings } from '../../src/app/settings';
 import type { SynthesisResult } from '../../src/core/providers/types';
 import { BLOCK_WALK } from '../../src/renderer/highlighter';
 import { SEGMENTATION } from '../../src/core/segmenter/revision';
@@ -169,4 +169,32 @@ it('keeps nothing warm while the device is offline', async () => {
   } finally {
     stop();
   }
+});
+
+const compatible: AppSettings = {
+  ...settings, provider: 'compatible', enabledProviders: ['compatible'],
+  compatible: { baseURL: 'https://first.invalid', model: 'first' },
+};
+const local: AppSettings = { ...settings, provider: 'local', enabledProviders: ['local'] };
+
+it.each<[string, AppSettings, AppSettings]>([
+  ['OpenAI Model', settings, { ...settings, openai: { model: 'second' } }],
+  ['compatible Model', compatible, { ...compatible, compatible: { ...compatible.compatible, model: 'second' } }],
+  ['compatible Address', compatible, { ...compatible, compatible: { ...compatible.compatible, baseURL: 'https://second.invalid' } }],
+  ['Kokoro Address', local, { ...local, local: { ...local.local, baseURL: 'https://second.invalid' } }],
+])('separates pending and cached Clips after a change of %s (#174)', async (document, first, second) => {
+  mock.open.mockResolvedValue({ readClip: async () => ({ clip: null, dropped: false }) });
+  const original = offlineProvider(document, first);
+  const changed = offlineProvider(document, second);
+  const [oldClip, sameClip, newClip] = await Promise.all([
+    original.synthesize('Same sentence.', options),
+    original.synthesize('Same sentence.', options),
+    changed.synthesize('Same sentence.', options),
+  ]);
+  expect(mock.synthesize).toHaveBeenCalledTimes(2);
+  expect(sameClip).toBe(oldClip);
+  expect(newClip).not.toBe(oldClip);
+  expect(await changed.synthesize('Same sentence.', options)).toBe(newClip);
+  expect(await original.synthesize('Same sentence.', options)).toBe(oldClip);
+  expect(mock.synthesize).toHaveBeenCalledTimes(2);
 });

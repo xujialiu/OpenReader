@@ -19,6 +19,7 @@ import { DEFAULT_LOOKUP, type LookupSettings } from '../translation/settings';
  * else.
  */
 
+import { SynthesisError } from '../core/providers/errors';
 import { COMPATIBLE_LABEL } from '../core/providers/compatible';
 import { DEFAULT_BRACKET_PAIRS } from '../core/speech-text';
 // The renderer's, because it is the renderer that paints it — and imported from
@@ -656,6 +657,25 @@ export function readinessSentence(provider: ProviderId, missing: readonly string
   return `${label} needs ${andList(missing)}.`;
 }
 
+/** A prefetched refusal can reach the Player after another Provider was enabled. */
+export class DisabledProviderError extends SynthesisError {
+  constructor(readonly provider: ProviderId, message: string) {
+    super('no-key', message);
+  }
+
+  currentNote(enabled: readonly ProviderId[]): string | null {
+    if (enabled.includes(this.provider)) return null;
+    return readinessSentence(this.provider, enabled.length ? ['enabling'] : ['no provider']);
+  }
+}
+
+export function readinessRefusal(provider: ProviderId, missing: readonly string[]): SynthesisError {
+  const message = readinessSentence(provider, missing);
+  return missing.includes('no provider') || missing.includes('enabling')
+    ? new DisabledProviderError(provider, message)
+    : new SynthesisError('no-key', message);
+}
+
 /**
  * What the player says about readiness, or null when there is nothing to say.
  *
@@ -779,5 +799,5 @@ export function engineIdentity(settings: AppSettings): string {
   // spoken: a change rebuilds the engine instead of mixing the two forms in
   // one reading (#25).
   return JSON.stringify([settings.provider, settings.enabledProviders.includes(settings.provider), settings.voice, config,
-    settings.stripBrackets, settings.bracketPairs]);
+    settings.stripBrackets, settings.stripBrackets ? settings.bracketPairs : null]);
 }

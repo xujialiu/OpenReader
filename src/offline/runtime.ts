@@ -30,7 +30,7 @@ import {
   providerDepsFor,
   providerSettings,
   readiness,
-  readinessSentence,
+  readinessRefusal,
   synthesisOrigin,
   type AppSettings,
 } from "../app/settings";
@@ -162,8 +162,22 @@ function abandonPreparation() {
   if (!abandoned.task) debugLog('offline', `Recheck ${shortId(abandoned.document)} section ${abandoned.section} interrupted`);
   abandoned.reject(abandoned.task ? new PreparationInterrupted() : new RecheckInterrupted());
 }
-const keyOf = (document: string, voice: OfflineVoice, text: string) =>
-  JSON.stringify([document, narrationIdentity(voice), text]);
+/** Only the transient Clip and its pending request depend on the configured server or Model (#174). */
+function requestKey(document: string, voice: OfflineVoice, text: string, current: AppSettings): string {
+  const key = [document, narrationIdentity(voice), text];
+  switch (voice.provider) {
+    case 'openai-official':
+      key.push(current.openai.model.trim());
+      break;
+    case 'compatible':
+      key.push(current.compatible.baseURL.trim(), current.compatible.model.trim());
+      break;
+    case 'local':
+      key.push(current.local.baseURL.trim(), current.local.engine);
+      break;
+  }
+  return JSON.stringify(key);
+}
 const emit = () => {
   revision++;
   listeners.forEach((listener) => { listener(); });
@@ -432,11 +446,7 @@ async function sendable(voice: OfflineVoice, current: AppSettings) {
   };
   const found = keyResult?.outcome === "found";
   const ready = readiness(configured, found);
-  if (!ready.ready)
-    throw new SynthesisError(
-      "no-key",
-      readinessSentence(voice.provider, ready.missing),
-    );
+  if (!ready.ready) throw readinessRefusal(voice.provider, ready.missing);
   return {
     configured,
     credentials: {
@@ -474,7 +484,7 @@ async function ensureConsent(
 ): Promise<void> {
   const configured = { ...current, provider: voice.provider, voice: voice.voice };
   if (consent.allows(providerRecipient(configured, voice.provider, false).key)) return;
-  if (await memory.match(keyOf(document, voice, text))) return;
+  if (await memory.match(requestKey(document, voice, text, current))) return;
   if (await savedClip(document, voice, text)) return;
   let recipient: Recipient;
   try {
@@ -512,7 +522,7 @@ async function synthesize(
     if (online) keepWarm(synthesisOrigin(current, voice.provider));
     return saved;
   }
-  const key = keyOf(document, voice, text);
+  const key = requestKey(document, voice, text, current);
   let flight = flights.get(key);
   if (!flight) {
     flight = (async () => {
