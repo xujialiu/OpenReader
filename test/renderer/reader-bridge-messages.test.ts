@@ -104,6 +104,22 @@ describe('a message with a known type is taken only whole', () => {
     expect(seen.onAnchors).toHaveBeenCalledTimes(2);
   });
 
+  it('delivers only the current Contents opening’s visible place, once', () => {
+    const bridge = mount({});
+    const old = vi.fn();
+    const current = vi.fn();
+    bridge.contentsPlace(old);
+    bridge.contentsPlace(current);
+    const reply = { type: 'openreader:contents-place', place: { sectionIndex: 1, block: 3 } };
+    arrive(bridge, { ...reply, request: 1 });
+    arrive(bridge, { ...reply, request: 2, place: { sectionIndex: 1, block: -1 } });
+    expect(current).not.toHaveBeenCalled();
+    arrive(bridge, { ...reply, request: 2 });
+    arrive(bridge, { ...reply, request: 2 });
+    expect(current).toHaveBeenCalledExactlyOnceWith(reply.place);
+    expect(old).not.toHaveBeenCalled();
+  });
+
   it('drops a selection with no text while Look Up is on', () => {
     const bridge = mount({});
     const selected = vi.fn();

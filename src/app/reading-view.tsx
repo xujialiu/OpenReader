@@ -179,7 +179,7 @@ export interface ReadingViewProps {
    */
   onState(playing: boolean, buffering: boolean): void;
   /**
-   * Where the contents list marks (`contentsPlace` below), for the download drawer to
+   * The Reading’s place, for the download drawer to
    * mark and open at the same chapter (#88, #212). The drawer is the screen's,
    * not this view's, so it hears it through the shell as the Reading Button does.
    * It changes when the reading enters another spine item or, in a file several
@@ -302,9 +302,23 @@ export function ReadingView({
   useEffect(() => { onState(reading.status.playing, reading.status.buffering); }, [reading.status.playing, reading.status.buffering, onState]);
   const voices = useVoiceLists(settings);
   const [displayError, setDisplayError] = useState<string | null>(null);
-  const [contentsOpen, setContentsOpen] = useState(false);
+  // undefined means closed. An open Contents may have no identifiable page yet.
+  const [visiblePlace, setVisiblePlace] = useState<ReadingSpineItem | null>();
+  const contentsOpen = visiblePlace !== undefined;
+  const opening = useRef(0);
+  const openContents = () => {
+    const request = ++opening.current;
+    // Only the live page can distinguish chapters in the same file.
+    setVisiblePlace(null);
+    reading.bridge.contentsPlace((place) => {
+      if (place && opening.current === request) setVisiblePlace(place);
+    });
+  };
   const [voicesOpen, setVoicesOpen] = useState(false);
-  const closeContents = useCallback(() => setContentsOpen(false), []);
+  const closeContents = useCallback(() => {
+    opening.current++;
+    setVisiblePlace(undefined);
+  }, []);
   const closeVoices = useCallback(() => setVoicesOpen(false), []);
   /**
    * Parked, the view closes its Drawers (#214, ADR 0049). A Reading left
@@ -317,9 +331,9 @@ export function ReadingView({
     if (shown) return;
     closeHighlights?.();
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setContentsOpen(false);
+    closeContents();
     setVoicesOpen(false);
-  }, [shown, closeHighlights]);
+  }, [shown, closeHighlights, closeContents]);
   /** Down to the Reading Button, or the whole strip and the navigation bar with it (#67). Here rather than in the player because pausing re-opens both, and the pause is this screen's. */
   const [collapsed, setCollapsed] = useState(false);
   /**
@@ -525,7 +539,7 @@ export function ReadingView({
   }, [sleepSlept]);
 
   /**
-   * Where the contents list marks: the section the **reading** is in, or the last
+   * The place shared with Now Playing and Download: the section the **reading** is in, or the last
    * one the renderer put on the page when nothing has been read yet. The second is
    * coarser and is said to be — it is the page's answer, not the voice's — and it is
    * better than opening the list at the top of a two-thousand-chapter book.
@@ -541,11 +555,14 @@ export function ReadingView({
    */
   const anchors = at === null ? null : status.anchors.get(at) ?? null;
   const settled = anchors && status.section === at && status.block !== null ? anchoredStart(anchors, status.block) : null;
-  const contentsPlace = useMemo<ReadingSpineItem | null>(
+  const readingPlace = useMemo<ReadingSpineItem | null>(
     () => (at === null ? null : { sectionIndex: at, block: settled, anchors }),
     [at, settled, anchors],
   );
-  useEffect(() => { onSection(contentsPlace); }, [contentsPlace, onSection]);
+  const contentsPlace = useMemo(() => visiblePlace
+    ? { ...visiblePlace, anchors: status.anchors.get(visiblePlace.sectionIndex) } : null,
+  [visiblePlace, status.anchors]);
+  useEffect(() => { onSection(readingPlace); }, [readingPlace, onSection]);
 
   /**
    * The Contents rows that carry the Downloaded check (#134), counted in the
@@ -676,7 +693,7 @@ export function ReadingView({
   useNowPlaying({
     title: document.title,
     // The reading's own place: the page's section is not where the voice is.
-    chapter: chapterOf(contents, status.section === null ? null : contentsPlace),
+    chapter: chapterOf(contents, status.section === null ? null : readingPlace),
     cover,
     playing: status.playing,
     rate: settings.rate,
@@ -808,7 +825,7 @@ export function ReadingView({
     if (what === 'collapse') return setCollapsed(Boolean(command.on));
     if (what === 'taplock') return chooseTapLock(Boolean(command.on));
     if (what === 'sleep') return sleep.choose(command.choice === 'chapter' ? 'chapter' : command.choice === null || command.choice === undefined ? null : Number(command.choice));
-    if (what === 'contents') return setContentsOpen(Boolean(command.on));
+    if (what === 'contents') return command.on ? void openContents() : closeContents();
     if (what === 'voicesheet') {
       setVoicesOpen(Boolean(command.on));
       if (command.on) voices.ask((command.provider ?? settings.provider) as ProviderId);
@@ -834,12 +851,13 @@ export function ReadingView({
           `reportsWordTimings=${status.reportsWordTimings} seeking=${status.seeking} spine=${status.spineHrefs.length} ` +
           `lang=${JSON.stringify(status.language)} collapsed=${collapsed} at=${at} contents=${contents.rows.length}`,
       );
-      // Where Contents, the Lock Screen and Download mark (#212).
-      const mark = contentsPlace ? currentRow(contents, contentsPlace) : null;
+      // When Contents is open, report its visible row alongside the spoken chapter.
+      const markedPlace = contentsOpen ? contentsPlace : readingPlace;
+      const mark = markedPlace ? currentRow(contents, markedPlace) : null;
       hlog(
-        `place block=${status.block} settled=${contentsPlace?.block ?? null} anchors=${anchors ? anchors.size : null} ` +
+        `place block=${status.block} settled=${readingPlace?.block ?? null} anchors=${anchors ? anchors.size : null} ` +
           `mark=${mark ? `${mark.row}:${mark.precision}:${JSON.stringify(contents.rows[mark.row]?.label ?? '')}` : null} ` +
-          `chapter=${JSON.stringify(chapterOf(contents, status.section === null ? null : contentsPlace))}`,
+          `chapter=${JSON.stringify(chapterOf(contents, status.section === null ? null : readingPlace))}`,
       );
       hlog(`line=${JSON.stringify(readingLine(status, settings))} highlight=${JSON.stringify(highlightLine(status))}`);
       hlog(`voiceInUse=${JSON.stringify(voiceInUse)} provider=${settings.provider} voice=${settings.voice} rate=${settings.rate}`);
@@ -929,7 +947,7 @@ export function ReadingView({
         onPause={pause}
         onSkip={reading.skip}
         onRate={onRate}
-        onContents={() => setContentsOpen(true)}
+        onContents={openContents}
         onVoices={() => setVoicesOpen(true)}
         following={status.following}
         onReturn={reading.returnToReading}

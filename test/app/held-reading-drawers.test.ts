@@ -3,6 +3,9 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DocumentId, LibraryEntry } from '../../src/core/document';
+import type { ReadingSpineItem } from '../../src/core/document/contents';
+import type { ReaderBridgeOptions } from '../../src/renderer/reader-bridge';
+import type { ContentsSheetProps } from '../../src/app/contents-sheet';
 import type { ReportedBlock } from '../../src/renderer/messages';
 import { ReadingHost, useHeldReading, type ReadingHandle } from '../../src/app/reading-host';
 import { DEFAULT_SETTINGS, type AppSettings } from '../../src/app/settings';
@@ -24,7 +27,10 @@ const sheets = vi.hoisted(() => ({ contents: false, voices: false }));
 const world = vi.hoisted(() => ({
   shell: null as unknown,
   handle: null as unknown,
-  page: null as null | { onBlocks?(blocks: readonly unknown[], section: { index: number; href: string; spine: number }): void },
+  page: null as ReaderBridgeOptions | null,
+  visiblePlace: { sectionIndex: 0, block: 0 } as ReadingSpineItem,
+  sample: (receive: (place: ReadingSpineItem) => void) => receive(world.visiblePlace),
+  shared: false,
   player: null as null | { onPlay(): void; onPause(): void; onContents(): void; onVoices(): void },
 }));
 
@@ -36,7 +42,7 @@ vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ t
 vi.mock('react-native-teleport', () => ({ Portal: ({ children }: { children: unknown }) => children, PortalHost: () => null }));
 vi.mock('@epubjs-react-native/core', () => ({
   Reader: () => null,
-  useReader: () => ({ getMeta: () => ({}), toc: [], injectJavascript() {}, currentLocation: null }),
+  useReader: () => ({ getMeta: () => ({}), toc: ['Chapter 9', 'Chapter 10'].map((label, i) => ({ label, href: world.shared ? 's0.xhtml#c' + i : 's' + i + '.xhtml' })), injectJavascript() {}, currentLocation: { start: { index: 0 } } }),
 }));
 vi.mock('../../src/app/routes', () => ({ useShell: () => world.shell }));
 // The page: the test reports a section's Blocks as the WebView would.
@@ -48,6 +54,7 @@ vi.mock('../../src/renderer', async () => {
     useReaderBridge: (options: typeof world.page) => {
       world.page = options;
       return {
+        contentsPlace: world.sample,
         goTo: nothing, goToSection: nothing, browse: nothing, show: nothing, clock: { onClip: nothing, onPosition: nothing },
         setUtterances: nothing, setInset: nothing, setOpenPlayer: nothing, setLinePosition: nothing, setScrolling: nothing, setBar: nothing,
         setAppearance: nothing, setTheme: nothing, resumeFollowing: nothing, snapshot: nothing, hold: nothing, clear: nothing,
@@ -89,7 +96,19 @@ vi.mock('../../src/app/body-text-sizes', () => ({ readBodyTextSize: () => null, 
 vi.mock('../../src/translation/services', () => ({ lookup: async () => { throw new Error('not in this test'); } }));
 vi.mock('../../src/translation/pronunciation-audio', () => ({ playPronunciation: async () => {} }));
 // The view's children. Contents and Voice record the `visible` they are given.
-vi.mock('../../src/app/contents-sheet', () => ({ ContentsSheet: (props: { visible: boolean }) => { sheets.contents = props.visible; return null; } }));
+vi.mock('../../src/app/contents-sheet', async (original) => {
+  const { ContentsSheet } = await original<typeof import('../../src/app/contents-sheet')>();
+  return { ContentsSheet: (props: ContentsSheetProps) => {
+    sheets.contents = props.visible;
+    return props.visible ? createElement(ContentsSheet, props) : null;
+  } };
+});
+vi.mock('../../src/app/drawer', () => ({
+  Drawer: 'Drawer', DrawerFooter: 'Footer', DrawerRow: 'Row', DrawerRowText: 'Label',
+  DrawerList: ({ data, renderItem }: { data: unknown[]; renderItem(info: {item: unknown; index: number}): React.ReactElement }) =>
+    data.map((item, index) => createElement('View', { key: index }, renderItem({ item, index }))),
+}));
+vi.mock('../../src/app/icon', () => ({ Icon: () => null }));
 vi.mock('../../src/app/voice-sheet', () => ({ VoiceSheet: (props: { visible: boolean }) => { sheets.voices = props.visible; return null; } }));
 vi.mock('../../src/app/saved-highlights', () => ({ SavedHighlights: ({ renderLookup }: { renderLookup(): unknown }) => renderLookup() }));
 vi.mock('../../src/app/lookup-drawer', () => ({ LookupDrawer: () => null }));
@@ -98,7 +117,7 @@ vi.mock('../../src/app/document-cover', () => ({ useDocumentCover: () => null })
 vi.mock('../../src/app/reader-file-system', () => ({ useReaderFileSystem: () => ({}) }));
 vi.mock('../../src/app/use-voices', () => ({ useVoiceLists: () => ({ voicesOf: () => null, ask() {}, asking: () => false, noteOf: () => null }) }));
 vi.mock('../../src/app/voice-catalog', () => ({ knownVoice: () => null }));
-vi.mock('../../src/app/controls', () => ({ INK: { page: '#fff', quiet: '#888' } }));
+vi.mock('../../src/app/controls', () => ({ useAccent: () => ({ onMark: 'white' }), INK: { page: '#fff', quiet: '#888' } }));
 vi.mock('../../src/app/text-styles', () => ({ TEXT: { subhead: {} } }));
 vi.mock('../../src/app/walkthrough-harness', () => ({ hlog() {}, probeScript: () => '', statusLine: () => '', useHarnessCommands() {} }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -138,7 +157,8 @@ async function playing(): Promise<ReactTestRenderer> {
   let tree!: ReactTestRenderer;
   await act(async () => { tree = create(createElement(ReadingHost, null, createElement(Reader))); });
   await settle();
-  await act(async () => { world.page!.onBlocks!(BLOCKS, { index: 0, href: 's0.xhtml', spine: 1 }); });
+  await act(async () => { world.page!.onDocument!({ spine: 2, hrefs: ['s0.xhtml', 's1.xhtml'] }); });
+  await act(async () => { world.page!.onBlocks!(BLOCKS, { index: 0, href: 's0.xhtml', spine: 2 }); });
   await settle();
   await act(async () => { world.player!.onPlay(); });
   await settle();
@@ -151,7 +171,7 @@ const leave = async () => {
   await settle();
 };
 
-beforeEach(() => { world.page = null; world.player = null; sheets.contents = false; sheets.voices = false; });
+beforeEach(() => { world.shared = false; world.sample = (receive) => receive(world.visiblePlace); world.page = null; world.player = null; sheets.contents = false; sheets.voices = false; });
 
 /** Back to the Reader: the Reading Button or the Document's row shows the held Reading again. */
 const comeBack = async () => {
@@ -205,5 +225,38 @@ describe('a Drawer of the Reader, open when the Reader is left (#214)', () => {
     expect(held()).toBeNull();
     expect(tree.toJSON()).toBeNull();
     await act(async () => { tree.unmount(); });
+  });
+});
+
+describe('the chapter marked when Contents opens (#383)', () => {
+  it('never paints the first chapter of a shared file while waiting for the visible block', async () => {
+    world.shared = true;
+    let reply!: (place: ReadingSpineItem) => void;
+    world.sample = (receive) => { reply = receive; };
+    const tree = await playing();
+    try {
+      await act(async () => { world.page!.onAnchors!(0, new Map([['c0', 0], ['c1', 2]])); });
+      await act(async () => { world.player!.onContents(); });
+      expect(sheets.contents).toBe(true);
+      expect(tree.root.findAllByProps({ marked: true })).toHaveLength(0);
+      await act(async () => { reply({ sectionIndex: 0, block: 2 }); });
+      expect(tree.root.findByProps({ marked: true }).findByProps({ emphasized: true }).props.children).toBe('Chapter 10');
+    } finally {
+      await act(async () => { tree.unmount(); });
+    }
+  });
+  it.each([true, false])('marks the visible chapter with playback running=%s', async (running) => {
+    const tree = await playing();
+    try {
+      if (!running) await act(async () => { world.player!.onPause(); });
+      world.visiblePlace = { sectionIndex: 1, block: 0 };
+      await act(async () => { world.page!.onFollowing!(false); });
+      await act(async () => { world.player!.onContents(); });
+      const row = tree.root.findByProps({ marked: true });
+      expect(row.findByProps({ emphasized: true }).props.children).toBe('Chapter 10');
+      expect(held()?.playing).toBe(running);
+    } finally {
+      await act(async () => { tree.unmount(); });
+    }
   });
 });

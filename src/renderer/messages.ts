@@ -273,7 +273,20 @@ export interface ProbeMessage {
   answer: string;
 }
 
+export interface VisiblePlace {
+  sectionIndex: number;
+  block: number | null;
+}
+
+export const CONTENTS_PLACE_MESSAGE = 'openreader:contents-place';
+interface ContentsPlaceMessage {
+  type: typeof CONTENTS_PLACE_MESSAGE;
+  request: number;
+  place: VisiblePlace | null;
+}
+
 export type WebViewMessage =
+  | ContentsPlaceMessage
   | BlocksMessage
   | DocumentMessage
   | FollowingStateMessage
@@ -663,6 +676,7 @@ export interface SnapshotMessage {
 }
 
 export type HighlightMessage =
+  | { kind: 'contentsPlace'; request: number }
   | { kind: 'savedHighlights'; marks: readonly SavedHighlight[] }
   | { kind: 'prepare'; section: number }
   | LookupControlMessage
@@ -720,6 +734,12 @@ export interface LookupControlMessage {
 export function readWebViewMessage(event: unknown): WebViewMessage | null {
   if (!isObject(event)) return null;
   switch (event.type) {
+    case CONTENTS_PLACE_MESSAGE: {
+      const place = event.place;
+      return isIndex(event.request) && (place === null || (isObject(place) &&
+        isIndex(place.sectionIndex) && (place.block === null || isIndex(place.block))))
+        ? (event as unknown as ContentsPlaceMessage) : null;
+    }
     case BLOCKS_MESSAGE:
       return isIndex(event.sectionIndex) &&
         typeof event.section === 'string' &&

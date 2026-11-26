@@ -12,8 +12,8 @@ stands._
 While the reading plays, choosing a chapter in the contents now takes the page
 to that chapter and does nothing else. The voice carries on with the sentence
 it was reading, the page stops following it, and the player shows **M**, as it
-does when the owner moves the page with a finger. The contents still mark the
-chapter being read, not the one on the page.
+does when the owner moves the page with a finger. When Contents opens, its coloured row shows the chapter visible on the page.
+This applies to a finger scroll and to a chapter opened from Contents.
 
 Paused, a chapter already behaved this way (design 0044). So a chapter in the
 contents now means one thing whether or not the voice is speaking: look at it.

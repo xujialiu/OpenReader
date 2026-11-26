@@ -36,7 +36,15 @@ with no change on the WebView side.
 
 A browse issues no engine call: no `seek`, no `silence`, no `pause`. The voice
 goes on with the Clip it is playing, `status.utterance` and `status.section`
-stay the reading's, and the Contents mark with them.
+stay the reading's.
+
+### The Contents mark uses the visible chapter (#383)
+
+Opening Contents samples the passage below the floating header. While the
+page answers, the drawer opens with no selected row. Each visible iframe supplies its spine index. In a shared file, the
+last text block before each chapter anchor tells whether that chapter has
+reached the visible page. The drawer uses the existing fragment-to-row mapping.
+Now Playing, Download and the Sleep Timer retain the speech cursor.
 
 ### `revealCue` is cleared by a browse
 

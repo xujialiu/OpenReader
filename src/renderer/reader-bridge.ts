@@ -51,6 +51,8 @@ import {
   type ReadingScheme,
 } from './highlighter';
 import {
+  CONTENTS_PLACE_MESSAGE,
+  type VisiblePlace,
   DOCUMENT_MESSAGE,
   FOLLOWING_STATE_MESSAGE,
   PROBLEM_MESSAGE,
@@ -253,6 +255,8 @@ export interface BridgeClock extends ReaderClock {
 }
 
 export interface ReaderBridge {
+  /** Sample the visible passage once when Contents opens. */
+  contentsPlace(receive: (place: VisiblePlace | null) => void): void;
   setLookupEnabled(enabled: boolean): void;
   resumeFollowing(): void;
   releaseSelection(): void;
@@ -949,6 +953,13 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     [send, goToLocation, placeIn],
   );
 
+  const contentsRequest = useRef(0);
+  const pendingContents = useRef<((place: VisiblePlace | null) => void) | null>(null);
+  const contentsPlace = useCallback((receive: (place: VisiblePlace | null) => void) => {
+    pendingContents.current = receive;
+    send({ kind: 'contentsPlace', request: ++contentsRequest.current });
+  }, [send]);
+
   const snapshot = useCallback(
     (why: string) => {
       if (DEBUG_MODE) send({ kind: 'snapshot', why });
@@ -972,6 +983,14 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     (event: unknown) => {
       const message = asMessage(event);
       if (!message) return;
+      if (message.type === CONTENTS_PLACE_MESSAGE) {
+        if (message.request === contentsRequest.current) {
+          const receive = pendingContents.current;
+          pendingContents.current = null;
+          receive?.(message.place);
+        }
+        return;
+      }
       if (message.type === TEXT_ERROR_MESSAGE) {
         clearTimeout(preparing.current.get(message.sectionIndex));
         preparing.current.delete(message.sectionIndex);
@@ -1118,7 +1137,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   return useMemo(
-    () => ({ expandSelection, setSavedHighlights, releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, setTapLock, goTo, goToSection, prepareSection, browse, snapshot, restart, readerProps }),
-    [expandSelection, setSavedHighlights, releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, setTapLock, goTo, goToSection, prepareSection, browse, snapshot, restart, readerProps],
+    () => ({ contentsPlace, expandSelection, setSavedHighlights, releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, setTapLock, goTo, goToSection, prepareSection, browse, snapshot, restart, readerProps }),
+    [contentsPlace, expandSelection, setSavedHighlights, releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, setTapLock, goTo, goToSection, prepareSection, browse, snapshot, restart, readerProps],
   );
 }

@@ -111,10 +111,9 @@ it, then press play. That is one tap more than before, and it is the cost of
 the change. Opening the contents, choosing a chapter and pressing play is no
 longer enough while paused, because play now means "carry on".
 
-The contents still mark the chapter your reading is in, not the one on the
-page. The page already shows what you are looking at. The mark answers the one
-question the page cannot answer while you look elsewhere: where play will
-carry on.
+Opening Contents marks the chapter visible on the page. Browsing to another
+chapter and opening Contents again puts its row in reach. Play resumes at the
+sentence where speech paused.
 
 Choosing the chapter your reading is in behaves like any other row. It shows
 the top of that chapter, and your sentence may be further down. Getting back to

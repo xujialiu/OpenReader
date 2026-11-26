@@ -136,3 +136,26 @@ describe('the Reader is told where each Contents fragment starts in a section it
     expect(report(undefined, BODY)).not.toHaveProperty('anchors');
   });
 });
+
+describe('the visible Contents chapter (#383)', () => {
+  it('passes a frame ending under the header and resolves chapters sharing the next frame', () => {
+    const page = standInPage({ toc: [{ href: 'ch3.xhtml#ten' }] });
+    const earlier = page.addSection(2, '<p>Nine</p>');
+    const visible = page.addSection(3, '<p>Front matter</p><h2 id="ten">Ten</h2><p>Body</p>');
+    page.sweep();
+    page.send({ kind: 'bar', coveredPx: 60, reservedPx: 60 });
+    earlier.document.defaultView.frameElement.getBoundingClientRect = () => ({ top: -750, bottom: 62, height: 812 });
+    visible.document.defaultView.frameElement.getBoundingClientRect = () => ({ top: 62, bottom: 1062, height: 1000 });
+    const rangeFor = (end: number) => ({
+      setStart() {}, setEnd() {}, getBoundingClientRect: () => ({ bottom: end }),
+    });
+    earlier.document.createRange = () => rangeFor(800); // All text ends at y=50.
+    visible.document.createRange = () => rangeFor(40);
+    page.send({ kind: 'contentsPlace', request: 1 });
+    expect(page.posted.at(-1)).toEqual({ type: 'openreader:contents-place', request: 1,
+      place: { sectionIndex: 3, block: 0 } });
+    visible.document.defaultView.frameElement.getBoundingClientRect = () => ({ top: -20, bottom: 980, height: 1000 });
+    page.send({ kind: 'contentsPlace', request: 2 });
+    expect(page.posted.at(-1)?.place).toEqual({ sectionIndex: 3, block: 1 });
+  });
+});

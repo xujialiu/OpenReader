@@ -651,6 +651,7 @@ ${constants}
      replaced is simply not in here and the next paint walks the live one instead
      of trusting a dead one. Walked once per document, not once per word. */
   var maps = new WeakMap();
+  var sectionAnchors = new WeakMap();
   /* Spine index -> the ids it contributed, so re-rendering a section replaces
      its Blocks instead of accumulating them. */
   var bySection = new Map();
@@ -2037,7 +2038,9 @@ ${constants}
     maps.set(contents.document, map);
     if (savedMarks.length) drawSaved(contents);
     bySection.set(index, ids);
-    post({ type: BLOCKS, sectionIndex: index, section: href, blocks: reported, sizes: MEASURE ? sizesOf(contents, found) : null, anchors: anchorsOf(contents.document, found) });
+    var anchors = anchorsOf(contents.document, found);
+    if (anchors && anchors.length) sectionAnchors.set(contents.document, anchors);
+    post({ type: BLOCKS, sectionIndex: index, section: href, blocks: reported, sizes: MEASURE ? sizesOf(contents, found) : null, anchors: anchors });
   }
 
   /* The rendered Contents for a section, or null — which is the ordinary "the
@@ -3860,7 +3863,60 @@ ${EPUB_GUARDS_SOURCE}
 
   /* ---- the one entry point ---- */
 
+  /* Read the first block below the floating header on demand. Only shared-file
+     chapters need a block ordinal. A Range around the actual text handles split
+     blocks whose parent element extends across several chapter headings. */
+  function contentsPlace() {
+    var stage = scroller();
+    if (!stage) return null;
+    var top = stage.getBoundingClientRect().top + barCovered;
+    var bottom = top + visibleOf(stage);
+    var list = rendition.getContents();
+    var trailingPlace = null;
+    for (var i = 0; i < list.length; i++) {
+      var content = list[i];
+      var doc = content && content.document;
+      var frame = doc && doc.defaultView && doc.defaultView.frameElement;
+      if (!frame) continue;
+      var bounds = frame.getBoundingClientRect();
+      if (bounds.bottom <= top || bounds.top >= bottom || bounds.height <= 0) continue;
+      var section = content.sectionIndex;
+      var place = { sectionIndex: section, block: null };
+      var ids = bySection.get(section);
+      var map = maps.get(doc);
+      if (!ids || !ids.length || !map) return place;
+      var edge = top - bounds.top;
+      var range = doc.createRange();
+      var endsAbove = function (ordinal) {
+        var parts = map.get(ids[ordinal]).parts;
+        range.setStart(parts[0].node, 0);
+        var last = parts[parts.length - 1].node;
+        range.setEnd(last, last.length);
+        return range.getBoundingClientRect().bottom <= edge;
+      };
+      // A previous frame's bottom margin can overlap the next chapter landing.
+      if (bounds.bottom < bottom && endsAbove(ids.length - 1)) {
+        trailingPlace = { sectionIndex: section, block: ids.length - 1 };
+        continue;
+      }
+      // A chapter is the first visible passage once the preceding block ends
+      // above the header. Measure only chapter boundaries, even in long files.
+      var anchors = sectionAnchors.get(doc) || [];
+      place.block = 0;
+      for (var j = 0; j < anchors.length; j++) {
+        var start = anchors[j][1];
+        if (start > place.block && start < ids.length && endsAbove(start - 1)) place.block = start;
+      }
+      return place;
+    }
+    return trailingPlace;
+  }
+
   function dispatch(message) {
+    if (message.kind === 'contentsPlace') {
+      post({ type: 'openreader:contents-place', request: message.request, place: contentsPlace() });
+      return;
+    }
     if (message.kind === 'savedHighlights') {
       savedMarks = message.marks.slice().sort(function (a, b) { return a.id - b.id; });
       rendition.getContents().forEach(drawSaved);

@@ -1,6 +1,5 @@
 /**
- * **Contents**: the Document's own list of its parts, open at the chapter the
- * reading is in (ADR 0020).
+ * **Contents**: the Document's own list of its parts, open at the visible chapter.
  *
  * This is half of what replaced the progress bar, and the half that answers "where
  * am I". So the thing to get right is not the list, it is the **opening**: it
@@ -73,9 +72,7 @@ export interface ContentsSheetProps {
    */
   spineKnown: boolean;
   /**
-   * Where the reading is: its spine item, or the one on the page when nothing is
-   * being read, and in a file several rows share, where the page says each row
-   * starts and the Block the reading is in (#212). Null when neither is known.
+   * The visible passage when Contents opened, with its file’s chapter anchors.
    */
   place: ReadingSpineItem | null;
   /**
@@ -118,8 +115,8 @@ export function ContentsSheet({ visible, onClose, contents, spineKnown, place, o
             nothing else stops working: tapping a sentence still reads from there.
           </DrawerFooter>
         ) : (
-          // Mounted afresh at every opening of the drawer, which is when it opens again at the current row.
-          <DrawerList data={contents.rows} openAt={here?.row ?? null} ends={!footer} extraData={downloaded}
+          // openAt is read on mount. The live page can refine the opening row after the first render.
+          <DrawerList key={here?.row ?? 'top'} data={contents.rows} openAt={here?.row ?? null} ends={!footer} extraData={downloaded}
             // The row's place in the whole list.
             keyExtractor={(_, index) => String(index)}
             renderItem={({ item, index }) => (
@@ -159,7 +156,7 @@ export function ContentsSheet({ visible, onClose, contents, spineKnown, place, o
  */
 function precisionLine(precision: 'shared' | 'before'): string {
   if (precision === 'shared') {
-    return 'Several rows share this file, so the first of them is marked; the one being read may come after it.';
+    return 'Several rows share this file, so the first is marked. The visible chapter may come later.';
   }
   return 'This page is not in the contents, so the nearest row before it is marked.';
 }
