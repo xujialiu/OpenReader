@@ -4,7 +4,6 @@
 //
 //   node test/manual-test/kit/hx.cjs UDID '{}' --code-file \
 //     test/manual-test/place-and-following/continuity-release-report.js
-/* global rendition */
 // eslint-disable-next-line no-unused-vars
 function probe() {
   const gate = globalThis.__openreader271ReportGate;
