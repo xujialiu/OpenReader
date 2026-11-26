@@ -62,6 +62,46 @@ a deadline test without touching app source.
   the preparation is released, the section reports empty and the reading stops
   with "That was the last of this document…". Without the stall the section is
   prepared during the last text section and the end is direct.
+- **#271: a later text report clears the wait and lets a collapsed Player
+  return to its Reading Button.** Start with a fresh, not-yet-read copy of
+  `continuity-fixture.ts`; on its first open, sections 0–3 report 45
+  Utterances and section 4 is still unknown. `continuity-hold-report.js`
+  intercepts only the reader page's actual `openreader:blocks` message for
+  section 4, retaining the original JSON payload in that WebView. It does not
+  invent text, replace audio, or alter the report. The guarded
+  `continuity-wait-release.py` stages the Player as collapsed through the
+  existing harness command, seeks to Utterance 44, verifies that the held
+  report is section 4, checks simulator silence, and sends one Play. It watches
+  only new Debug Log bytes and sends `continuity-release-report.js` on the first
+  `[reading] note` that says the Reading is waiting for more reported text.
+  Inspect its Hermes `ReadingStatus` and actual `Player` props: section 4 must
+  be known, the utterance must have advanced, `playing` must be true, the
+  waiting note must be gone, and `collapsed` must remain true. The script then
+  pauses as cleanup. Release inside the reader bridge's 15-second preparation
+  deadline; a later release produces the separate “Preparing the next section
+  timed out” note and is an invalid setup, not #271 evidence.
+
+  A Document retains its Reading Position and reported sections. Delete only
+  the prior disposable fixture entry before rerunning, then import and open a
+  fresh copy so section 4 starts unknown. The base fixture is in
+  `../fixtures/continuity-fixture.ts`.
+
+  With the local fake Kokoro service configured and its Consent answered, run
+  the probe as one guarded phase:
+
+  ```sh
+  python3 test/manual-test/kit/ios_guard.py run --wait 0 --timeout 120 \
+    --record ATTEMPT/issue271-phase.json -- \
+    python3 test/manual-test/place-and-following/continuity-wait-release.py \
+    SIMULATOR_UDID FAKE_TTS_LOG ATTEMPT/issue271.log
+  ```
+
+  The held report is an induced WebView bridge delay in a Debug simulator.
+  Play is sent by the walkthrough harness while the Player is collapsed; this
+  does not establish a physical Player touch, natural offscreen delay,
+  background suspension, Lock Screen behavior, or audible speech. The fake
+  Kokoro service returns silent PCM with word timings, and the simulator stays
+  at volume zero.
 - **#156: Play after the end stays stopped — Player and lock screen.** A
   handler `play`, a real press on the player's Play, and a real press on the
   lock-screen card's centre button all leave the reading stopped with

@@ -91,6 +91,28 @@ a simulator whose own volume is not zero. Read the test log to
 report the actual interval between the two taps. This exercises real simulator
 touches; it still needs screenshot inspection to establish icon visibility.
 
+### Explicit remote Play while a Reading is already playing (#291)
+
+The Lock Screen centre button says Pause while audio is playing. This case
+delivers one explicit play event to the app's already-registered
+remoteCommand listener through Expo's native-module EventEmitter. It is a
+debug event, not a physical Lock Screen, car or headphone press:
+
+  OPENREADER_DEVICE=OpenReader1 OPENREADER_METRO=http://127.0.0.1:8269 \
+    node test/manual-test/kit/cdp.cjs --eval \
+    test/manual-test/lock-screen/remote-play-event.js http://127.0.0.1:8269
+
+remote-play-event.js sends nothing unless the Player is playing, the engine
+has queued audio, and exactly one remoteCommand listener is registered. It
+emits one remoteCommand with command play. Record the returned queue snapshot
+and the Debug Log line remote command=play playing=true, then inspect the Player
+and engine through Hermes (../place-and-following/continuity-state.js): Pause
+remains visible, buffering is false, the same engine continues, and the
+utterance advances. Pause promptly with kit/reading.cjs pause after those
+facts are established. The local fake Provider's PCM is silent; keep simulator
+volume zero. This proves the JavaScript app listener's handling, not iOS's
+MediaRemote delivery.
+
 For the dark lock-screen card's invisible-icon reproduction, the exported
 `center-button` JSON carries the actual button rectangle. Run:
 
