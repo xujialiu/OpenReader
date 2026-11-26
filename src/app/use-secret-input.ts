@@ -13,7 +13,7 @@ export function useSecretInput(id: ProviderId, label: string, secret: ProviderSe
     let mounted = true;
     void (async () => {
       try {
-        const writeError = await flushProviderEdits(id).then(() => null, () => 'The previous edit could not be saved.');
+        const writeError = await flushProviderEdits(id, label).then(() => null, () => 'The previous edit could not be saved.');
         await read(async (saved) => {
           if (mounted) { setValue(saved); setReady(true); setError(writeError); }
         });
@@ -22,13 +22,13 @@ export function useSecretInput(id: ProviderId, label: string, secret: ProviderSe
       }
     })();
     return () => { mounted = false; };
-  }, [id, read]);
+  }, [id, label, read]);
 
   const change = (next: string) => {
     if (locked || !ready) return;
     setValue(next);
     void saveProviderEdit(id, label, () => next.trim() ? secret.save(next) : secret.forget())
-      .then(() => flushProviderEdits(id)).then(() => setError(null), () => setError('Could not save. Try again.'));
+      .then(() => flushProviderEdits(id, label)).then(() => setError(null), () => setError('Could not save. Try again.'));
   };
   return { value, change, editable: ready && !locked, error };
 }

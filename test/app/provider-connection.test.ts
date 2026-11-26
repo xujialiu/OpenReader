@@ -29,3 +29,20 @@ describe('connection test', () => {
     expect(mock.create).not.toHaveBeenCalled();
   });
 });
+
+it.each(['openai-official', 'azure', 'fish', 'speechify', 'compatible', 'local'] as const)(
+  'gives applicable timeout guidance for %s', async (id) => {
+    vi.useFakeTimers();
+    try {
+      mock.check.mockImplementationOnce(() => new Promise<void>(() => {}));
+      const settings = { ...DEFAULT_SETTINGS, openai: { model: 'tts-1' }, azure: { region: 'eastasia' },
+        compatible: { baseURL: 'https://example.invalid', model: 'tts-1' },
+        local: { ...DEFAULT_SETTINGS.local, baseURL: 'https://example.invalid' } };
+      const guidance = id === 'compatible' || id === 'local' ? 'the address' : 'your connection';
+      const result = expect(testProviderConnection(settings, id)).rejects.toThrow(
+        `Connection timed out. Check ${guidance} and try again.`);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await result;
+    } finally { vi.useRealTimers(); }
+  },
+);

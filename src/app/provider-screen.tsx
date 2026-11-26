@@ -16,7 +16,7 @@ import { fishModelLabel, fishModels, sharedFishModels, type FishSpeechModel } fr
 import { ActionRow, FieldRow, Footnote, HeaderButton, SettingsGroup, SettingsPage, SwitchRow, TextRow, ValueRow, type Choice } from './controls';
 import type { ScreenProps } from './routes';
 import { useShell } from './routes';
-import { headersAreOffered, keyIsOffered, providerDeps, PROVIDER_LABELS, SENTENCES_AT_ONCE } from './settings';
+import { hasProviderAddress, headersAreOffered, keyIsOffered, providerDeps, PROVIDER_LABELS, SENTENCES_AT_ONCE } from './settings';
 import { useProviderKey, useGatewayHeaders, type ProviderSecret } from './use-provider-secrets';
 import { useSecretInput } from './use-secret-input';
 import { useProviderConnection } from './use-provider-connection';
@@ -31,15 +31,18 @@ const AT_ONCE_CHOICES: readonly Choice<number>[] = SENTENCES_AT_ONCE.map((value)
  * handed up rather than drawn here: it is said under the fields' card, named
  * after the field it is about (design 0041).
  */
-function SecretField({ id, label, secret, locked, placeholder, onError }: {
+function SecretField({ id, label, secret, locked, placeholder, onEdit, onError }: {
   id: ProviderId; label: string; secret: ProviderSecret; locked: boolean; placeholder: string;
+  onEdit(): void;
   onError(label: string, error: string | null): void;
 }) {
   const input = useSecretInput(id, label, secret, locked);
   const [revealed, setRevealed] = useState(false);
   useFocusEffect(useCallback(() => () => setRevealed(false), []));
   useEffect(() => { onError(label, input.error); }, [label, input.error, onError]);
-  return <FieldRow label={label} value={input.value} onChangeText={input.change} secure={!revealed} editable={input.editable}
+  return <FieldRow label={label} value={input.value} onChangeText={(next) => {
+    if (input.editable) { onEdit(); input.change(next); }
+  }} secure={!revealed} editable={input.editable}
     placeholder={placeholder}
     accessory={<HeaderButton label={`${revealed ? 'Hide' : 'Show'} ${label}`}
       icon={revealed ? 'eyeOff' : 'eye'} onPress={() => setRevealed((previous) => !previous)} />} />;
@@ -49,6 +52,7 @@ export function ProviderScreen({ route, navigation }: ScreenProps<'Provider'>) {
   const { id } = route.params;
   const { settings, setSettings } = useShell();
   const connection = useProviderConnection(id);
+  useFocusEffect(useCallback(() => connection.clearNote, [connection.clearNote]));
   const key = useProviderKey(id), headers = useGatewayHeaders(id);
   const locked = connection.enabled || connection.busy;
   const [discoveredModels, setDiscoveredModels] = useState<readonly FishSpeechModel[]>([]);
@@ -93,11 +97,11 @@ export function ProviderScreen({ route, navigation }: ScreenProps<'Provider'>) {
         {modelError ? <Footnote attention>{modelError}</Footnote> : null}
       </> : null}
     </>}>
-      {id === 'local' || id === 'compatible' ? <FieldRow label="Address" value={settings[id].baseURL}
+      {hasProviderAddress(id) ? <FieldRow label="Address" value={settings[id].baseURL}
         onChangeText={(baseURL) => setSettings((previous) => ({ ...previous, [id]: { ...previous[id], baseURL } }))}
         editable={!locked} keyboard="url" placeholder="https://" /> : null}
       {keyIsOffered(id) ? <SecretField key={`${id}:key`} id={id} label="API key" secret={key} locked={locked}
-        placeholder="Not set" onError={reportSecretError} /> : null}
+        placeholder="Not set" onEdit={connection.clearNote} onError={reportSecretError} /> : null}
       {id === 'fish' ? <ValueRow label="Model" choices={modelChoices} chosen={settings.fish.model} disabled={locked}
         onChoose={(model) => setSettings((previous) => previous.enabledProviders.includes('fish') ? previous :
           { ...previous, fish: { ...previous.fish, model } })} /> : null}
@@ -108,7 +112,7 @@ export function ProviderScreen({ route, navigation }: ScreenProps<'Provider'>) {
         onChangeText={(next) => setSettings((previous) => id === 'openai-official'
           ? { ...previous, openai: { model: next } } : { ...previous, compatible: { ...previous.compatible, model: next } })} /> : null}
       {headersAreOffered(id) ? <SecretField key={`${id}:headers`} id={id} label="Extra headers" secret={headers} locked={locked}
-        placeholder="Name: value; Name: value" onError={reportSecretError} /> : null}
+        placeholder="Name: value; Name: value" onEdit={connection.clearNote} onError={reportSecretError} /> : null}
     </SettingsGroup>
     {id === 'fish' ? <SettingsGroup title="Voice sources">
       {([['includeOfficial', 'Official voices'], ['includeOwn', 'Your voices'], ['includeManual', 'Manual voices']] as const).map(([source, label]) =>
