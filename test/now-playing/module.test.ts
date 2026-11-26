@@ -149,8 +149,16 @@ describe('one clock, two readers (ADR 0012)', () => {
   it('refuses an elapsed time before anything has been shown', () => {
     // Writing one into an empty dictionary puts a titleless item on the lock
     // screen, which looks exactly like a broken one.
-    expect(swift).toContain('guard self.shown else {');
+    expect(swift).toContain('guard self.pictured != nil else {');
     expect(swift).toContain('throw NotShownException()');
+  });
+
+  it('applies each Reading and elapsed-time update inside its main-queue publication (#267)', () => {
+    expect(swift).toMatch(/DispatchQueue\.main\.async \{\s*self\.reading = reading/);
+    expect(swift).toMatch(/DispatchQueue\.main\.async \{\s*self\.reading\.position = position\s*self\.publish\(\)/);
+    const teardown = body('teardown');
+    expect(teardown.indexOf('DispatchQueue.main.async')).toBeLessThan(teardown.indexOf('in self.targets'));
+    expect(teardown).toContain('self.targets.removeAll()');
   });
 
   it('refuses an empty title and a rate that would freeze or reverse the clock', () => {

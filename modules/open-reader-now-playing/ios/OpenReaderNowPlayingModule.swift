@@ -81,12 +81,14 @@ public final class OpenReaderNowPlayingModule: Module {
   /// The last state pushed, so that a position-only push can restate the rate
   /// iOS extrapolates with. Writing `nowPlayingInfo` replaces the dictionary
   /// wholesale, so there is nothing to read back and merge.
+  /// Accessed only on the main queue, together with artwork and command targets.
   private var reading = NowPlayingReading()
-  private var shown = false
 
-  /// The Cover `artwork` was built from. Read and written on the calling thread,
-  /// in `show` and `teardown`, so that a Cover is decoded once per Document
-  /// rather than once per `show`.
+  /// Keep submission order across module reloads, including OnDestroy on main.
+  /// This queue prepares Covers and submits MediaPlayer work without waiting for main.
+  private static let submissions = DispatchQueue(label: "OpenReader.NowPlaying.submissions")
+
+  /// Submission queue only. Nil means hidden; the empty string requests the app icon.
   private var pictured: String?
 
   /// The picture Now Playing shows. Main queue only, like everything `publish`
@@ -122,17 +124,16 @@ public final class OpenReaderNowPlayingModule: Module {
       guard reading.rate > 0 else {
         throw NonPositiveRateException(reading.rate)
       }
-      // Decoded here, on the JavaScript thread that called, and only when the
-      // Cover changed; the main queue only swaps it in.
-      let changed = reading.cover != self.pictured
-      let artwork = changed ? NowPlayingPicture.artwork(cover: reading.cover) : nil
-      self.pictured = reading.cover
-      self.reading = reading
-      self.shown = true
-      onMain {
-        if changed { self.artwork = artwork }
-        self.register()
-        self.publish()
+      Self.submissions.async {
+        let changed = reading.cover != self.pictured
+        let artwork = changed ? NowPlayingPicture.artwork(cover: reading.cover) : nil
+        self.pictured = reading.cover
+        DispatchQueue.main.async {
+          self.reading = reading
+          if changed { self.artwork = artwork }
+          self.register()
+          self.publish()
+        }
       }
     }
 
@@ -143,14 +144,13 @@ public final class OpenReaderNowPlayingModule: Module {
     /// a minute, and taking the position out of `show` would mean a state change
     /// could carry a stale one.
     Function("setPosition") { (position: Double) in
-      guard self.shown else {
-        // Writing an elapsed time into an empty dictionary would put a Now Playing
-        // item on the lock screen with no title at all. The caller's order is
-        // `show` then `setPosition`; this is the tripwire for it being otherwise.
-        throw NotShownException()
+      try Self.submissions.sync {
+        guard self.pictured != nil else { throw NotShownException() }
+        DispatchQueue.main.async {
+          self.reading.position = position
+          self.publish()
+        }
       }
-      self.reading.position = position
-      onMain { self.publish() }
     }
 
     Function("hide") {
@@ -246,33 +246,19 @@ public final class OpenReaderNowPlayingModule: Module {
   }
 
   private func teardown() {
-    shown = false
-    pictured = nil
-    let held = targets
-    targets = [:]
-    onMain {
-      self.artwork = nil
-      for (command, token) in held {
-        command.removeTarget(token)
-        command.isEnabled = false
+    Self.submissions.async {
+      self.pictured = nil
+      DispatchQueue.main.async {
+        self.artwork = nil
+        for (command, token) in self.targets {
+          command.removeTarget(token)
+          command.isEnabled = false
+        }
+        self.targets.removeAll()
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        MPNowPlayingInfoCenter.default().playbackState = .stopped
       }
-      MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
-      MPNowPlayingInfoCenter.default().playbackState = .stopped
     }
-  }
-}
-
-/// Main-queue dispatch that does not hop when it is already there.
-///
-/// `show` is called from a button press and `setPosition` from the position
-/// stream, both on the JavaScript thread, so in practice this always dispatches —
-/// but `OnDestroy` can run on either, and a queue hop that is a no-op reads better
-/// than two spellings of the same call.
-private func onMain(_ body: @escaping () -> Void) {
-  if Thread.isMainThread {
-    body()
-  } else {
-    DispatchQueue.main.async(execute: body)
   }
 }
 

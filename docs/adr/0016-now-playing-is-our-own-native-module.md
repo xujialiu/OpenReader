@@ -110,8 +110,7 @@ string when the Document declares none. `useNowPlaying` shows nothing while that
 lookup is still running (`undefined`, as against `null` for none), so a Document
 with a Cover never shows the icon first.
 
-`NowPlayingPicture` builds the artwork once per Cover, in `show` on the
-JavaScript thread, and the main queue only swaps it in. `publish` never builds
+A serial submission queue prepares artwork once per Cover and orders updates across module reloads (#267). Its Cover state also lets a position update after hide throw synchronously. The main queue owns the published Reading, artwork and command targets, and applies title, position and teardown operations in submission order. `publish` never builds
 one: `setPosition` publishes once a second, and a new `MPMediaItemArtwork` each
 time would have iOS ask for the picture each time. A Cover is drawn whole and
 centred on a black square at most 1024 px a side; the owner chose the whole
