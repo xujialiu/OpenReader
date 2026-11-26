@@ -3,7 +3,7 @@ import { createProvider } from '../core/providers/factory';
 import type { ProviderId, VoiceInfo } from '../core/providers/types';
 import { withTimeout } from '../core/timeout';
 import { readProviderKey, readGatewayHeaders } from '../keys/store';
-import { headersAreOffered, keyIsOffered, missingBeforeVoice, providerDepsFor, providerSettings, readinessSentence, type AppSettings } from './settings';
+import { hasProviderAddress, headersAreOffered, keyIsOffered, missingBeforeVoice, providerDepsFor, providerSettings, readinessSentence, type AppSettings } from './settings';
 
 export async function testProviderConnection(settings: AppSettings, id: ProviderId): Promise<readonly VoiceInfo[]> {
   const abort = new AbortController();
@@ -21,5 +21,7 @@ export async function testProviderConnection(settings: AppSettings, id: Provider
     const voices = await provider.listVoices({ signal: abort.signal });
     if (!voices.length) throw new Error('No voices returned. Check the configuration and try again.');
     return voices;
-  })(), 15_000, () => new Error('Connection timed out. Check the address and try again.'), () => abort.abort());
+  })(), 15_000, () => new Error(hasProviderAddress(id)
+    ? 'Connection timed out. Check the address and try again.'
+    : 'Connection timed out. Check your connection and try again.'), () => abort.abort());
 }

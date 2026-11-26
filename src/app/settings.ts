@@ -751,6 +751,16 @@ export function providerSettings(settings: AppSettings, secrets: ProviderSecrets
   };
 }
 
+/** The editable, non-secret configuration of a single Provider. */
+export function providerConfiguration(settings: AppSettings, id: ProviderId) {
+  if (id === 'speechify') return null;
+  return id === 'openai-official' ? settings.openai : settings[id];
+}
+
+export function hasProviderAddress(id: ProviderId): id is 'local' | 'compatible' {
+  return id === 'local' || id === 'compatible';
+}
+
 /**
  * What identifies the Provider the engine was built around.
  *
@@ -764,9 +774,7 @@ export function providerSettings(settings: AppSettings, secrets: ProviderSecrets
  * rebuilt for it would re-spend the quota to change a font.
  */
 export function engineIdentity(settings: AppSettings): string {
-  const config = settings.provider === 'local' ? settings.local : settings.provider === 'compatible' ? settings.compatible :
-    settings.provider === 'openai-official' ? settings.openai : settings.provider === 'fish' ? settings.fish :
-      settings.provider === 'azure' ? settings.azure : null;
+  const config = providerConfiguration(settings, settings.provider);
   // The bracket setting decides the Speech Text, so it is part of what is
   // spoken: a change rebuilds the engine instead of mixing the two forms in
   // one reading (#25).

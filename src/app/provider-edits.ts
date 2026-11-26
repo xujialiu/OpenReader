@@ -13,8 +13,10 @@ export function saveProviderEdit(id: ProviderId, field: string, write: () => Pro
   writes.set(id, next);
   return next;
 }
-export async function flushProviderEdits(id: ProviderId): Promise<void> {
+export async function flushProviderEdits(id: ProviderId, field?: string): Promise<void> {
   await writes.get(id);
-  const error = [...failures].find(([field]) => field.startsWith(`${id}:`))?.[1];
+  const error = field === undefined
+    ? [...failures].find(([key]) => key.startsWith(`${id}:`))?.[1]
+    : failures.get(`${id}:${field}`);
   if (error) throw new Error(error);
 }
