@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """#271: collapse, hold one real section report, then release it on the first wait note."""
 import atexit
-import hashlib
+import re
 import json
 import os
 import pathlib
@@ -19,9 +19,10 @@ WAITING = 'The reading has reached the end of the text this document has reporte
 METRO = os.environ.get('OPENREADER_METRO', 'http://127.0.0.1:8081')
 
 if len(sys.argv) != 5:
-    raise SystemExit('usage: continuity-wait-release.py SIMULATOR_UDID FIXTURE.epub FAKE_PROVIDER_LOG OUTPUT.log')
-udid, fixture_name, fake_log_name, output_name = sys.argv[1:]
-expected_document_id = 'sha256:' + hashlib.sha256(pathlib.Path(fixture_name).read_bytes()).hexdigest()
+    raise SystemExit('usage: continuity-wait-release.py SIMULATOR_UDID DOCUMENT_ID FAKE_PROVIDER_LOG OUTPUT.log')
+udid, expected_document_id, fake_log_name, output_name = sys.argv[1:]
+if not re.fullmatch(r'sha256:[0-9a-f]{64}', expected_document_id):
+    raise SystemExit('Pass the Document Id of the imported fixture from its Library entry.')
 devices = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '-j']))
 DEVICE_NAME = next(device['name'] for runtime in devices['devices'].values()
                    for device in runtime if device['udid'] == udid)
