@@ -37,12 +37,14 @@ that names the script or probe you are about to run.
   with the app away from the screen, and the queue race that stopped the
   owner's reading for good. `background-crossing.sh`, `queue-race-arm.js`,
   `queue-race-read.js`.
-- [reading-continuity.md](reading-continuity.md) (#153, #161, #170, #156):
+- [reading-continuity.md](reading-continuity.md) (#153, #161, #170, #156, #271):
   speech across boundaries while browsing far ahead and behind, empty first and
-  last sections, Play after the end, and the offscreen preparation's deadlines
-  — with a fixture (`../fixtures/continuity-fixture.ts`) and the page probes
-  `continuity-page-state.js`, `continuity-arm-stalled-view.js`,
-  `continuity-disarm-stalled-view.js`.
+  last sections, Play after the end, offscreen-preparation deadlines, and #271's
+  held real section report → wait → resume while collapsed — with the
+  `../fixtures/continuity-fixture.ts` fixture, the page probe
+  `continuity-page-state.js`, the #271 bridge gates
+  `continuity-hold-report.js` / `continuity-release-report.js`, and
+  `continuity-wait-release.py`.
 - [beta7-reader-fixes.md](beta7-reader-fixes.md) (#96, #195, #196, 1.0.0 (9)-beta7):
   only speech writes the Reading Position (paused taps, all four skips, a
   paused Contents row, a stalled Play, a never-played tap, remote adoption's
