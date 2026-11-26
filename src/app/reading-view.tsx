@@ -636,6 +636,7 @@ export function ReadingView({
    * a press taken back during the wait starts nothing when the wait ends (#160).
    */
   const play = useCallback(() => {
+    if (reading.isSpeaking()) return;
     lookup.stopPronunciation(false);
     const request = ++playRequestRef.current;
     setAwaitingSync(true);
@@ -648,9 +649,9 @@ export function ReadingView({
       }
       reading.play();
     });
-    // `reading` is a fresh object every render; the two callbacks are stable.
+    // `reading` is a fresh object every render; its Reading callbacks are stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reading.play, reading.resumeAt, sync, library, document.identity.id, lookup.stopPronunciation]);
+  }, [reading.play, reading.resumeAt, reading.isSpeaking, sync, library, document.identity.id, lookup.stopPronunciation]);
 
   /**
    * The lock screen, Control Centre and the headphone remote (ADR 0016).

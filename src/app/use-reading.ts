@@ -80,6 +80,7 @@ import {
   readingFromRow,
   samePrefix,
   segmentDocument,
+  type OutOfText,
   type Segmented,
 } from './segment';
 import {
@@ -228,6 +229,8 @@ export interface Reading {
   opened(language: string | null | undefined): void;
   /** A press of Play: asks about the Trial and the Unlock when read-aloud is locked (#148). */
   play(): void;
+  /** Whether a Play would reach a running engine with audio queued. */
+  isSpeaking(): boolean;
   /**
    * The Reading going on after a Pronunciation paused it (#148): not a new
    * press, so never asked about the Trial, and a Reading the end of the Trial
@@ -409,6 +412,11 @@ export function useReading(
 
   const engineRef = useRef<PlaybackEngine | null>(null);
   const playIntent = useRef(false);
+  const waitingForText = useRef<OutOfText | null>(null);
+  const isSpeaking = useCallback(() => {
+    const engine = engineRef.current?.snapshot();
+    return playIntent.current && engine?.playing === true && engine.queued > 0;
+  }, []);
   /**
    * Play has been pressed and its first cue has not yet gone to the renderer
    * (#71). That cue is the owner asking for the reading, and it is revealed: it
@@ -897,6 +905,7 @@ export function useReading(
     }
     seekingRef.current = false;
     playIntent.current = false;
+    restateNowPlaying();
     setStatus((was) => ({
       ...was,
       playing: false,
@@ -1474,12 +1483,14 @@ export function useReading(
     bridgeRef.current?.snapshot('the reading ran out of text');
     const spine = renderedRef.current?.spine ?? 0;
     const extent = readingExtent(loadedRef.current, loadedBlocksRef.current, atRef.current ?? 0, reportedSectionsRef.current, spine);
-    const { ended, sentence } = outOfTextSentence(extent.next === null ? spine - 1 : extent.next - 1, spine, {
+    const exhaustion = outOfTextSentence(extent.next === null ? spine - 1 : extent.next - 1, spine, {
       count: report.unspoken,
       // The engine hands the problem over unconverted, so that the one place a
       // problem becomes a sentence is the one place it is done anywhere here.
       reason: report.refusal === null ? null : describe(report.refusal),
     });
+    const { ended, sentence } = exhaustion;
+    waitingForText.current = ended ? null : exhaustion;
     if (!ended && extent.next !== null) bridgeRef.current?.prepareSection(extent.next);
     if (ended) {
       playIntent.current = false;
@@ -1533,10 +1544,16 @@ export function useReading(
           if (playIntent.current && !state.playing) bridgeRef.current?.hold({ stop: true });
           playIntent.current = state.playing;
         }
-        // Building for a press of Play, or waiting for its place (#54): a paused
-        // engine saying it is paused — after a quiet reload — is not the press undone.
-        setStatus((was) => ({ ...was, ...((awaitingPlaceRef.current || (buildingRef.current && playIntent.current)) && !state.playing
-          ? { playing: true, buffering: true } : state) }));
+        // A playable clip ends a section wait. Another diagnostic may have replaced its note.
+        const resumed = state.playing && !state.buffering ? waitingForText.current : null;
+        if (resumed) waitingForText.current = null;
+        // Loading a paused engine during a pending Play must keep the spinner (#54).
+        const starting = (awaitingPlaceRef.current || (buildingRef.current && playIntent.current)) && !state.playing;
+        setStatus((was) => ({
+          ...was,
+          ...(starting ? { playing: true, buffering: true } : state),
+          note: resumed && was.note === resumed.sentence ? resumed.afterResume ?? null : was.note,
+        }));
       },
       onOutOfText: ranOutOfText,
       onStopLine: (utterance) => {
@@ -1590,7 +1607,8 @@ export function useReading(
       // What `readiness` says, not `enabling` alone: with nothing enabled that
       // would name a Provider the owner never chose (#103).
       const note = readinessNote(settings.provider, readiness(settings, hasKey));
-      setStatus((was) => ({ ...was, playing: false, note }));
+      setStatus((was) => ({ ...was, playing: false, buffering: false, note }));
+      restateNowPlaying();
       return;
     }
     /**
@@ -1662,7 +1680,9 @@ export function useReading(
     void buildingRef.current.then((engine) => {
       if (generation !== engineGeneration.current) return;
       if (!engine) {
+        if (!playIntent.current) return;
         playIntent.current = false;
+        restateNowPlaying();
         setStatus((was) => ({ ...was, playing: false, buffering: false }));
         return;
       }
@@ -1673,6 +1693,7 @@ export function useReading(
       playIntent.current = false;
       setStatus((was) => ({ ...was, playing: false, buffering: false }));
       report(error);
+      restateNowPlaying();
     });
   }, [settings, build, report, walkForward, abandonResume, document, hasKey]);
   // A Play held by Sync or the purchase gate starts with the latest committed settings.
@@ -1695,6 +1716,7 @@ export function useReading(
    * cuts one off: it meets the gate at the next press after a pause.
    */
   const play = useCallback(() => {
+    if (isSpeaking()) return;
     if (endedRef.current || purchases.canStartSpeech()) {
       startRef.current();
       return;
@@ -1707,7 +1729,7 @@ export function useReading(
       // refusal changed nothing it shows, so it is told again (#148).
       else restateNowPlaying();
     });
-  }, []);
+  }, [isSpeaking]);
 
   /**
    * The section Play was looking for has arrived with text in it, so the reading
@@ -2060,5 +2082,5 @@ export function useReading(
     onStoppedRef.current?.(readingPosition());
   }, [stopped, readingPosition, resumeAt, takeLatePlace]);
 
-  return { bridge, status, opened, play, carryOn: start, pause, chooseVoice, seekTo: pointAt, skip, stopAt, returnToReading, goToSection, readingPosition, resumeAt };
+  return { bridge, status, opened, play, isSpeaking, carryOn: start, pause, chooseVoice, seekTo: pointAt, skip, stopAt, returnToReading, goToSection, readingPosition, resumeAt };
 }

@@ -415,6 +415,8 @@ describe('outOfTextSentence, with Utterances that were never spoken', () => {
   it('says it is waiting for more when there are sections still to render', () => {
     const answer = outOfTextSentence(4, 2077, { count: 2, reason: lost });
     expect(answer.sentence).toContain('2 Utterances were never spoken');
+    expect(answer.afterResume).toContain(lost);
+    expect(answer.afterResume).not.toContain('waiting for more');
     expect(answer.sentence).toContain('waiting for more of it');
     expect(answer.sentence).not.toContain('the end of the book');
   });

@@ -39,12 +39,14 @@ const world = vi.hoisted(() => ({
   /** How many sentences the Provider was asked for. */
   asked: 0,
   restated: 0,
+  spinners: 0,
+  key: 'held' as 'held' | 'absent',
   /** Now Playing, which the Lock Screen and the headphones reach: what it is told, and the handler a press there calls. */
-  remote: null as null | { playing: boolean; press(intent: 'play' | 'pause'): void },
-  player: null as null | { playing: boolean; buffering: boolean; notes: readonly { said: string }[]; onPlay(): void },
+  remote: null as null | { playing: boolean; live: boolean; press(intent: 'play' | 'pause'): void },
+  player: null as null | { playing: boolean; buffering: boolean; notes: readonly { said: string }[]; onCollapsed(value: boolean): void; onPlay(): void },
   disk: { entries: [] as unknown[] },
   /** The Reading the host holds, as the Reading Button is told, and the Reader's way out. */
-  held: null as null | { playing: boolean; buffering: boolean },
+  held: null as null | { playing: boolean; buffering: boolean; chrome: boolean },
   leave: null as null | (() => void),
 }));
 
@@ -111,7 +113,7 @@ vi.mock('../../../src/offline/runtime', () => ({
 // Now Playing: the test presses its Play through the handler the view gave, and reads what it was told.
 vi.mock('../../../src/now-playing', () => ({
   lockScreenPosition: () => {}, restateNowPlaying: () => { world.restated++; }, chapterOf: () => null,
-  useNowPlaying: (now: { playing: boolean; onIntent(intent: 'play' | 'pause'): void }) => { world.remote = { playing: now.playing, press: now.onIntent }; },
+  useNowPlaying: (now: { playing: boolean; live: boolean; onIntent(intent: 'play' | 'pause'): void }) => { world.remote = { playing: now.playing, live: now.live, press: now.onIntent }; },
 }));
 // The Library's disk.
 vi.mock('../../../src/app/library', () => ({
@@ -129,7 +131,7 @@ vi.mock('../../../src/app/document', () => ({
   openDocument: async (entry: { id: string; format: string; title: string }) => ({ identity: { id: entry.id, format: entry.format }, title: entry.title, base64: '' }),
 }));
 vi.mock('../../../src/keys/store', () => ({ readSyncPassword: async () => ({ outcome: 'absent' }) }));
-vi.mock('../../../src/app/use-provider-secrets', () => ({ useProviderKey: () => ({ presence: { state: 'held' } }) }));
+vi.mock('../../../src/app/use-provider-secrets', () => ({ useProviderKey: () => ({ presence: { state: world.key } }) }));
 // The view's own children, which draw and decide nothing here. Each is doubled because it does not load under Node.
 vi.mock('../../../src/app/body-text-sizes', () => ({ readBodyTextSize: () => null, writeBodyTextSize: () => {} }));
 vi.mock('../../../src/app/use-lookup', () => ({ useLookup: () => ({ selection: null, stopPronunciation() {} }) }));
@@ -137,7 +139,7 @@ vi.mock('../../../src/app/saved-highlights', () => ({ SavedHighlights: ({ render
 vi.mock('../../../src/app/lookup-drawer', () => ({ LookupDrawer: () => null }));
 vi.mock('../../../src/app/contents-sheet', () => ({ ContentsSheet: () => null }));
 vi.mock('../../../src/app/voice-sheet', () => ({ VoiceSheet: () => null }));
-vi.mock('../../../src/app/player', () => ({ Player: (props: NonNullable<typeof world.player>) => { world.player = props; return null; } }));
+vi.mock('../../../src/app/player', () => ({ Player: (props: NonNullable<typeof world.player>) => { world.player = props; if (props.buffering) world.spinners++; return null; } }));
 vi.mock('../../../src/app/document-cover', () => ({ useDocumentCover: () => null }));
 vi.mock('../../../src/app/reader-file-system', () => ({ useReaderFileSystem: () => ({}) }));
 vi.mock('../../../src/app/use-voices', () => ({ useVoiceLists: () => ({ voicesOf: () => null, ask() {}, asking: () => false, noteOf: () => null }) }));
@@ -147,7 +149,7 @@ vi.mock('../../../src/app/walkthrough-harness', () => ({ hlog() {}, probeScript:
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const DOCUMENT = ('sha256:' + 'd'.repeat(64)) as DocumentId;
-const SETTINGS: AppSettings = { ...DEFAULT_SETTINGS, provider: 'local', enabledProviders: ['local'], voice: 'af_bella' };
+const SETTINGS: AppSettings = { ...DEFAULT_SETTINGS, provider: 'openai-official', enabledProviders: ['openai-official'], voice: 'alloy', openai: { model: 'tts-1' } };
 const END = 'That was the last of this document. The reading has stopped at the end of the book.';
 /** The whole Document: one section, which is the whole spine, holding one sentence. */
 const BLOCKS: ReportedBlock[] = [{
@@ -158,19 +160,19 @@ function Open() {
   const { show, left, current } = useHeldReading();
   useEffect(() => { show(DOCUMENT); }, [show]);
   useEffect(() => {
-    world.held = current ? { playing: current.playing, buffering: current.buffering } : null;
+    world.held = current ? { playing: current.playing, buffering: current.buffering, chrome: current.chrome } : null;
     world.leave = () => left(DOCUMENT);
   }, [current, left]);
   return null;
 }
 /** What `shell.tsx` holds for every screen: the Library, the sync transport and the settings, in the real context. */
-function ShellProbe() {
+function ShellProbe({ revision = 0, disabled = false }: { revision?: number; disabled?: boolean }) {
   const library = useLibrary();
   // Sync is off in these settings. A client asked for anyway would be a network request, and the test would fail on it.
   const { sync, last } = useSync(SETTINGS, library, { client: () => { throw new Error('no network in this test'); }, now: () => Date.now() });
   const value = useMemo<Shell>(
-    () => ({ settings: SETTINGS, setSettings() {}, library, secretsWritten: 0, secretRevisions: {}, noteSecretWritten() {}, sync, syncLast: last }),
-    [library, sync, last],
+    () => ({ settings: disabled ? { ...SETTINGS, enabledProviders: [] } : SETTINGS, setSettings() {}, library, secretsWritten: revision, secretRevisions: { 'openai-official': revision }, noteSecretWritten() {}, sync, syncLast: last }),
+    [library, sync, last, disabled, revision],
   );
   return createElement(ShellContext.Provider, { value }, createElement(ReadingHost, null, createElement(Open)));
 }
@@ -205,22 +207,29 @@ function shown() {
   };
 }
 
-/** The Document open, Play pressed and its sentence heard: the Reading has stopped at the end. */
-async function atTheEnd(spine = 1) {
+async function openReading(spine = 1, blocks = BLOCKS) {
   let tree!: ReactTestRenderer;
   await act(async () => { tree = create(createElement(ShellProbe)); });
   await settle();
-  await press(() => world.page!.onBlocks!(BLOCKS, { index: 0, href: 's0.xhtml', spine }));
+  await press(() => world.page!.onBlocks!(blocks, { index: 0, href: 's0.xhtml', spine }));
+  return {
+    down: () => act(async () => { tree.unmount(); }),
+    changeProvider: (disabled: boolean) => press(() => tree.update(createElement(ShellProbe, { revision: 1, disabled }))),
+  };
+}
+
+async function atTheEnd(spine = 1) {
+  const reading = await openReading(spine);
   await press(() => world.player!.onPlay());
   await hear();
-  return { async down() { await act(async () => { tree.unmount(); }); } };
+  return reading;
 }
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'], now: Date.UTC(2026, 9, 11, 9, 0, 0) });
   world.page = null; world.remote = null; world.player = null; world.held = null; world.leave = null;
   world.audio.handlers = null; world.audio.queue = []; world.audio.running = false; world.audio.resumes = 0;
-  world.asked = 0; world.restated = 0;
+  world.asked = 0; world.restated = 0; world.key = 'held';
   world.disk.entries = [{
     id: DOCUMENT, format: 'epub', publicationId: null, publicationIdSource: 'none', title: 'A novel', position: null,
     stamp: { at: 1, device: 'iPhone-test0001' },
@@ -282,5 +291,61 @@ describe('after the last sentence of the Document has been spoken', () => {
     const kept = { readingButton: world.held, queued: world.audio.queue.length, audioRunning: world.audio.running };
     expect(kept.readingButton === null || kept.queued > 0, JSON.stringify(kept)).toBe(true);
     await reading.down();
+  });
+});
+
+describe('what the Player and Now Playing show when playback changes', () => {
+  it('keeps Pause during a repeated remote Play with a clip queued (#291)', async () => {
+    const reading = await openReading();
+    try {
+      await press(() => world.remote!.press('play'));
+      const speaking = shown();
+      expect(speaking).toMatchObject({ button: 'Pause', audioRunning: true, queued: 1, asked: 1 });
+      const spinners = world.spinners;
+      await press(() => world.remote!.press('play'));
+      expect(shown()).toEqual(speaking);
+      expect(world.spinners).toBe(spinners);
+    } finally { await reading.down(); }
+  });
+
+  it.each(['missing key', 'disabled provider'])('restores an existing paused card after a %s refusal (#272)', async (reason) => {
+    const reading = await openReading();
+    try {
+      await press(() => world.remote!.press('play'));
+      expect(shown()).toMatchObject({ button: 'Pause', audioRunning: true, asked: 1 });
+      await press(() => world.remote!.press('pause'));
+      if (reason === 'missing key') world.key = 'absent';
+      await reading.changeProvider(reason === 'disabled provider');
+      expect(world.remote).toMatchObject({ playing: false, live: true });
+      const before = world.restated;
+      await press(() => world.remote!.press('play'));
+      expect(shown()).toMatchObject({ button: 'Play', audioRunning: false, asked: 1 });
+      expect(shown().note).toMatch(reason === 'missing key' ? /API key/i : /no provider is enabled/i);
+      expect(world.restated).toBe(before + 1);
+    } finally { await reading.down(); }
+  });
+
+  it('answers a remote Play when the search for readable text reaches the end (#272)', async () => {
+    const reading = await openReading(1, []);
+    try {
+      await press(() => world.remote!.press('play'));
+      expect(shown()).toMatchObject({ button: 'Play', audioRunning: false, asked: 0 });
+      expect(shown().note).toContain('nothing here that can be read aloud');
+      expect(world.restated).toBe(1);
+    } finally { await reading.down(); }
+  });
+
+  it('lets the Player collapse when the next chapter starts speaking (#271)', async () => {
+    const reading = await atTheEnd(2);
+    try {
+      await press(() => world.player!.onCollapsed(true));
+      expect(shown().note).toContain('waiting for more');
+      expect(world.held?.chrome).toBe(true);
+      const next = { ...BLOCKS[0], id: '1.0', sectionIndex: 1, section: 's1.xhtml', text: 'Second chapter.', cfi: 'epubcfi(/6/4[s1]!/4/2)' };
+      await press(() => world.page!.onBlocks!([...BLOCKS, next], { index: 1, href: next.section, spine: 2 }));
+      await wait(3000);
+      expect(shown()).toMatchObject({ button: 'Pause', audioRunning: true, queued: 1, asked: 2, note: null });
+      expect(world.held?.chrome).toBe(false);
+    } finally { await reading.down(); }
   });
 });

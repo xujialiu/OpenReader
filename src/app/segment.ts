@@ -182,6 +182,8 @@ export interface OutOfText {
   /** True when the furthest section the renderer has reported is the document's last spine item. */
   ended: boolean;
   sentence: string;
+  /** Any synthesis failure still worth showing once speech resumes. */
+  afterResume?: string;
 }
 
 /**
@@ -241,17 +243,13 @@ export function outOfTextSentence(furthest: number, spine: number, unspoken: Uns
   const ended = spine > 0 && furthest >= spine - 1;
   if (unspoken.count > 0) {
     const many = unspoken.count === 1;
-    return {
-      ended,
-      sentence:
-        `${many ? 'One Utterance was' : `${unspoken.count} Utterances were`} never spoken, because synthesis failed` +
-        `${unspoken.reason ? `: ${fullStop(unspoken.reason)}` : '.'} ` +
-        (ended
-          ? 'The reading has stopped here for that reason and not at the end of the book. '
-          : 'The reading has run out of the text this document has reported and is waiting for more of it. ') +
-        `Going back to ${many ? 'it' : 'them'} is how ${many ? 'it is' : 'they are'} asked for again; ` +
-        'nothing is retried out of sight.',
-    };
+    const failure = `${many ? 'One Utterance was' : `${unspoken.count} Utterances were`} never spoken, because synthesis failed` +
+      `${unspoken.reason ? `: ${fullStop(unspoken.reason)}` : '.'} `;
+    const retry = `Going back to ${many ? 'it' : 'them'} is how ${many ? 'it is' : 'they are'} asked for again; nothing is retried out of sight.`;
+    const explanation = ended
+      ? 'The reading has stopped here for that reason and not at the end of the book. '
+      : 'The reading has run out of the text this document has reported and is waiting for more of it. ';
+    return { ended, sentence: failure + explanation + retry, afterResume: failure + retry };
   }
   return {
     ended,
