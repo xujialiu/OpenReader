@@ -9,7 +9,7 @@ import { standInPage } from './stand-in-page';
  * **Where a Contents entry starts: the page program's one rule (#212, #190, #167).**
  *
  * A Contents entry that points into a file by its fragment starts at the first
- * Block whose first text lies inside the fragment's element or after it. A
+ * Block starting in or after its containing heading, or the fragment itself elsewhere. A
  * Download cuts a file's sentences into chapters by it, and the Reader tells the
  * rows of a shared file apart by it, so the Contents, the Lock Screen and the
  * Download drawer name the same chapter.
@@ -55,6 +55,24 @@ describe('a chapter whose anchor is inside its heading starts at that heading (#
       ['nav.0', ['Chapter One', 'One one.', 'One two.']],
       ['nav.1', ['Chapter Two', 'Two one.']],
     ]);
+  });
+
+  it.each([
+    '<h2><span>Chapter </span><a id="c1"></a>One</h2>',
+    '<h2>Chapter One<a id="c1"></a></h2>',
+    '<h2><span style="display:block">Chapter One<a id="c1"></a></span></h2>',
+  ])('keeps a heading with its own Download when its anchor follows text (#262)', async (heading) => {
+    const answer = await prepared('<p>Earlier.</p>' + heading + '<p>Next.</p>', 'c1');
+    const chapters = sectionChapters(answer.index, answer.blocks, answer.points, answer.language);
+    expect(chapters.map((chapter) => chapter.texts)).toEqual([['Earlier.'], ['Chapter One', 'Next.']]);
+  });
+
+  it('names an unlisted part from a block nested inside its heading (#275)', async () => {
+    const answer = await prepared('<h1><span style="display:block">Chapter One</span></h1><p>Next.</p>');
+    expect(answer.blocks[0].role).toBe('heading');
+    expect(sectionChapters(answer.index, answer.blocks, [], answer.language)[0].title).toBe('Chapter One');
+    const plain = await prepared('<div><span style="display:block">Next.</span></div>');
+    expect(sectionChapters(plain.index, plain.blocks, [], plain.language)[0].title).toBe('Part 4');
   });
 
   it('controls, placed as before: the id on the heading, an anchor before it, an id on a <div> around the chapter', async () => {
@@ -106,6 +124,11 @@ describe('the Reader is told where each Contents fragment starts in a section it
       { href: 'ch3.xhtml#caf%C3%A9' },
     ];
     expect(report(toc, BODY).anchors).toEqual([['a', 0], ['b', 2], ['café', 4]]);
+  });
+
+  it('marks the first Block of a heading when the fragment is in a later child (#262)', () => {
+    const body = '<p>Before.</p><h2><span style="display:block">Chapter</span><span style="display:block">One<a id="late"></a></span></h2><p>After.</p>';
+    expect(report([{ href: 'ch3.xhtml#late' }], body).anchors).toEqual([['late', 1]]);
   });
 
   it('sends nothing new for a Document whose Contents names no fragment, or before the navigation is known', () => {

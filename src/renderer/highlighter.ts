@@ -130,8 +130,9 @@ export const HIGHLIGHTER = '__openReaderHighlighter';
  * and cells apart (#184), a drop cap in its word (#189) and the two lines of a
  * `<br>` apart (#192). 3 reports explicit paragraph break offsets (#380).
  * 4 keeps a wrapped drop cap inside its word (#263).
+ * 5 recognizes Blocks and Contents anchors inside headings (#262, #275).
  */
-export const BLOCK_WALK = 4;
+export const BLOCK_WALK = 5;
 
 /**
  * The fonts **Appearance** offers, as the owner reads them and as CSS names
@@ -1253,9 +1254,18 @@ ${constants}
     return floated !== 'none' || position === 'absolute' || position === 'fixed';
   }
 
+  /* The heading can own several CSS Blocks and its fragment can be in any of them. */
+  function headingOf(element) {
+    while (element && element.nodeType === 1) {
+      if (HEADING[element.tagName.toUpperCase()]) return element;
+      element = element.parentNode;
+    }
+    return null;
+  }
+
   function roleOf(element) {
+    if (headingOf(element)) return 'heading';
     var tag = element && element.tagName ? element.tagName.toUpperCase() : '';
-    if (HEADING[tag]) return 'heading';
     if (PARAGRAPH[tag]) return 'paragraph';
     return 'other';
   }
@@ -1391,7 +1401,7 @@ ${constants}
 
   /* The one rule, for the Reading's Contents, the Lock Screen and a Download's
      chapters alike: an entry starts at the first Block whose first text lies
-     inside its anchor element or after it. That places an id on the heading, an
+     inside its containing heading (or the anchor itself) or after it. That places an id on the heading, an
      empty <a id> or a <span id> inside the heading (#190), an anchor before the
      heading and an id on a <div> around the chapter. A heading that holds its
      anchor is the chapter's first Block; a paragraph whose text begins before an
@@ -1405,12 +1415,13 @@ ${constants}
      does. A section of thousands of Blocks with every chapter's anchor in it
      asks a dozen comparisons per anchor rather than thousands. */
   function anchorBlock(found, anchor) {
+    var start = headingOf(anchor) || anchor;
     var low = 0;
     var high = found.length;
     while (low < high) {
       var middle = (low + high) >> 1;
       var first = firstText(found[middle]);
-      if (first && (anchor.compareDocumentPosition(first) & 4)) high = middle;
+      if (first && (start.compareDocumentPosition(first) & 4)) high = middle;
       else low = middle + 1;
     }
     return low;
