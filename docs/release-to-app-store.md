@@ -2,6 +2,12 @@
 
 ## Readiness gate
 
+When the owner asks to increase the release version, for example
+`发布版本+0.0.1`, apply the requested increment, upload the three-copy set and
+submit its formal copy for App Store review. This request is the explicit
+upload and submission decision; do not ask again which stage to reach. Keep
+manual release and treat public testing as a separate decision.
+
 Proceed only for an explicit owner upload or submission request, after current
 source, Apple identities, signing and group routing pass the checks below. The
 three-role pipeline has local native/UI acceptance; that is not permission
