@@ -24,3 +24,6 @@
 | 1.0.6 | 34 | Formal | Trial and Unlock | Off | Internal `owner` (automatic); submitted for App Store review with manual release | VALID | `7e2d69a` |
 | 1.0.6 | 35 | Free test | None | Off | Internal `owner` (automatic); `public`, WAITING_FOR_BETA_REVIEW | VALID | `7e2d69a` |
 | 1.0.6 | 36 | Debug | None | On | Internal `owner` (automatic) | VALID | `7e2d69a` |
+| 1.0.7 | 37 | Formal | Trial and Unlock | Off | Internal `owner` (automatic); submitted for App Store review with manual release | VALID | `a6ea90c3` |
+| 1.0.7 | 38 | Free test | None | Off | Internal `owner` (automatic); not in `public` | VALID | `a6ea90c3` |
+| 1.0.7 | 39 | Debug | None | On | Internal `owner` (automatic); not in `public` | VALID | `a6ea90c3` |
