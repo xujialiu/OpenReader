@@ -1037,7 +1037,10 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
       );
       const where = `the installed @epubjs-react-native/core lib/${build}/utils/GestureHandler.js`;
       expect(handler, where).not.toContain('Gesture.LongPress(');
-      pinCount(handler, 'Gesture.Exclusive(swipeLeft, swipeRight, swipeUp, swipeDown, doubleTap, singleTap)', 2, where);
+      // A physical leftward fling must leave the reading position in place (#384).
+      expect(handler, where).not.toContain('Directions.LEFT');
+      expect(handler, where).toMatch(/Directions\.RIGHT\)\.onStart\([^)]*I18nManager\.isRTL \? onSwipeLeft : onSwipeRight\)/);
+      pinCount(handler, 'Gesture.Exclusive(swipeRight, swipeUp, swipeDown, doubleTap, singleTap)', 2, where);
     }
   });
 
