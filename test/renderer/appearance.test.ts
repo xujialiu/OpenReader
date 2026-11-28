@@ -14,13 +14,17 @@ import {
   UTTERANCE_HIGHLIGHT,
   WORD_HIGHLIGHT,
 } from '../../src/renderer/highlighter';
+import { standInPage } from './stand-in-page';
 import { pin } from '../structural';
 import { DEFAULT_HIGHLIGHT_COLOURS, HIGHLIGHT_PRESETS, type HighlightColours } from '../../src/renderer/highlight-colours';
 
-/** The one alignment rule, as `appearanceCss` writes it, for the value given. */
+/** The rules that preserve the Document’s headings and align its prose. */
+const headingRules = ['start', 'left', '-webkit-left', 'justify'].map(value =>
+  `:where([data-openreader-own-alignment="${value}"]) { text-align: ${value} !important; }\n`
+).join('');
 const aligned = (value: 'start' | 'justify') =>
   'body *:not(h1, h2, h3, h4, h5, h6, h1 *, h2 *, h3 *, h4 *, h5 *, h6 *, [data-openreader-own-alignment]) ' +
-  '{ text-align: ' + value + ' !important; }\n';
+  '{ text-align: ' + value + ' !important; }\n' + headingRules;
 
 /** The one Margins rule, as `appearanceCss` writes it, for the value given. */
 const margined = (percent: number) =>
@@ -105,7 +109,7 @@ describe('Appearance as a stylesheet', () => {
     // produce, over body text sizes a Document could measure at and some it
     // should not.
     const fonts = [null, ...READING_FONTS.map((font) => font.id)];
-    const alignments = new Set([aligned('start'), aligned('justify')].map((rule) => rule.trimEnd()));
+    const alignments = new Set([aligned('start'), aligned('justify')].flatMap(rule => rule.trimEnd().split('\n')));
     const marginRules = new Set(MARGINS.map((points) => margined(points).trimEnd()));
     for (const font of fonts) {
       for (const size of FONT_SIZES) {
@@ -218,7 +222,7 @@ describe('Text Alignment', () => {
     // One rule either way, and after the font's, so the font rule above it is
     // unchanged by the choice.
     const css = appearanceCss({ font: 'georgia', size: 16, margins: 16, textAlignment: 'left', highlight: DEFAULT_HIGHLIGHT_COLOURS }, 16);
-    expect(css.match(/text-align:/g)).toHaveLength(1);
+    expect(css.split('\n').filter(line => line.startsWith('body *:not('))).toHaveLength(1);
     expect(css.indexOf('text-align:')).toBeGreaterThan(css.indexOf('font-family:'));
   });
 
@@ -239,6 +243,25 @@ describe('Text Alignment', () => {
     const rule = css.split('\n').find((line) => line.includes('text-align:'));
     expect(rule?.startsWith('body *:not(')).toBe(true);
     expect(rule).not.toMatch(/(^|, )(html|body)(:not\([^)]*\))?(, | \{)/);
+  });
+
+  it('restores the original alignment of nested headings while their wrappers follow Appearance (#257)', () => {
+    const page = standInPage();
+    const { document } = page.addSection(1, '<section><h1>Title</h1><p>Prose</p></section>' +
+      '<div style="text-align:justify"><h2><span>Subtitle</span></h2></div>');
+    page.sweep();
+    for (const [tag, value] of [['h1', 'start'], ['h2', 'justify']]) {
+      const heading = document.getElementsByTagName(tag)[0];
+      expect(heading.getAttribute(OWN_ALIGNMENT)).toBe(value);
+      for (const textAlignment of TEXT_ALIGNMENTS) {
+        const css = appearanceCss({ ...DEFAULT_APPEARANCE, textAlignment });
+        expect(css).toContain(`[${OWN_ALIGNMENT}="${value}"]`);
+        expect(css).toContain(aligned(textAlignment === 'left' ? 'start' : 'justify'));
+      }
+    }
+    for (const tag of ['section', 'p', 'div', 'span']) {
+      expect(document.getElementsByTagName(tag)[0].hasAttribute(OWN_ALIGNMENT)).toBe(false);
+    }
   });
 
   it('reads an alignment it does not know as Justify, rather than writing it into a rule', () => {

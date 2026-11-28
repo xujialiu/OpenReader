@@ -390,7 +390,7 @@ describe('never highlight by mutating the DOM, and never check whether you can (
     // nothing else about an element is touched.
     expect(program.match(/setAttribute\(/g)).toHaveLength(2);
     expect(program).toContain("live.element.setAttribute('data-or-mixed-text', '');");
-    expect(program).toContain("own[k].setAttribute(OWN_ALIGNMENT, '');");
+    expect(program).toContain("own[k][0].setAttribute(OWN_ALIGNMENT, own[k][1]);");
     expect(program).not.toMatch(/removeAttribute|toggleAttribute|setAttributeNS|\.dataset\b|classList|className\s*=|\.style\./);
     for (const mutation of [
       'innerHTML',
@@ -1571,14 +1571,14 @@ describe('the reading is fed by the reading, not by the scroll (notes/NOTES_2026
     // Never a spine index of our own: `section.next()` is the call the manager's
     // own check() makes, and it is what knows about a spine item that is not linear.
     expect(ahead).toContain('var current = book.spine.get(section);');
-    expect(ahead).toContain('var next = current && current.next();');
+    expect(ahead).toContain('var adjacent = current && current.next();');
   });
 
   it('appends visibly only from the last view, and prepares offscreen otherwise (#153)', () => {
     // The view list is a contiguous run of spine items — append and prepend are the
     // only things that extend it — so appending out of order would put the wrong
     // text under the reader's thumb.
-    expect(ahead).toContain('if (!last || !last.section || last.section.index !== section) {');
+    expect(ahead).toContain('if (next !== adjacent || !last || !last.section || last.section.index !== section) {');
     expect(ahead).toContain('prepareSection(next.index);');
     expect(ahead.indexOf('prepareSection(next.index);')).toBeLessThan(ahead.indexOf('manager.append(next)'));
   });

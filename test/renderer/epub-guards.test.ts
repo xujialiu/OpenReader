@@ -203,7 +203,7 @@ function page({ guarded = true } = {}) {
 const settled = () => new Promise((resolve) => setImmediate(resolve));
 
 /** The program's own `renderAhead`, cut out of the program the app installs. */
-function realRenderAhead(rendition: object, bySection: Map<number, unknown>, asked: Set<number>, sweep: () => void, report: (detail: string) => void, spine: unknown[]) {
+function realRenderAhead(rendition: object, bySection: Map<number, unknown>, asked: Set<number>, sweep: () => void, report: (detail: string) => void, spine: unknown[], prepareSection = vi.fn()) {
   const program = highlighterSource();
   const start = program.indexOf('function renderAhead(section) {');
   let depth = 0;
@@ -212,8 +212,8 @@ function realRenderAhead(rendition: object, bySection: Map<number, unknown>, ask
     if (program[end] === '{') depth++;
     else if (program[end] === '}' && --depth === 0) break;
   }
-  const make = vm.runInNewContext(`(function (rendition, bySection, asked, sweep, report, book) { var post = function(message) { report(message.detail); }; ${program.slice(start, end + 1)}\n return renderAhead; })`);
-  return make(rendition, bySection, asked, sweep, report, { spine: { get: (index: number) => spine[index] } }) as (section: number | null) => void;
+  const make = vm.runInNewContext(`(function (rendition, bySection, asked, sweep, report, book, prepareSection) { var post = function(message) { report(message.detail); }; ${program.slice(start, end + 1)}\n return renderAhead; })`);
+  return make(rendition, bySection, asked, sweep, report, { spine: { get: (index: number) => spine[index] } }, prepareSection) as (section: number | null) => void;
 }
 
 describe('a view taken off the page before its display finished (#112)', () => {
@@ -284,6 +284,33 @@ describe('a view taken off the page before its display finished (#112)', () => {
     expect(asked.has(34)).toBe(true);
     await world.frames();
     expect(world.views.last().section.index).toBe(34);
+  });
+});
+
+describe('speech preparation keeps visible sections in spine order (#273)', () => {
+  it('prepares the next text offscreen across previously reported empty sections', async () => {
+    const world = page();
+    const reported = new Map([[34, []], [35, []]]);
+    const prepare = vi.fn();
+    realRenderAhead(world.rendition, reported, new Set(), () => {}, vi.fn(), world.spine, prepare)(33);
+    await world.frames();
+    expect(world.views._views.map(view => view.section.index)).toEqual([33]);
+    expect(prepare).toHaveBeenCalledExactlyOnceWith(36);
+  });
+
+  it('rechecks the visible tail after a queued browsing operation', async () => {
+    const world = page();
+    const prepare = vi.fn();
+    const asked = new Set<number>();
+    void world.manager.q.enqueue(() => {
+      world.views.clear();
+      world.manager.append(world.spine[12]);
+    });
+    realRenderAhead(world.rendition, new Map(), asked, () => {}, vi.fn(), world.spine, prepare)(33);
+    await world.frames();
+    expect(world.views._views.map(view => view.section.index)).toEqual([12]);
+    expect(asked.has(34)).toBe(false);
+    expect(prepare).toHaveBeenCalledExactlyOnceWith(34);
   });
 });
 

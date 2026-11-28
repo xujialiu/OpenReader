@@ -68,6 +68,15 @@ the Document's own answer, and every element that holds body text is reached
 directly anyway. The price: text that sits straight in `body`, outside any
 element, keeps the Document's alignment. No Document measured has any.
 
+A wrapper such as a chapter `section` can also pass its new alignment to a
+heading. During the original alignment pass, a nested heading records its
+computed alignment in `data-openreader-own-alignment`. Fixed stylesheet rules
+restore start, left, WebKit left and justify on those marked headings under
+either Appearance setting. Center and end alignments retain the existing
+exclusion on both the element and any ancestor from which it inherits.
+This keeps prose directly inside a mixed chapter wrapper subject to Appearance
+and leaves heading descendants to inherit or use their own declarations (#257).
+
 ## The mark
 
 What the Document placed itself cannot be told apart in CSS: a selector cannot

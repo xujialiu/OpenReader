@@ -99,6 +99,8 @@ and what is committed is what was measured, never their text.
 
 ## Pitfalls
 
+- **Check the report and the visible views together when testing speech read-ahead.** For #273, a list of views `[0, 1]` after a cue did not establish that section 3 had supplied text. A placeholder for the plate also survived a direct return to its preceding chapter. In a fresh EPUB with the same three target sections later in the spine, observe `openreader:blocks` before visiting the plate, use the spoken Block’s full text and length in the cue, and record `manager.views.all()` at the following section’s report. Scrolling should then mount the intervening image. A missing report or a visible placeholder before the cue leaves the intended scenario unverified.
+
 - **A seeded book can still appear at the Library root (#295, #297).** Copy its full `entries[].id` from `library.json` into the membership map, including the `sha256:` prefix. A bare digest creates an unused membership. To exercise a successful bulk move, select the two fixture books individually and check the selection count. Select all at the root also selects the destination Folder and disables Move throughout its subtree.
 
 - **A listed runtime can support only some device types.** On this host, both Xcode 27.0 and 27.1 listed iOS 27.1 as available, but its `supportedDeviceTypes` contained only iPhone Duo. `simctl create` for iPhone 17 Pro / iOS 27.1 returned CoreSimulator error 403 `Incompatible device` before allocating a UDID. Inspect `xcrun simctl list runtimes -j` and choose only a type listed by the requested runtime; runtime presence alone does not prove the pair is supported (#380 installer).

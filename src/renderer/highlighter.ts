@@ -219,10 +219,8 @@ export const TEXT_ALIGNMENTS = ['left', 'justify'] as const;
 export type TextAlignment = (typeof TEXT_ALIGNMENTS)[number];
 
 /**
- * The attribute the program puts on each element a Document itself centres or
- * sets to the right, so that the owner's Text Alignment passes over it (ADR
- * 0034). Written once, because `appearanceCss` excludes by it and the program
- * sets it.
+ * Marks elements the Document centers or sets to the end. On a nested heading,
+ * its value can also preserve alignment inherited from a wrapper (ADR 0034).
  */
 export const OWN_ALIGNMENT = 'data-openreader-own-alignment';
 
@@ -290,6 +288,13 @@ const OWN = '[' + OWN_ALIGNMENT + ']';
 const HEADINGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
 const BODY_TEXT = 'body *:not(' + [...HEADINGS, ...HEADINGS.map((heading) => heading + ' *'), OWN].join(', ') + ')';
 
+// A heading can inherit any of these from a wrapper that subsequently takes
+// the owner's alignment. Centered and end-aligned ancestors already keep
+// their original alignment through OWN_ALIGNMENT.
+const HEADING_ALIGNMENT_CSS = ['start', 'left', '-webkit-left', 'justify']
+  .map(value => `:where([${OWN_ALIGNMENT}="${value}"]) { text-align: ${value} !important; }\n`)
+  .join('');
+
 /**
  * Appearance as CSS, for a Document whose own body text is `bodyTextSize`
  * pixels, or `PLAIN_BODY_TEXT_SIZE` while that is not known.
@@ -354,7 +359,7 @@ export function appearanceCss(appearance: Appearance, bodyTextSize?: number | nu
   // Anything that is not `left` is the default, so a value from a settings file
   // this build does not know still lays the book out the way a new one would.
   const align = appearance.textAlignment === 'left' ? 'start' : 'justify';
-  css += BODY_TEXT + ' { text-align: ' + align + ' !important; }\n';
+  css += BODY_TEXT + ' { text-align: ' + align + ' !important; }\n' + HEADING_ALIGNMENT_CSS;
   // A number from the ladder or the default, so a settings file cannot put
   // anything else into the rule.
   const margins = marginCssValue(appearance);
@@ -1622,16 +1627,20 @@ ${constants}
      what carries a centred line down: a paragraph inside a centred division
      computes center without declaring it, and left unmarked it would take the
      owner's rule and leave its division's alignment behind. Not the body
-     itself, which the owner's rule never reaches. */
+     itself, which the owner's rule never reaches. A nested heading also
+     records its alignment before its parent can change it (#257). */
   function markOwnAlignment(doc) {
     var win = doc.defaultView;
     if (!win || !doc.body) return;
     var elements = doc.body.getElementsByTagName('*');
     var own = [];
     for (var i = 0; i < elements.length; i++) {
-      if (OWN_ALIGNMENTS[String(win.getComputedStyle(elements[i]).textAlign || '')]) own.push(elements[i]);
+      var element = elements[i];
+      var align = win.getComputedStyle(element).textAlign;
+      if (OWN_ALIGNMENTS[align]) own.push([element, '']);
+      else if (HEADING[element.tagName.toUpperCase()] && element.parentNode !== doc.body) own.push([element, align]);
     }
-    for (var k = 0; k < own.length; k++) own[k].setAttribute(OWN_ALIGNMENT, '');
+    for (var k = 0; k < own.length; k++) own[k][0].setAttribute(OWN_ALIGNMENT, own[k][1]);
   }
 
   function ensureStyle(doc) {
@@ -1640,7 +1649,7 @@ ${constants}
        document they style and there is no reason for two. Its text is not a
        constant any more — Appearance changes while the book is open — so this
        both creates and updates. The only other DOM change this file makes is the
-       attribute markOwnAlignment() puts on the Document's own centred lines, once,
+       alignment attribute markOwnAlignment() sets once,
        just before the stylesheet is created. */
     var style = doc.getElementById(STYLE_ID);
     if (!style) {
@@ -3147,11 +3156,12 @@ ${constants}
     var manager = rendition.manager;
     if (!manager || !manager.views || !manager.q) return;
     var current = book.spine.get(section);
-    var next = current && current.next();
+    var adjacent = current && current.next();
+    var next = adjacent;
     while (next && bySection.has(next.index) && bySection.get(next.index).length === 0) next = next.next();
     if (!next || bySection.has(next.index) || asked.has(next.index)) return;
     var last = manager.views.last();
-    if (!last || !last.section || last.section.index !== section) {
+    if (next !== adjacent || !last || !last.section || last.section.index !== section) {
       prepareSection(next.index);
       return;
     }
@@ -3174,6 +3184,13 @@ ${constants}
        library's own listener throws first (ADR 0036). Sweeping is idempotent
        per document. */
     manager.q.enqueue(function () {
+      if (bySection.has(next.index)) return;
+      // Browsing can replace the tail while this task waits in epub.js's queue.
+      if (manager.views.last() !== last) {
+        asked.delete(next.index);
+        prepareSection(next.index);
+        return;
+      }
       return manager.append(next).display(manager.request);
     }).then(function () {
       sweep();

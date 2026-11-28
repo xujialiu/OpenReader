@@ -70,6 +70,13 @@ guards:
   second or two and without it the same chapter would be fetched and parsed once
   per Utterance.
 
+A section already reported without Blocks can be skipped when finding text
+for speech. If that skips an item in the linear spine, the target is prepared
+offscreen even when the spoken chapter is the last visible view. Ordinary
+scrolling can then mount the intervening plate. A visible append checks the
+tail again inside the manager queue because browsing can replace it while
+the task waits (#273).
+
 **It appends through the manager's own queue**, and that is the whole difference
 between it working and not. Measured at 05:09: appended and displayed straight
 away, the view was taken apart by the `update()` a scroll had already scheduled
