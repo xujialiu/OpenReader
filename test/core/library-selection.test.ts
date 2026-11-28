@@ -16,6 +16,19 @@ function fixture() {
 }
 
 describe('current-level Library selection (#128)', () => {
+  it('checks each incoming title only a bounded number of times in a bulk move (#295)', () => {
+    const { tree } = fixture();
+    const ids = Array.from({ length: 200 }, (_, i) => `book-${i}`);
+    const titles = Object.fromEntries(ids.map((id) => [id, id]));
+    const normalize = vi.spyOn(String.prototype, 'normalize');
+    try {
+      const moved = moveSelection(tree, ids.map(document), ids, 'c', titles);
+      expect(moved.documents).toEqual({ inside: 'b', ...Object.fromEntries(ids.map((id) => [id, 'c'])) });
+      expect(normalize.mock.calls.length).toBeLessThanOrEqual(2 * ids.length);
+    } finally {
+      normalize.mockRestore();
+    }
+  });
   it('namespaces folder/document identities and counts complete subtrees once', () => {
     const { tree, documents } = fixture();
     expect(targetKey(folder('one'))).not.toBe(targetKey(document('one')));

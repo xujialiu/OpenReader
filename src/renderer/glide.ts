@@ -25,9 +25,9 @@
  *
  * And for **Continuous** (#71), where the page moves all the while:
  *
- * - **`lineLead(left, from, to, pitch)`** — how far past the line position the
+ * - **`lineLead(readWidth, lineWidth, pitch)`** — how far past the line position the
  *   line being spoken is carried: the spoken word's share of the way along its
- *   line, `(left − from) / (to − from)`, times the distance to the next line.
+ *   line, `readWidth / lineWidth`, times the distance to the next line.
  *   Nought at the start of a line and nearly a whole line at its end, so the next
  *   line arrives where this one was as the voice reaches it, and nothing jumps
  *   from one line to the next.
@@ -84,9 +84,9 @@ export const GLIDE_SOURCE =
   '  return Math.abs(move) <= visible;\n' +
   '}\n' +
   'var DRIFT_TAU_MS = ' + DRIFT_TAU_MS + ';\n' +
-  'function lineLead(left, from, to, pitch) {\n' +
-  '  if (!(to > from) || !(pitch > 0)) return 0;\n' +
-  '  var along = (left - from) / (to - from);\n' +
+  'function lineLead(readWidth, lineWidth, pitch) {\n' +
+  '  if (!(lineWidth > 0) || !(pitch > 0)) return 0;\n' +
+  '  var along = readWidth / lineWidth;\n' +
   '  if (!(along > 0)) return 0;\n' +
   '  if (along > 1) along = 1;\n' +
   '  return along * pitch;\n' +

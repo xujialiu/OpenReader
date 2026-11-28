@@ -55,6 +55,11 @@ describe('exclusive nested Folders (#121)', () => {
     expect([...folderSubtree(tree, 'a')]).toEqual(['a', 'b', 'c']);
     expect(folderPath(tree, null)).toBe('Library');
   });
+  it.each([['כתבים', 'רומנים'], ['كتب', 'روايات']])('isolates adjacent bidirectional folder names in the displayed path (#297)', (parent, child) => {
+    const tree = putFolder(putFolder(emptyFolders(), { id: 'p', name: parent, parent: null }), { id: 'c', name: child, parent: 'p' });
+    expect(folderPath(tree, 'c')).toBe(`Library → \u2068${parent}\u2069 → \u2068${child}\u2069`);
+    expect(tree.folders.map((folder) => folder.name)).toEqual([parent, child]);
+  });
   it('moves a document to one destination or root, never into several folders', () => {
     const tree = placeDocument(placeDocument(fixture(), 'book', 'a'), 'book', 'c');
     expect(tree.documents).toEqual({ book: 'c' });

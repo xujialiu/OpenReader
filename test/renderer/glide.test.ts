@@ -25,7 +25,7 @@ interface Glide {
   glideLeft(from: number, elapsed: number): number;
   sameLine(a: Line | null, b: Line | null): boolean;
   glides(move: number, visible: number): boolean;
-  lineLead(left: number, from: number, to: number, pitch: number): number;
+  lineLead(readWidth: number, lineWidth: number, pitch: number): number;
   driftVelocity(error: number, velocity: number, dt: number): number;
 }
 
@@ -112,7 +112,7 @@ describe('what glides and what jumps', () => {
 
 describe('the lead, in Continuous (#71)', () => {
   // A 36 px line, drawn from x 20 to x 380.
-  const lead = (left: number): number => glide.lineLead(left, 20, 380, 36);
+  const lead = (left: number): number => glide.lineLead(left - 20, 360, 36);
 
   it('is nought at the start of a line and nearly a whole line at its end', () => {
     expect(lead(20)).toBe(0);
@@ -128,16 +128,16 @@ describe('the lead, in Continuous (#71)', () => {
   });
 
   it('is nought when there is no line to measure along, rather than a guess', () => {
-    expect(glide.lineLead(100, 380, 380, 36)).toBe(0);
-    expect(glide.lineLead(100, Infinity, -Infinity, 36)).toBe(0);
-    expect(glide.lineLead(100, 20, 380, 0)).toBe(0);
-    expect(glide.lineLead(Number.NaN, 20, 380, 36)).toBe(0);
+    expect(glide.lineLead(100, 0, 36)).toBe(0);
+    expect(glide.lineLead(100, -1, 36)).toBe(0);
+    expect(glide.lineLead(100, 360, 0)).toBe(0);
+    expect(glide.lineLead(Number.NaN, 360, 36)).toBe(0);
   });
 
   it('is measured along the line’s own text, so a short last line is still read to its end', () => {
     // The last line of a paragraph, drawn from 20 to 140: its last word is
     // nearly all of the way along it, not a third.
-    expect(glide.lineLead(120, 20, 140, 36)).toBeCloseTo(30, 10);
+    expect(glide.lineLead(100, 120, 36)).toBeCloseTo(30, 10);
   });
 });
 

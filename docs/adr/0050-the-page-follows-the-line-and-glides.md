@@ -328,29 +328,28 @@ review fixes after that changed the rest gate and the paragraph glide again.
 - **The target carries a `lead`.** In Continuous, `aim()` and `followWord` aim at
   `{ line, lead }`, and `moveFor` returns `middle − at + lead`: the line being
   spoken is held `lead` px above the line position. `leadOf(ranges, line)` is
-  `lineLead(line.left, from, to, pitch)` (`glide.ts`): the word's share of the
+  `lineLead(readWidth, lineWidth, pitch)` (`glide.ts`): the word's share of the
   way along its line, clamped to [0, 1], times the distance to the next line. At
   the start of a line the lead is 0, the same place By line holds it. At the end
   it is nearly a whole pitch, so the next line is nearly at the line position when
   the voice reaches it. The step left at a line change is the last word's width
   over the line's, about an eighth of a pitch, or 2–5 px, and the follower
   absorbs it.
-  - `from` and `to` are the leftmost and rightmost client rects that overlap the
-    word's line by more than half the smaller height. They are the text drawn on
-    the line, not the Block's content box. The last line of a paragraph stops
-    short, and a Document's own centred line starts late. Against the box, the
-    lead of either would never reach a whole pitch, and every such line change
-    would owe the rest as a jump.
+  - `lineWidth` sums text fragments that overlap the word's line by more than
+    half the smaller height. `readWidth` counts the share before the spoken
+    word in DOM order. This advances through both RTL text and an embedded LTR
+    phrase (#199). The widths exclude paragraph margins and inline element
+    boxes, which can enclose text already counted.
   - `pitch` is the next line's top minus this line's top. On a Block's last line
     it is this top minus the previous line's, and on a one-line Block the line's
     own height. It is clamped to that height when it is not positive or is over
     three times it. The gap to the next Block is not part of the lead: it is a
     glide (below).
-  - The rects are measured over a Range of ±`NEAR` (400) code units around the
+  - The rects are measured within ±`NEAR` (400) code units around the
     word, not the whole Block. A Document that is one `<div>` with `<br>`s makes a
     Block a chapter long, and its `getClientRects()` on every word would be a
-    chapter's worth. `nearby()` snaps the window's ends to the text nodes the walk
-    found, as `domRange` resolves offsets.
+    chapter's worth. Each measured range stays within one text node. The node
+    containing the word start is split there to measure the read portion.
 - **The follower.** `driftVelocity(e, v, dt) = v + (e/τ² − 2v/τ)·dt`, a critically
   damped second-order follower, stepped once per drawn frame (semi-implicit
   Euler). `τ = DRIFT_TAU_MS = 200` ms, and `dt = min(now − last, 2 × FRAME_MS)`,

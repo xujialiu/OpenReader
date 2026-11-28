@@ -99,6 +99,8 @@ and what is committed is what was measured, never their text.
 
 ## Pitfalls
 
+- **A seeded book can still appear at the Library root (#295, #297).** Copy its full `entries[].id` from `library.json` into the membership map, including the `sha256:` prefix. A bare digest creates an unused membership. To exercise a successful bulk move, select the two fixture books individually and check the selection count. Select all at the root also selects the destination Folder and disables Move throughout its subtree.
+
 - **A listed runtime can support only some device types.** On this host, both Xcode 27.0 and 27.1 listed iOS 27.1 as available, but its `supportedDeviceTypes` contained only iPhone Duo. `simctl create` for iPhone 17 Pro / iOS 27.1 returned CoreSimulator error 403 `Incompatible device` before allocating a UDID. Inspect `xcrun simctl list runtimes -j` and choose only a type listed by the requested runtime; runtime presence alone does not prove the pair is supported (#380 installer).
 - **Reading files from a simulator whose screenshot succeeded.** On OpenReader2, `devicectl device copy from` reported CoreDeviceError 1001 because the target does not advertise the Transfer Files capability. Use `xcrun simctl get_app_container SIMULATOR_UDID top.xujialiu.openreader data` and read `Documents/library.json` under the returned directory. This gave the three saved positions for comparison with the Library screenshot (#382).
 - **A zsh wrapper can lose the guarded command's exit status after it ran.** Assigning `status=$?` fails with `zsh: read-only variable: status`; inspect the guard JSON and captured log before deciding whether to retry, and use `rc` or another ordinary variable in the wrapper (2026-11-25 installer).

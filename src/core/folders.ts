@@ -19,7 +19,8 @@ export function folderPath(tree: FolderTree, id: FolderId | null): string {
   const names = [];
   while (id !== null) {
     const folder = folderAt(tree, id);
-    names.push(folder.name);
+    // Keep the arrow outside the name's bidi run. Printable ASCII needs no isolate.
+    names.push(/^[ -~]+$/.test(folder.name) ? folder.name : `\u2068${folder.name}\u2069`);
     id = folder.parent;
   }
   return ['Library', ...names.reverse()].join(' → ');
@@ -72,10 +73,11 @@ export function folderNameProblem(tree: FolderTree, name: string, parent: Folder
 export function documentNameProblem(tree: FolderTree, documents: readonly { id: string; title: string }[], name: string, parent: FolderId | null, except?: string): string | null {
   if (!name.trim()) return 'Enter a name.';
   if (documents.some((document) => document.id !== except && (tree.documents[document.id] ?? null) === parent && nameKey(document.title) === nameKey(name))) {
-    return 'A document with this name already exists here. Rename it first.';
+    return DOCUMENT_NAME_TAKEN;
   }
   return null;
 }
+const DOCUMENT_NAME_TAKEN = 'A document with this name already exists here. Rename it first.';
 /** `name` if no Document in `parent` has it, otherwise the first of "name 2", "name 3", … free there: what Keep Both calls the new one, as Files does. */
 export function freeDocumentName(tree: FolderTree, documents: readonly { id: string; title: string }[], name: string, parent: FolderId | null): string {
   const base = name.trim();
@@ -216,14 +218,23 @@ export function moveSelection(tree: FolderTree, targets: readonly LibraryTarget[
   const moving = scope === 'results' ? targets.filter((target) => (tree.documents[target.id] ?? null) !== parent) : targets;
   if (scope === 'folder' ? parent === tree.current : !moving.length) throw new Error('Choose a different destination.');
   if (parent !== null && plan.folders.has(parent)) throw new Error('A selection cannot be moved into itself or its subfolders.');
-  const named = Object.entries(titles).map(([id, title]) => ({ id, title }));
-  let next = tree;
+  const occupied = new Set<string>();
+  for (const [id, title] of Object.entries(titles)) {
+    if ((tree.documents[id] ?? null) === parent) occupied.add(nameKey(title));
+  }
+  const membership = { ...tree.documents };
+  let next = { ...tree, documents: membership };
   for (const target of moving) {
     if (target.kind === 'document') {
       const title: string | undefined = titles[target.id];
-      const problem = title === undefined ? null : documentNameProblem(next, named, title, parent, target.id);
-      if (problem) throw new Error(`“${title}”: ${problem}`);
-      next = placeDocument(next, target.id, parent);
+      if (title !== undefined) {
+        const key = nameKey(title);
+        if (!key) throw new Error(`“${title}”: Enter a name.`);
+        if (occupied.has(key)) throw new Error(`“${title}”: ${DOCUMENT_NAME_TAKEN}`);
+        occupied.add(key);
+      }
+      if (parent === null) delete membership[target.id];
+      else membership[target.id] = parent;
     } else {
       const folder = folderAt(next, target.id);
       const problem = folderNameProblem(next, folder.name, parent, target.id);

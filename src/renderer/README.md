@@ -338,7 +338,7 @@ on either side, the walk puts one newline in the text, held by no node (#192).
 Without it `Chapter 1:<br/>Nightmare Begins` reached the Provider as
 `Chapter 1:Nightmare Begins`, `第9章<br/>下崖` as `第9章下崖`, and two lines of
 verse as one word. Sentences and words are trimmed of white space, so no range
-starts or ends on it, and `nearby()` passes over text no node holds. Where the
+starts or ends on it, and line measurements pass over text no node holds. Where the
 document wrote white space beside the break, nothing is added.
 
 What counts as a Block is decided by the document's own computed `display` rather

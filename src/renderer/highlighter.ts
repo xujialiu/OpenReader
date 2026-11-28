@@ -1321,7 +1321,7 @@ ${constants}
            One newline goes into the text, held by no node, so the words either
            side stay two words for the Provider, the sentence splitter and the
            word matching. Sentences and words are trimmed of white space, so no
-           range starts or ends on it, and nearby() passes over it. Where the
+           range starts or ends on it, and line measurements pass over it. Where the
            Document wrote white space beside the break, nothing is added. */
         if (open.broken) {
           open.broken = false;
@@ -2507,9 +2507,8 @@ ${constants}
      a line wraps an empty rect at the end of the line before, and aiming at it
      would hold the wrong line until the next word moved the page again.
 
-     Also where on that line it begins (\`left\`), and which of the Ranges it is
-     (\`index\`), which is what Continuous measures how far along the line the
-     word is from (leadOf). */
+     The index identifies the Block range whose logical start supplies the
+     word's place along the line in Continuous (leadOf). */
   function lineOf(built) {
     var frame = built.window.frameElement;
     if (!frame) return null;
@@ -2517,7 +2516,7 @@ ${constants}
       var rects = built.ranges[i].getClientRects();
       for (var j = 0; j < rects.length; j++) {
         if (rects[j].height && rects[j].width) {
-          return { doc: built.window.document, frame: frame, range: built.ranges[i], index: i, block: built.blocks[i], top: rects[j].top, height: rects[j].height, left: rects[j].left };
+          return { doc: built.window.document, frame: frame, range: built.ranges[i], index: i, block: built.blocks[i], top: rects[j].top, height: rects[j].height };
         }
       }
     }
@@ -2547,49 +2546,50 @@ ${constants}
     var at = ranges[line.index];
     var live = at ? liveBlock(at.block) : null;
     if (!live) return 0;
-    var span = nearby(live, at.start - NEAR, at.start + NEAR);
-    if (!span) return 0;
-    var rects = span.getClientRects();
-    var bottom = line.top + line.height;
-    var from = Infinity;
-    var to = -Infinity;
+    var from = at.start - NEAR;
+    var to = at.start + NEAR;
+    var readWidth = 0;
+    var lineWidth = 0;
     var below = Infinity;
     var above = -Infinity;
-    for (var i = 0; i < rects.length; i++) {
-      var rect = rects[i];
-      if (!rect.height || !rect.width) continue;
-      if (Math.min(rect.bottom, bottom) - Math.max(rect.top, line.top) > Math.min(rect.height, line.height) / 2) {
-        if (rect.left < from) from = rect.left;
-        if (rect.right > to) to = rect.right;
-      } else if (rect.top > line.top) {
-        if (rect.top < below) below = rect.top;
-      } else if (rect.top > above) {
-        above = rect.top;
+    var dom = live.document.createRange();
+
+    // Measure text nodes individually: a Range crossing inline markup can
+    // return both an element's box and the boxes of the text inside it.
+    function measure(part, start, end, read) {
+      if (end <= start) return;
+      dom.setStart(part.node, start - part.at);
+      dom.setEnd(part.node, end - part.at);
+      var rects = dom.getClientRects();
+      for (var j = 0; j < rects.length; j++) {
+        var rect = rects[j];
+        if (!rect.height || !rect.width) continue;
+        var overlap = Math.min(rect.bottom, line.top + line.height) - Math.max(rect.top, line.top);
+        if (overlap > Math.min(rect.height, line.height) / 2) {
+          lineWidth += rect.width;
+          if (read) readWidth += rect.width;
+        } else if (rect.top > line.top) {
+          below = Math.min(below, rect.top);
+        } else {
+          above = Math.max(above, rect.top);
+        }
       }
+    }
+
+    for (var i = 0; i < live.parts.length; i++) {
+      var part = live.parts[i];
+      if (part.at >= to) break;
+      if (part.at + part.len <= from) continue;
+      var start = Math.max(part.at, from);
+      var end = Math.min(part.at + part.len, to);
+      // DOM order is the Reading's order even when adjacent words on the
+      // screen change direction, as in English text inside a Hebrew sentence.
+      measure(part, start, Math.min(end, at.start), true);
+      measure(part, Math.max(start, at.start), end, false);
     }
     var pitch = below < Infinity ? below - line.top : above > -Infinity ? line.top - above : line.height;
     if (!(pitch > 0) || pitch > 3 * line.height) pitch = line.height;
-    return lineLead(line.left, from, to, pitch);
-  }
-
-  /* A Range over the live Block's text from \`from\` to \`to\`, pulled in to the
-     text nodes that are there: an offset past either end, or on text the walk
-     kept in the Block and no node holds, snaps to the nearest one that does. */
-  function nearby(live, from, to) {
-    var first = null;
-    var last = null;
-    for (var i = 0; i < live.parts.length; i++) {
-      var part = live.parts[i];
-      if (part.at + part.len > from && part.at < to) {
-        if (!first) first = part;
-        last = part;
-      }
-    }
-    if (!first || !last) return null;
-    var dom = live.document.createRange();
-    dom.setStart(first.node, Math.max(0, from - first.at));
-    dom.setEnd(last.node, Math.min(last.len, to - last.at));
-    return dom;
+    return lineLead(readWidth, lineWidth, pitch);
   }
 
   /* Where that line's middle is now, in the top document's coordinates, or null

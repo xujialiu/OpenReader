@@ -248,8 +248,9 @@ describe('the page follows the line being spoken (ADR 0011, ADR 0050)', () => {
     const lead = fn(program, 'leadOf');
     // The text around the word, not the whole Block: a Block the length of a
     // chapter must cost what a paragraph does.
-    pin(lead, 'var span = nearby(live, at.start - NEAR, at.start + NEAR);', 'highlighter.ts, function leadOf');
-    pin(lead, 'return lineLead(line.left, from, to, pitch);', 'highlighter.ts, function leadOf');
+    pin(lead, 'var from = at.start - NEAR;', 'highlighter.ts, function leadOf');
+    pin(lead, 'var to = at.start + NEAR;', 'highlighter.ts, function leadOf');
+    pin(lead, 'return lineLead(readWidth, lineWidth, pitch);', 'highlighter.ts, function leadOf');
     pin(program, 'var NEAR = 400;', 'highlighter.ts');
     const aim = fn(program, 'aim');
     pin(aim, "return SCROLLING === 'continuous' ? { line: line, lead: leadOf(ranges, line) } : { line: line };", 'highlighter.ts, function aim');
